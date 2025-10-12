@@ -1,0 +1,42 @@
+{
+  "name": "swing-advisor-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "create-user": "ts-node --project tsconfig.node.json scripts/create-user.ts",
+    "create-user:quick": "ts-node --project tsconfig.node.json scripts/create-user-simple.ts"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.7.3",
+    "@prisma/client": "^5.19.1",
+    "@types/node": "^20.11.30",
+    "axios": "^1.7.2",
+    "bcrypt": "^5.1.1",
+    "date-fns": "^3.6.0",
+    "ioredis": "^5.4.1",
+    "next": "15.0.0",
+    "next-auth": "^4.24.7",
+    "openai": "^4.56.0",
+    "prisma": "^5.19.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "technicalindicators": "^3.1.0",
+    "typescript": "^5.6.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/react": "19.2.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "ts-node": "^10.9.2"
+  }
+}
