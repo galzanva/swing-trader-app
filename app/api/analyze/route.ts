@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { PolygonClient } from "@/lib/data-vendors/polygon";
 import { calculateTechnicalIndicators, findSupportResistance } from "@/lib/indicators/technical";
-import { detectPatterns, getPrimaryPattern } from "@/lib/patterns/detector";
-import { calculateSetupScore } from "@/lib/scoring/rating";
+import { detectPatterns, getPrimaryPattern, getCompositePattern } from "@/lib/patterns/detector";
+import { calculateSetupScore, calculateCompositeScore } from "@/lib/scoring/rating";
 import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/management";
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
 
@@ -19,6 +19,41 @@ export interface AnalysisReport {
     name: string;
     type: string;
     confidence: number;
+    validation?: {
+      wickToBodyRatio?: number;
+      bodySize?: number;
+      volumeRatio?: number;
+      note?: string;
+    };
+  };
+  
+  // Chart pattern info
+  chartPattern: {
+    name: string;
+    type: string;
+    confidence: number;
+    confidenceLabel: string;
+    breakoutStatus: string;
+    priceTarget?: number;
+    keyLevels: {
+      resistance?: number[];
+      support?: number[];
+      breakoutLevel?: number;
+    };
+    volumeConfirmation: boolean;
+    volumeZScore?: number;
+    metadata?: {
+      tightness?: number;
+      duration?: number;
+      trendStrength?: number;
+    };
+  } | null;
+  
+  // Pattern fusion info
+  patternFusion: {
+    fusedConfidence: number;
+    fusionBonus: number;
+    analysis: string;
   };
   
   // Score
@@ -77,6 +112,7 @@ export interface AnalysisReport {
     atr: number;
     trend: string;
     trendStrength: number;
+    emaCompression: number;
     supportLevels: number[];
     resistanceLevels: number[];
   };
@@ -163,20 +199,21 @@ export async function POST(request: Request) {
     const supportResistance = findSupportResistance(marketData.bars);
     console.log(`[Analyze] Found ${supportResistance.support.length} support and ${supportResistance.resistance.length} resistance levels`);
 
-    // 4. Detect patterns
+    // 4. Detect patterns (candlestick + chart patterns)
     const patterns = detectPatterns(marketData.bars);
-    const primaryPattern = getPrimaryPattern(marketData.bars);
-    console.log(`[Analyze] Detected ${patterns.length} patterns. Primary: ${primaryPattern.name}`);
+    const compositePattern = getCompositePattern(marketData.bars);
+    console.log(`[Analyze] Candlestick: ${compositePattern.candlestickPattern.name}, Chart: ${compositePattern.chartPattern?.name || 'None'}`);
+    console.log(`[Analyze] Pattern fusion: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus} bonus, Fused confidence: ${compositePattern.fusedConfidence}%`);
 
-    // 5. Calculate setup score
-    const score = calculateSetupScore(indicators, primaryPattern);
+    // 5. Calculate setup score (with chart pattern fusion)
+    const score = calculateCompositeScore(indicators, compositePattern);
     console.log(`[Analyze] Setup score: ${score.overall}/100 (${score.rating})`);
 
-    // 6. Create risk management plan
+    // 6. Create risk management plan (using candlestick pattern for entry/stop placement)
     const riskPlan = createRiskManagementPlan(
       marketData.currentPrice,
       indicators,
-      primaryPattern,
+      compositePattern.candlestickPattern,
       supportResistance
     );
     const rrValidation = validateRiskReward(riskPlan.riskReward);
@@ -187,38 +224,49 @@ export async function POST(request: Request) {
     if (openaiApiKey) {
       try {
         const llmAnalyzer = new LLMAnalyzer(openaiApiKey);
-        aiAnalysis = await llmAnalyzer.generateAnalysis(
+        aiAnalysis = await llmAnalyzer.generateCompositeAnalysis(
           symbol,
           timeframe,
           indicators,
-          primaryPattern,
+          compositePattern,
           score,
           riskPlan
         );
-        console.log(`[Analyze] Generated AI analysis`);
+        console.log(`[Analyze] Generated AI analysis with chart pattern context`);
       } catch (error) {
         console.error("[Analyze] Error generating AI analysis:", error);
         // Use fallback analysis
         aiAnalysis = {
-          narrative: `Technical analysis shows ${primaryPattern.name} pattern with ${score.overall}/100 setup score.`,
-          mentorNotes: "AI analysis unavailable. Review technical indicators manually.",
-          reasoning: [`${primaryPattern.name} detected`, `Score: ${score.overall}/100`],
+          narrative: compositePattern.chartPattern 
+            ? `${compositePattern.chartPattern.name} chart pattern (${compositePattern.chartPattern.confidence}%) combined with ${compositePattern.candlestickPattern.name} provides ${compositePattern.fusionBonus > 0 ? 'strong' : 'conflicting'} signal. Overall score: ${score.overall}/100.`
+            : `Technical analysis shows ${compositePattern.candlestickPattern.name} pattern with ${score.overall}/100 setup score.`,
+          mentorNotes: compositePattern.analysis,
+          reasoning: [
+            `Candlestick: ${compositePattern.candlestickPattern.name} (${compositePattern.candlestickPattern.confidence}%)`,
+            compositePattern.chartPattern ? `Chart pattern: ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.confidence}%)` : 'No chart pattern detected',
+            `Fusion confidence: ${compositePattern.fusedConfidence}%`
+          ],
           warnings: ["AI analysis failed - review data carefully"],
           strengths: []
         };
       }
     } else {
       // Fallback without AI
+      const chartInfo = compositePattern.chartPattern 
+        ? ` ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus}) provides market structure.`
+        : '';
+      
       aiAnalysis = {
-        narrative: `${symbol} shows ${primaryPattern.name} pattern on ${timeframe} with ${indicators.trend} trend. RSI: ${indicators.rsi.toFixed(1)}, Overall score: ${score.overall}/100.`,
-        mentorNotes: `Technical setup with ${score.rating} rating. ${score.recommendation} recommendation based on current indicators.`,
+        narrative: `${symbol} shows ${compositePattern.candlestickPattern.name} on ${timeframe}.${chartInfo} ${indicators.trend} trend. RSI: ${indicators.rsi.toFixed(1)}, Overall score: ${score.overall}/100.`,
+        mentorNotes: compositePattern.analysis + ` Technical setup with ${score.rating} rating. ${score.recommendation} recommendation.`,
         reasoning: [
-          `${primaryPattern.name} pattern identified`,
-          `${indicators.trend} trend with ${indicators.strength} strength`,
-          `RSI at ${indicators.rsi.toFixed(1)}`
+          `Candlestick: ${compositePattern.candlestickPattern.name}`,
+          compositePattern.chartPattern ? `Chart: ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus})` : 'No chart pattern',
+          `Fusion bonus: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus}`,
+          `${indicators.trend} trend with ${indicators.strength} strength`
         ],
         warnings: indicators.rsi > 70 ? ["RSI overbought"] : indicators.rsi < 30 ? ["RSI oversold"] : [],
-        strengths: score.overall > 70 ? ["High setup quality", "Favorable technical alignment"] : []
+        strengths: score.overall > 70 ? ["High setup quality", compositePattern.fusionBonus > 10 ? "Strong pattern alignment" : "Favorable technical alignment"] : []
       };
     }
 
@@ -230,9 +278,29 @@ export async function POST(request: Request) {
       currentPrice: marketData.currentPrice,
       
       pattern: {
-        name: primaryPattern.name,
-        type: primaryPattern.type,
-        confidence: primaryPattern.confidence
+        name: compositePattern.candlestickPattern.name,
+        type: compositePattern.candlestickPattern.type,
+        confidence: compositePattern.candlestickPattern.confidence,
+        validation: compositePattern.candlestickPattern.validation
+      },
+      
+      chartPattern: compositePattern.chartPattern ? {
+        name: compositePattern.chartPattern.name,
+        type: compositePattern.chartPattern.type,
+        confidence: compositePattern.chartPattern.confidence,
+        confidenceLabel: compositePattern.chartPattern.confidenceLabel || `${compositePattern.chartPattern.confidence}% confidence`,
+        breakoutStatus: compositePattern.chartPattern.breakoutStatus,
+        priceTarget: compositePattern.chartPattern.priceTarget,
+        keyLevels: compositePattern.chartPattern.keyLevels,
+        volumeConfirmation: compositePattern.chartPattern.volumeConfirmation,
+        volumeZScore: compositePattern.chartPattern.volumeZScore,
+        metadata: compositePattern.chartPattern.metadata
+      } : null,
+      
+      patternFusion: {
+        fusedConfidence: compositePattern.fusedConfidence,
+        fusionBonus: compositePattern.fusionBonus,
+        analysis: compositePattern.analysis
       },
       
       score: {
@@ -276,6 +344,7 @@ export async function POST(request: Request) {
         atr: indicators.atr,
         trend: indicators.trend,
         trendStrength: indicators.strength,
+        emaCompression: indicators.emaCompression,
         supportLevels: supportResistance.support,
         resistanceLevels: supportResistance.resistance
       },

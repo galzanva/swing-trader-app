@@ -194,7 +194,8 @@ export default function AnalyzeClient() {
                   <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${report.riskManagement.direction === 'long' ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 'bg-red-500/20 text-red-300 border border-red-500/50'}`}>
                     {report.riskManagement.direction === 'long' ? '📈 LONG' : '📉 SHORT'} Setup
                   </span>
-                  <span className={`ml-2 px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
+                  <span className="mx-2 text-blue-300">•</span>
+                  <span className={`px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
                     {report.pattern.name} ({report.pattern.confidence}%)
                   </span>
                 </h2>
@@ -229,6 +230,132 @@ export default function AnalyzeClient() {
               </div>
             </div>
           </div>
+
+          {/* Chart Pattern & Pattern Fusion */}
+          {report.chartPattern && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">📐 Chart Pattern Analysis</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                  <h4 className="text-purple-300 font-semibold mb-2">🏗️ Market Structure</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-blue-200 text-sm">Pattern:</span>
+                      <span className={`font-semibold ${report.chartPattern.type === 'bullish' ? 'text-green-400' : report.chartPattern.type === 'bearish' ? 'text-red-400' : 'text-white'}`}>
+                        {report.chartPattern.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-200 text-sm">Confidence:</span>
+                      <span className="text-white font-semibold">{report.chartPattern.confidence}% ({report.chartPattern.confidenceLabel})</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-200 text-sm">Breakout:</span>
+                      <span className={`font-semibold ${report.chartPattern.breakoutStatus === 'confirmed' ? 'text-green-400' : report.chartPattern.breakoutStatus === 'pending' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                        {report.chartPattern.breakoutStatus}
+                      </span>
+                    </div>
+                    {report.chartPattern.volumeZScore !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-blue-200 text-sm">Volume Z-Score:</span>
+                        <span className={`font-semibold ${report.chartPattern.volumeZScore > 1 ? 'text-green-400' : report.chartPattern.volumeZScore < -1 ? 'text-red-400' : 'text-white'}`}>
+                          {report.chartPattern.volumeZScore > 0 ? '+' : ''}{report.chartPattern.volumeZScore}
+                        </span>
+                      </div>
+                    )}
+                    {report.chartPattern.priceTarget && (
+                      <div className="flex justify-between">
+                        <span className="text-blue-200 text-sm">Price Target:</span>
+                        <span className="text-white font-semibold">${report.chartPattern.priceTarget.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {report.chartPattern.metadata?.tightness && (
+                      <div className="flex justify-between">
+                        <span className="text-blue-200 text-sm">Tightness:</span>
+                        <span className="text-white font-semibold">{report.chartPattern.metadata.tightness}%</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
+                  <h4 className="text-teal-300 font-semibold mb-2">⚡ Entry Timing</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-blue-200 text-sm">Candlestick:</span>
+                      <span className={`font-semibold ${report.pattern.type === 'bullish' ? 'text-green-400' : report.pattern.type === 'bearish' ? 'text-red-400' : 'text-white'}`}>
+                        {report.pattern.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-200 text-sm">Confidence:</span>
+                      <span className="text-white font-semibold">{report.pattern.confidence}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pattern Fusion Analysis */}
+              <div className={`p-4 rounded-lg ${report.patternFusion.fusionBonus > 0 ? 'bg-green-500/10 border border-green-500/30' : report.patternFusion.fusionBonus < 0 ? 'bg-yellow-500/20 border border-yellow-500/50' : 'bg-blue-500/10 border border-blue-500/30'}`}>
+                <h4 className={`font-semibold mb-2 ${report.patternFusion.fusionBonus > 0 ? 'text-green-300' : report.patternFusion.fusionBonus < 0 ? 'text-yellow-300' : 'text-blue-300'}`}>
+                  🎯 Composite Confidence: {report.patternFusion.fusedConfidence}/100
+                  {report.patternFusion.fusionBonus > 0 && (
+                    <span className="ml-2 text-sm">(Structure + Timing alignment)</span>
+                  )}
+                  {report.patternFusion.fusionBonus < 0 && (
+                    <span className="ml-2 text-sm">(Conflicting signals)</span>
+                  )}
+                  {report.patternFusion.fusionBonus === 0 && (
+                    <span className="ml-2 text-sm">(Single pattern signal)</span>
+                  )}
+                </h4>
+                <p className={`text-sm ${report.patternFusion.fusionBonus > 0 ? 'text-green-200' : report.patternFusion.fusionBonus < 0 ? 'text-yellow-200' : 'text-blue-200'}`}>
+                  {report.patternFusion.analysis}
+                </p>
+                {report.patternFusion.fusionBonus !== 0 && (
+                  <p className={`text-xs mt-2 ${report.patternFusion.fusionBonus > 0 ? 'text-green-300' : 'text-yellow-300'}`}>
+                    Fusion bonus: {report.patternFusion.fusionBonus > 0 ? '+' : ''}{report.patternFusion.fusionBonus} points
+                  </p>
+                )}
+              </div>
+
+              {/* Key Levels from Chart Pattern */}
+              {(report.chartPattern.keyLevels.support?.length || report.chartPattern.keyLevels.resistance?.length) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {report.chartPattern.keyLevels.support && report.chartPattern.keyLevels.support.length > 0 && (
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                      <div className="text-green-200 text-sm font-semibold mb-2">Pattern Support</div>
+                      {report.chartPattern.keyLevels.support.map((level, idx) => (
+                        <div key={idx} className="text-green-400 text-sm">${level.toFixed(2)}</div>
+                      ))}
+                    </div>
+                  )}
+                  {report.chartPattern.keyLevels.resistance && report.chartPattern.keyLevels.resistance.length > 0 && (
+                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <div className="text-red-200 text-sm font-semibold mb-2">Pattern Resistance</div>
+                      {report.chartPattern.keyLevels.resistance.map((level, idx) => (
+                        <div key={idx} className="text-red-400 text-sm">${level.toFixed(2)}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No Chart Pattern Message */}
+          {!report.chartPattern && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">📐 Chart Pattern Analysis</h3>
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <p className="text-blue-200 text-sm">
+                  <strong>No major chart pattern detected.</strong> Analysis relies on candlestick pattern ({report.pattern.name}) and immediate support/resistance levels. 
+                  Chart patterns like flags, triangles, and double tops/bottoms provide structural context - when present, they can significantly boost signal confidence.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Risk Management */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
@@ -275,6 +402,15 @@ export default function AnalyzeClient() {
               <p className="text-blue-200 text-sm mb-2"><strong>Example:</strong> {report.riskManagement.riskAmount}</p>
               <p className="text-blue-200 text-sm"><strong>Reasoning:</strong> {report.riskManagement.reasoning}</p>
             </div>
+            
+            {/* Pattern Validation */}
+            {report.pattern.validation && (
+              <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30 mb-3">
+                <p className="text-purple-200 text-sm">
+                  <strong>Pattern Validation:</strong> {report.pattern.validation.note}
+                </p>
+              </div>
+            )}
             
             {/* Low Volume Warning */}
             {report.technical.volumeZScore < 0 && report.pattern.name.includes("Engulfing") && (
@@ -343,7 +479,7 @@ export default function AnalyzeClient() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               {report.technical.supportLevels.length > 0 && (
                 <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                   <div className="text-green-200 text-sm font-semibold mb-2">Support Levels</div>
@@ -361,12 +497,73 @@ export default function AnalyzeClient() {
                 </div>
               )}
             </div>
+            
+            {/* EMA Compression Insight */}
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
+              <p className="text-blue-200 text-sm">
+                <strong>EMA Proximity:</strong> The 9, 20, and 50 EMAs are within {report.technical.emaCompression.toFixed(2)}% of each other
+                {report.technical.emaCompression < 2 ? " — tight compression, expect breakout or choppy action." : 
+                 report.technical.emaCompression < 5 ? " — moderate spacing, trend forming." : 
+                 " — wide spacing, strong trending environment."}
+              </p>
+            </div>
+            
+            {/* Countertrend Warning */}
+            {((report.riskManagement.direction === 'short' && report.technical.ema9 > report.technical.ema200) ||
+              (report.riskManagement.direction === 'long' && report.technical.ema9 < report.technical.ema200)) && (
+              <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+                <p className="text-yellow-200 text-sm">
+                  ⚠️ <strong>Countertrend Setup:</strong> This is a {report.riskManagement.direction} setup against the longer-term{' '}
+                  {report.technical.ema9 > report.technical.ema200 ? 'uptrend' : 'downtrend'} (price{' '}
+                  {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA). Countertrend trades have lower probability. 
+                  Use tighter stops and smaller position sizes.
+                </p>
+              </div>
+            )}
+            
+            {/* Earnings Proximity */}
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <p className="text-blue-200 text-sm">
+                <strong>Earnings Proximity:</strong> Earnings calendar integration coming soon. Before trading, verify earnings date using your broker or a financial calendar.
+                Avoid trading 1-2 days before earnings (high volatility risk).
+              </p>
+            </div>
           </div>
 
           {/* Score Breakdown */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">⭐ Score Breakdown</h3>
             
+            {/* Score Explanation Card */}
+            <div className="mb-4 p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30">
+              <p className="text-blue-100 text-sm mb-3">
+                <strong>How the {report.score.overall}/100 ({report.score.rating}) score is calculated:</strong>
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-blue-200">
+                {report.chartPattern ? (
+                  <>
+                    <div>• Technical ({report.score.breakdown.technical}/100): EMA alignment & trend strength - 25% weight</div>
+                    <div>• Momentum ({report.score.breakdown.momentum}/100): RSI & MACD signals - 20% weight</div>
+                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 15% weight</div>
+                    <div>• Pattern Fusion ({report.score.breakdown.pattern}/100): Structure + timing combo - 25% weight</div>
+                    <div>• Chart Pattern: {report.chartPattern.confidence}% ({report.chartPattern.confidenceLabel}) - 10% weight</div>
+                    <div>• Volume ({report.score.breakdown.volume}/100): Confirmation strength - 5% weight</div>
+                  </>
+                ) : (
+                  <>
+                    <div>• Technical ({report.score.breakdown.technical}/100): EMA alignment & trend - 30% weight</div>
+                    <div>• Momentum ({report.score.breakdown.momentum}/100): RSI & MACD signals - 25% weight</div>
+                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 20% weight</div>
+                    <div>• Pattern ({report.score.breakdown.pattern}/100): Candlestick signal - 15% weight</div>
+                    <div>• Volume ({report.score.breakdown.volume}/100): Confirmation strength - 10% weight</div>
+                  </>
+                )}
+              </div>
+              <p className="text-blue-300 text-xs mt-3 italic">
+                Grade: 90+=A+, 76-89=A, 61-75=B, 41-60=C, 0-40=D. All confidences capped at 95% for realism.
+              </p>
+            </div>
+
             {/* Pattern Score Adjustment Explanation */}
             {Math.abs(report.score.breakdown.pattern - report.pattern.confidence) > 5 && (
               <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">

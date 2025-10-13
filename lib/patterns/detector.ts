@@ -3,6 +3,8 @@
  * Identifies chart patterns for swing trading
  */
 
+import { detectChartPatterns, ChartPattern } from "./chart-patterns";
+
 interface OHLCV {
   timestamp: number;
   open: number;
@@ -18,6 +20,20 @@ export interface DetectedPattern {
   confidence: number; // 0-100
   description: string;
   timeframe: string;
+  validation?: {
+    wickToBodyRatio?: number;
+    bodySize?: number;
+    volumeRatio?: number;
+    note?: string;
+  };
+}
+
+export interface CompositePattern {
+  candlestickPattern: DetectedPattern;
+  chartPattern: ChartPattern | null;
+  fusedConfidence: number; // Combined confidence when patterns align
+  fusionBonus: number; // Bonus points from pattern alignment
+  analysis: string; // How the patterns work together
 }
 
 /**
@@ -38,13 +54,19 @@ function detectBullishEngulfing(bars: OHLCV[]): DetectedPattern | null {
     
     const bodyRatio = (current.close - current.open) / (prev.open - prev.close);
     const confidence = Math.round(Math.min(100, 70 + bodyRatio * 10)); // Round to whole number
+    const volumeRatio = current.volume / prev.volume;
     
     return {
       name: "Bullish Engulfing",
       type: "bullish",
       confidence,
       description: "Strong reversal signal - buyers overwhelmed sellers",
-      timeframe: "2 bars"
+      timeframe: "2 bars",
+      validation: {
+        bodySize: Number(bodyRatio.toFixed(2)),
+        volumeRatio: Number(volumeRatio.toFixed(2)),
+        note: `Current bar body ${bodyRatio.toFixed(2)}× prev bar, volume ratio ${volumeRatio.toFixed(2)}× (valid engulfing ${volumeRatio > 1 ? '✓' : '⚠'})`
+      }
     };
   }
   
@@ -69,13 +91,19 @@ function detectBearishEngulfing(bars: OHLCV[]): DetectedPattern | null {
     
     const bodyRatio = (current.open - current.close) / (prev.close - prev.open);
     const confidence = Math.round(Math.min(100, 70 + bodyRatio * 10)); // Round to whole number
+    const volumeRatio = current.volume / prev.volume;
     
     return {
       name: "Bearish Engulfing",
       type: "bearish",
       confidence,
       description: "Strong reversal signal - sellers overwhelmed buyers",
-      timeframe: "2 bars"
+      timeframe: "2 bars",
+      validation: {
+        bodySize: Number(bodyRatio.toFixed(2)),
+        volumeRatio: Number(volumeRatio.toFixed(2)),
+        note: `Current bar body ${bodyRatio.toFixed(2)}× prev bar, volume ratio ${volumeRatio.toFixed(2)}× (valid engulfing ${volumeRatio > 1 ? '✓' : '⚠'})`
+      }
     };
   }
   
@@ -96,13 +124,20 @@ function detectHammer(bars: OHLCV[]): DetectedPattern | null {
   // Hammer criteria: long lower wick, small body, little to no upper wick
   if (lowerWick > body * 2 && upperWick < body * 0.5 && lowerWick > upperWick * 3) {
     const confidence = Math.round(Math.min(100, 60 + (lowerWick / body) * 5));
+    const wickToBodyRatio = body > 0 ? lowerWick / body : 0;
+    const bodyPercent = ((body / bar.close) * 100);
     
     return {
       name: "Hammer",
       type: "bullish",
       confidence,
       description: "Potential bullish reversal - buyers rejected lower prices",
-      timeframe: "1 bar"
+      timeframe: "1 bar",
+      validation: {
+        wickToBodyRatio: Number(wickToBodyRatio.toFixed(2)),
+        bodySize: Number(bodyPercent.toFixed(2)),
+        note: `Lower wick ${wickToBodyRatio.toFixed(1)}× body size, close near high (valid hammer ✓)`
+      }
     };
   }
   
@@ -123,13 +158,20 @@ function detectShootingStar(bars: OHLCV[]): DetectedPattern | null {
   // Shooting star criteria: long upper wick, small body, little to no lower wick
   if (upperWick > body * 2 && lowerWick < body * 0.5 && upperWick > lowerWick * 3) {
     const confidence = Math.round(Math.min(100, 60 + (upperWick / body) * 5));
+    const wickToBodyRatio = body > 0 ? upperWick / body : 0;
+    const bodyPercent = ((body / bar.close) * 100);
     
     return {
       name: "Shooting Star",
       type: "bearish",
       confidence,
       description: "Potential bearish reversal - sellers rejected higher prices",
-      timeframe: "1 bar"
+      timeframe: "1 bar",
+      validation: {
+        wickToBodyRatio: Number(wickToBodyRatio.toFixed(2)),
+        bodySize: Number(bodyPercent.toFixed(2)),
+        note: `Upper wick ${wickToBodyRatio.toFixed(1)}× body size, close near low (valid shooting star ✓)`
+      }
     };
   }
   
@@ -305,6 +347,82 @@ export function getPrimaryPattern(bars: OHLCV[]): DetectedPattern {
     confidence: 50,
     description: "No distinct technical pattern identified",
     timeframe: "N/A"
+  };
+}
+
+/**
+ * Get composite pattern (chart + candlestick fusion)
+ * This combines market structure (chart pattern) with timing (candlestick pattern)
+ */
+export function getCompositePattern(bars: OHLCV[]): CompositePattern {
+  const candlestickPattern = getPrimaryPattern(bars);
+  const chartPattern = detectChartPatterns(bars);
+  
+  let fusionBonus = 0;
+  let analysis = "";
+  
+  if (chartPattern) {
+    // Check if patterns align (same direction)
+    const patternsAlign = candlestickPattern.type === chartPattern.type;
+    
+    if (patternsAlign && chartPattern.type !== "neutral") {
+      // Strong alignment bonus
+      fusionBonus = 15;
+      
+      if (chartPattern.type === "bullish") {
+        analysis = `Strong bullish setup: ${chartPattern.name} provides structural support (${chartPattern.confidence}% confidence) while ${candlestickPattern.name} confirms entry timing. `;
+        
+        if (chartPattern.breakoutStatus === "confirmed") {
+          fusionBonus += 10;
+          analysis += "Breakout is confirmed with volume. ";
+        } else if (chartPattern.breakoutStatus === "pending") {
+          analysis += "Breakout is pending - price approaching resistance. ";
+        }
+        
+      } else {
+        analysis = `Strong bearish setup: ${chartPattern.name} defines downside structure (${chartPattern.confidence}% confidence) while ${candlestickPattern.name} signals entry timing. `;
+        
+        if (chartPattern.breakoutStatus === "confirmed") {
+          fusionBonus += 10;
+          analysis += "Breakdown is confirmed with volume. ";
+        } else if (chartPattern.breakoutStatus === "pending") {
+          analysis += "Breakdown is pending - price approaching support. ";
+        }
+      }
+      
+      // Additional bonus for tight patterns near breakout
+      if (chartPattern.metadata?.tightness && chartPattern.metadata.tightness > 70) {
+        fusionBonus += 5;
+        analysis += "Pattern is tight and coiled for move. ";
+      }
+      
+    } else if (!patternsAlign && chartPattern.type !== "neutral" && candlestickPattern.type !== "neutral") {
+      // Conflicting patterns - reduce confidence
+      fusionBonus = -10;
+      analysis = `Conflicting signals: ${chartPattern.name} (${chartPattern.type}) vs ${candlestickPattern.name} (${candlestickPattern.type}). Wait for clarity. `;
+      
+    } else {
+      // Neutral case - one pattern is neutral
+      analysis = chartPattern.type !== "neutral" 
+        ? `${chartPattern.name} provides context but ${candlestickPattern.name} is neutral. `
+        : `${candlestickPattern.name} detected but no clear chart pattern. `;
+    }
+  } else {
+    // No chart pattern detected
+    analysis = `${candlestickPattern.name} identified. No major chart pattern detected - focus on candlestick signal and short-term support/resistance. `;
+  }
+  
+  // Calculate fused confidence (capped at 95% for realism)
+  const fusedConfidence = chartPattern
+    ? Math.min(95, Math.round((candlestickPattern.confidence + chartPattern.confidence) / 2 + fusionBonus))
+    : Math.min(95, candlestickPattern.confidence);
+  
+  return {
+    candlestickPattern,
+    chartPattern,
+    fusedConfidence,
+    fusionBonus,
+    analysis
   };
 }
 

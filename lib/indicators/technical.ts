@@ -27,6 +27,7 @@ export interface TechnicalIndicators {
   atr: number;
   trend: "bullish" | "bearish" | "neutral";
   strength: number; // 0-100
+  emaCompression: number; // Max % difference between EMA9, 20, 50 - indicates choppy/trending
 }
 
 /**
@@ -235,6 +236,13 @@ export function calculateTechnicalIndicators(ohlcv: OHLCV[]): TechnicalIndicator
   // Determine trend
   const { trend, strength } = determineTrend(ema9, ema20, ema50, ema200);
   
+  // Calculate EMA compression (max % difference between 9, 20, 50)
+  // Lower values = choppy/compression, higher = trending
+  const emas = [ema9, ema20, ema50];
+  const minEma = Math.min(...emas);
+  const maxEma = Math.max(...emas);
+  const emaCompression = ((maxEma - minEma) / minEma) * 100;
+  
   return {
     ema9,
     ema20,
@@ -245,7 +253,8 @@ export function calculateTechnicalIndicators(ohlcv: OHLCV[]): TechnicalIndicator
     volumeZScore,
     atr,
     trend,
-    strength
+    strength,
+    emaCompression
   };
 }
 

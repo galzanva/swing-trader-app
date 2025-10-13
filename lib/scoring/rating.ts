@@ -4,7 +4,8 @@
  */
 
 import { TechnicalIndicators } from "../indicators/technical";
-import { DetectedPattern } from "../patterns/detector";
+import { DetectedPattern, CompositePattern } from "../patterns/detector";
+import { ChartPattern } from "../patterns/chart-patterns";
 
 export interface SetupScore {
   overall: number; // 0-100
@@ -60,6 +61,7 @@ function scoreTechnical(indicators: TechnicalIndicators): number {
 
 /**
  * Score momentum indicators (RSI, MACD)
+ * Cap at 70-75 unless RSI > 60 OR MACD is positive (prevents over-scoring neutral momentum)
  */
 function scoreMomentum(indicators: TechnicalIndicators): number {
   let score = 0;
@@ -82,6 +84,8 @@ function scoreMomentum(indicators: TechnicalIndicators): number {
   }
   
   // MACD scoring (50 points max)
+  const macdPositive = macd.value > macd.signal || macd.histogram > 0;
+  
   if (macd.histogram > 0 && macd.value > macd.signal) {
     score += 50; // Bullish MACD
   } else if (macd.histogram > 0) {
@@ -92,7 +96,11 @@ function scoreMomentum(indicators: TechnicalIndicators): number {
     score += 25; // Neutral
   }
   
-  return Math.min(100, score);
+  // Cap momentum at 70-75 unless strong bullish indicators
+  const hasStrongMomentum = rsi > 60 || macdPositive;
+  const maxScore = hasStrongMomentum ? 100 : 75;
+  
+  return Math.min(maxScore, score);
 }
 
 /**
@@ -186,6 +194,90 @@ export function calculateSetupScore(
     momentum: Math.round(momentum),
     trend: Math.round(trend),
     pattern: Math.round(patternScore),
+    volume: Math.round(volume),
+    rating,
+    recommendation
+  };
+}
+
+/**
+ * Calculate setup score with chart pattern fusion
+ * This version considers both candlestick and chart patterns
+ */
+export function calculateCompositeScore(
+  indicators: TechnicalIndicators,
+  compositePattern: CompositePattern
+): SetupScore {
+  const technical = scoreTechnical(indicators);
+  const momentum = scoreMomentum(indicators);
+  const trend = indicators.strength;
+  const candlestickScore = scorePattern(compositePattern.candlestickPattern, indicators.volumeZScore);
+  const volume = scoreVolume(indicators.volumeZScore);
+  
+  // If we have a chart pattern, factor it in
+  let chartPatternScore = 0;
+  if (compositePattern.chartPattern) {
+    chartPatternScore = compositePattern.chartPattern.confidence;
+    
+    // Bonus for confirmed breakout
+    if (compositePattern.chartPattern.breakoutStatus === "confirmed") {
+      chartPatternScore = Math.min(100, chartPatternScore + 10);
+    }
+  }
+  
+  // Use fused confidence which already accounts for pattern alignment
+  const fusedPatternScore = compositePattern.fusedConfidence;
+  
+  // Weighted average with chart pattern factored in
+  const overall = compositePattern.chartPattern
+    ? (
+        technical * 0.25 +
+        momentum * 0.20 +
+        trend * 0.15 +
+        fusedPatternScore * 0.25 + // Increased weight for fused pattern
+        chartPatternScore * 0.10 +  // Additional chart pattern influence
+        volume * 0.05
+      )
+    : (
+        technical * 0.30 +
+        momentum * 0.25 +
+        trend * 0.20 +
+        fusedPatternScore * 0.15 +
+        volume * 0.10
+      );
+  
+  // Determine rating and recommendation (direction-aware)
+  let rating: SetupScore["rating"];
+  let recommendation: SetupScore["recommendation"];
+  
+  // Use the fused confidence pattern type for direction
+  const patternType = compositePattern.chartPattern?.type || compositePattern.candlestickPattern.type;
+  const isBullish = patternType === "bullish";
+  const isBearish = patternType === "bearish";
+  
+  if (overall >= 90) {
+    rating = "A+";
+    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
+  } else if (overall >= 76) {
+    rating = "A";
+    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
+  } else if (overall >= 61) {
+    rating = "B";
+    recommendation = isBullish ? "Buy" : isBearish ? "Short" : "Buy";
+  } else if (overall >= 41) {
+    rating = "C";
+    recommendation = "Watch";
+  } else {
+    rating = "D";
+    recommendation = "Pass";
+  }
+  
+  return {
+    overall: Math.round(overall),
+    technical: Math.round(technical),
+    momentum: Math.round(momentum),
+    trend: Math.round(trend),
+    pattern: Math.round(fusedPatternScore),
     volume: Math.round(volume),
     rating,
     recommendation
