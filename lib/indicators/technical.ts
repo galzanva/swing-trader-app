@@ -172,12 +172,33 @@ export function determineTrend(ema9: number, ema20: number, ema50: number, ema20
   
   if (bullishAlignment) {
     const spread = ((ema9 - ema200) / ema200) * 100;
-    return { trend: "bullish", strength: Math.min(100, Math.abs(spread) * 10) };
+    return { trend: "bullish", strength: Math.min(100, 60 + Math.abs(spread) * 10) };
   } else if (bearishAlignment) {
     const spread = ((ema200 - ema9) / ema200) * 100;
-    return { trend: "bearish", strength: Math.min(100, Math.abs(spread) * 10) };
+    return { trend: "bearish", strength: Math.max(0, 40 - Math.abs(spread) * 10) };
   } else {
-    return { trend: "neutral", strength: 50 };
+    // Partial alignment - determine bias
+    // Check short-term trend (EMA9 vs EMA20)
+    const shortTermBullish = ema9 > ema20;
+    const shortTermBearish = ema9 < ema20;
+    
+    // Check mid-term trend (EMA20 vs EMA50)
+    const midTermBullish = ema20 > ema50;
+    const midTermBearish = ema20 < ema50;
+    
+    // Count bullish signals (0-2)
+    const bullishCount = (shortTermBullish ? 1 : 0) + (midTermBullish ? 1 : 0);
+    
+    if (bullishCount === 2) {
+      // Bullish bias but not perfect alignment
+      return { trend: "neutral", strength: 60 };
+    } else if (bullishCount === 0) {
+      // Bearish bias but not perfect alignment
+      return { trend: "neutral", strength: 40 };
+    } else {
+      // Mixed signals - truly neutral
+      return { trend: "neutral", strength: 50 };
+    }
   }
 }
 
@@ -230,16 +251,19 @@ export function calculateTechnicalIndicators(ohlcv: OHLCV[]): TechnicalIndicator
 
 /**
  * Identify support and resistance levels
+ * Support = swing lows BELOW current price
+ * Resistance = swing highs ABOVE current price
  */
 export function findSupportResistance(ohlcv: OHLCV[]): {
   support: number[];
   resistance: number[];
 } {
+  const currentPrice = ohlcv[ohlcv.length - 1].close;
   const highs = ohlcv.map(bar => bar.high);
   const lows = ohlcv.map(bar => bar.low);
   
-  const support: number[] = [];
-  const resistance: number[] = [];
+  const allSupport: number[] = [];
+  const allResistance: number[] = [];
   
   // Find swing highs and lows (simple pivot points)
   const lookback = 5;
@@ -257,14 +281,23 @@ export function findSupportResistance(ohlcv: OHLCV[]): {
       }
     }
     
-    if (isSwingHigh) resistance.push(highs[i]);
-    if (isSwingLow) support.push(lows[i]);
+    // Support = swing lows BELOW current price
+    if (isSwingLow && lows[i] < currentPrice) {
+      allSupport.push(lows[i]);
+    }
+    
+    // Resistance = swing highs ABOVE current price
+    if (isSwingHigh && highs[i] > currentPrice) {
+      allResistance.push(highs[i]);
+    }
   }
   
-  // Return the most recent 3 levels
+  // Return the 3 closest levels
+  // For support: highest values (closest to price from below)
+  // For resistance: lowest values (closest to price from above)
   return {
-    support: support.slice(-3).reverse(),
-    resistance: resistance.slice(-3).reverse()
+    support: allSupport.sort((a, b) => b - a).slice(0, 3), // Descending - closest first
+    resistance: allResistance.sort((a, b) => a - b).slice(0, 3) // Ascending - closest first
   };
 }
 

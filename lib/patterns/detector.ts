@@ -37,7 +37,7 @@ function detectBullishEngulfing(bars: OHLCV[]): DetectedPattern | null {
       current.close > prev.open) {
     
     const bodyRatio = (current.close - current.open) / (prev.open - prev.close);
-    const confidence = Math.min(100, 70 + bodyRatio * 10);
+    const confidence = Math.round(Math.min(100, 70 + bodyRatio * 10)); // Round to whole number
     
     return {
       name: "Bullish Engulfing",
@@ -68,7 +68,7 @@ function detectBearishEngulfing(bars: OHLCV[]): DetectedPattern | null {
       current.close < prev.open) {
     
     const bodyRatio = (current.open - current.close) / (prev.close - prev.open);
-    const confidence = Math.min(100, 70 + bodyRatio * 10);
+    const confidence = Math.round(Math.min(100, 70 + bodyRatio * 10)); // Round to whole number
     
     return {
       name: "Bearish Engulfing",
@@ -95,7 +95,7 @@ function detectHammer(bars: OHLCV[]): DetectedPattern | null {
   
   // Hammer criteria: long lower wick, small body, little to no upper wick
   if (lowerWick > body * 2 && upperWick < body * 0.5 && lowerWick > upperWick * 3) {
-    const confidence = Math.min(100, 60 + (lowerWick / body) * 5);
+    const confidence = Math.round(Math.min(100, 60 + (lowerWick / body) * 5));
     
     return {
       name: "Hammer",
@@ -122,7 +122,7 @@ function detectShootingStar(bars: OHLCV[]): DetectedPattern | null {
   
   // Shooting star criteria: long upper wick, small body, little to no lower wick
   if (upperWick > body * 2 && lowerWick < body * 0.5 && upperWick > lowerWick * 3) {
-    const confidence = Math.min(100, 60 + (upperWick / body) * 5);
+    const confidence = Math.round(Math.min(100, 60 + (upperWick / body) * 5));
     
     return {
       name: "Shooting Star",

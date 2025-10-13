@@ -44,6 +44,8 @@ export interface MarketData {
     volume: number;
   }[];
   currentPrice: number;
+  lastBarDate: Date;
+  dataAgeDays: number;
   marketCap?: number;
   exchange?: string;
 }
@@ -62,10 +64,10 @@ export class PolygonClient {
   async getAggregates(
     symbol: string,
     timeframe: "1min" | "5min" | "15min" | "1hour" | "1day" = "1day",
-    limit: number = 300
+    limit: number = 500 // Increased for daily data
   ): Promise<MarketData> {
     try {
-      // Calculate date range (get last N bars)
+      // Calculate date range - get data up to today
       const to = new Date();
       const from = new Date();
       
@@ -84,12 +86,14 @@ export class PolygonClient {
           from.setDate(from.getDate() - 120);
           break;
         case "1day":
-          from.setFullYear(from.getFullYear() - 2);
+          from.setFullYear(from.getFullYear() - 2); // 2 years of daily data
           break;
       }
 
       const fromStr = from.toISOString().split("T")[0];
       const toStr = to.toISOString().split("T")[0];
+      
+      console.log(`[Polygon] Requesting data from ${fromStr} to ${toStr} for ${symbol}`);
 
       // Map timeframe to Polygon format
       const timeframeMap: Record<string, string> = {
@@ -100,9 +104,11 @@ export class PolygonClient {
         "1day": "1/day"
       };
 
+      // Use sort=desc to get most recent bars first, then reverse
+      // This ensures we always get the latest data even for newer stocks
       const url = `${this.baseUrl}/v2/aggs/ticker/${symbol.toUpperCase()}/range/${
         timeframeMap[timeframe]
-      }/${fromStr}/${toStr}?adjusted=true&sort=asc&limit=${limit}&apiKey=${this.apiKey}`;
+      }/${fromStr}/${toStr}?adjusted=true&sort=desc&limit=${limit}&apiKey=${this.apiKey}`;
 
       const response = await fetch(url);
       
@@ -113,13 +119,16 @@ export class PolygonClient {
       const data: PolygonAggregatesResponse = await response.json();
 
       if (!data.results || data.results.length === 0) {
-        throw new Error(`No data available for ${symbol}`);
+        throw new Error(`No data available for ${symbol}. This symbol may be delisted, invalid, or have no trading history.`);
       }
+      
+      console.log(`[Polygon] Received ${data.results.length} bars. Status: ${data.status}`);
 
       // Get ticker details
       const details = await this.getTickerDetails(symbol);
 
-      // Transform data
+      // Transform data and reverse since we used sort=desc
+      // This gives us chronological order (oldest to newest) for indicator calculations
       const bars = data.results.map(bar => ({
         timestamp: bar.t,
         open: bar.o,
@@ -127,9 +136,27 @@ export class PolygonClient {
         low: bar.l,
         close: bar.c,
         volume: bar.v
-      }));
+      })).reverse(); // Reverse to get oldest to newest
 
       const currentPrice = bars[bars.length - 1].close;
+      
+      // Check data freshness - IMPORTANT for trading decisions
+      const lastBarDate = new Date(bars[bars.length - 1].timestamp);
+      const daysSinceLastBar = Math.floor((Date.now() - lastBarDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      console.log(`[Polygon] Symbol: ${symbol}`);
+      console.log(`[Polygon] Total bars received: ${bars.length}`);
+      console.log(`[Polygon] Date range: ${new Date(bars[0].timestamp).toISOString().split('T')[0]} to ${lastBarDate.toISOString().split('T')[0]}`);
+      console.log(`[Polygon] Last bar date: ${lastBarDate.toISOString()}`);
+      console.log(`[Polygon] Days since last bar: ${daysSinceLastBar}`);
+      console.log(`[Polygon] Last close price: $${currentPrice}`);
+      
+      // Warning if data is very stale (might be delisted)
+      if (daysSinceLastBar > 7) {
+        console.warn(`[Polygon] ⚠️ WARNING: Data is ${daysSinceLastBar} days old! Symbol may be delisted or suspended.`);
+      } else if (daysSinceLastBar <= 3) {
+        console.log(`[Polygon] ✅ Data is fresh (${daysSinceLastBar} days old)`);
+      }
 
       return {
         symbol: symbol.toUpperCase(),
@@ -137,6 +164,8 @@ export class PolygonClient {
         timeframe,
         bars,
         currentPrice,
+        lastBarDate: new Date(bars[bars.length - 1].timestamp),
+        dataAgeDays: daysSinceLastBar,
         marketCap: details.marketCap,
         exchange: details.exchange
       };

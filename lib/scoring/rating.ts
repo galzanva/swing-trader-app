@@ -13,8 +13,8 @@ export interface SetupScore {
   trend: number; // 0-100
   pattern: number; // 0-100
   volume: number; // 0-100
-  rating: "A+" | "A" | "B+" | "B" | "C+" | "C" | "D" | "F";
-  recommendation: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+  rating: "A+" | "A" | "B" | "C" | "D";
+  recommendation: "Strong Buy" | "Buy" | "Strong Short" | "Short" | "Watch" | "Pass";
 }
 
 /**
@@ -108,11 +108,29 @@ function scoreVolume(volumeZScore: number): number {
 }
 
 /**
- * Score pattern
+ * Score pattern - adjusted for volume confirmation
  */
-function scorePattern(pattern: DetectedPattern): number {
-  // Pattern confidence is already 0-100
-  return pattern.confidence;
+function scorePattern(pattern: DetectedPattern, volumeZScore: number): number {
+  let score = pattern.confidence;
+  
+  // Penalize patterns with weak volume
+  // Engulfing and breakout patterns NEED volume confirmation
+  const needsVolume = pattern.name.includes("Engulfing") || pattern.name.includes("Breakout");
+  
+  if (needsVolume) {
+    if (volumeZScore < 0) {
+      // Below average volume - significant penalty
+      score = score * 0.7; // 30% reduction
+    } else if (volumeZScore < 0.5) {
+      // Slightly below average
+      score = score * 0.85; // 15% reduction
+    } else if (volumeZScore > 2) {
+      // Very high volume - bonus
+      score = Math.min(100, score * 1.1); // 10% bonus
+    }
+  }
+  
+  return Math.round(score);
 }
 
 /**
@@ -125,7 +143,7 @@ export function calculateSetupScore(
   const technical = scoreTechnical(indicators);
   const momentum = scoreMomentum(indicators);
   const trend = indicators.strength;
-  const patternScore = scorePattern(pattern);
+  const patternScore = scorePattern(pattern, indicators.volumeZScore); // Pass volume for adjustment
   const volume = scoreVolume(indicators.volumeZScore);
   
   // Weighted average
@@ -137,34 +155,29 @@ export function calculateSetupScore(
     volume * 0.10
   );
   
-  // Determine rating
+  // Determine rating and recommendation (direction-aware)
+  // Grade mapping: 0-40=D, 41-60=C, 61-75=B, 76-90=A, 90+=A+
   let rating: SetupScore["rating"];
   let recommendation: SetupScore["recommendation"];
   
+  const isBullish = pattern.type === "bullish";
+  const isBearish = pattern.type === "bearish";
+  
   if (overall >= 90) {
     rating = "A+";
-    recommendation = "Strong Buy";
-  } else if (overall >= 85) {
+    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
+  } else if (overall >= 76) {
     rating = "A";
-    recommendation = "Strong Buy";
-  } else if (overall >= 80) {
-    rating = "B+";
-    recommendation = "Buy";
-  } else if (overall >= 70) {
+    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
+  } else if (overall >= 61) {
     rating = "B";
-    recommendation = "Buy";
-  } else if (overall >= 60) {
-    rating = "C+";
-    recommendation = "Hold";
-  } else if (overall >= 50) {
+    recommendation = isBullish ? "Buy" : isBearish ? "Short" : "Buy";
+  } else if (overall >= 41) {
     rating = "C";
-    recommendation = "Hold";
-  } else if (overall >= 40) {
-    rating = "D";
-    recommendation = "Sell";
+    recommendation = "Watch";
   } else {
-    rating = "F";
-    recommendation = "Strong Sell";
+    rating = "D";
+    recommendation = "Pass";
   }
   
   return {

@@ -49,11 +49,16 @@ export interface AnalysisReport {
       target2: number;
       target3: number;
     };
+    atrValue: number;
+    atrMultiple: number;
+    riskPerShare: number;
+    riskPercent: number;
     positionSize: string;
     riskAmount: string;
     reasoning: string;
     isValid: boolean;
     validationMessage: string;
+    direction: "long" | "short";
   };
   
   // Technical facts
@@ -89,6 +94,8 @@ export interface AnalysisReport {
   marketData: {
     marketCap?: number;
     exchange?: string;
+    lastBarDate: string;
+    dataAgeDays: number;
   };
   
   timestamp: string;
@@ -246,11 +253,16 @@ export async function POST(request: Request) {
         stopLoss: riskPlan.stopLoss,
         targets: riskPlan.targets,
         riskReward: riskPlan.riskReward,
+        atrValue: riskPlan.atrValue,
+        atrMultiple: riskPlan.atrMultiple,
+        riskPerShare: riskPlan.riskPerShare,
+        riskPercent: riskPlan.riskPercent,
         positionSize: riskPlan.positionSize,
         riskAmount: riskPlan.riskAmount,
         reasoning: riskPlan.reasoning,
         isValid: rrValidation.isValid,
-        validationMessage: rrValidation.message
+        validationMessage: rrValidation.message,
+        direction: riskPlan.direction
       },
       
       technical: {
@@ -272,7 +284,9 @@ export async function POST(request: Request) {
       
       marketData: {
         marketCap: marketData.marketCap,
-        exchange: marketData.exchange
+        exchange: marketData.exchange,
+        lastBarDate: marketData.lastBarDate.toISOString(),
+        dataAgeDays: marketData.dataAgeDays
       },
       
       timestamp: new Date().toISOString()

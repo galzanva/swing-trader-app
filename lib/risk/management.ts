@@ -19,9 +19,14 @@ export interface RiskManagementPlan {
     target2: number;
     target3: number;
   };
+  atrValue: number;
+  atrMultiple: number;
+  riskPerShare: number;
+  riskPercent: number;
   positionSize: string;
   riskAmount: string;
   reasoning: string;
+  direction: "long" | "short";
 }
 
 interface SupportResistance {
@@ -41,8 +46,8 @@ function calculateStopLoss(
   let stopLoss: number;
   
   if (pattern.type === "bullish") {
-    // For bullish setups, place stop below support or 2x ATR
-    const atrStop = currentPrice - (2 * atr);
+    // For bullish setups, place stop below support or 1.5x ATR (for realistic 5-8% risk)
+    const atrStop = currentPrice - (1.5 * atr);
     const nearestSupport = support.find(s => s < currentPrice);
     
     if (nearestSupport && nearestSupport > atrStop) {
@@ -52,9 +57,9 @@ function calculateStopLoss(
       stopLoss = atrStop;
     }
   } else {
-    // For bearish setups, place stop above resistance or 2x ATR
+    // For bearish setups, place stop above resistance or 1.5x ATR (for realistic 5-8% risk)
     const resistance = support; // This should be resistance array in real implementation
-    const atrStop = currentPrice + (2 * atr);
+    const atrStop = currentPrice + (1.5 * atr);
     const nearestResistance = resistance.find(r => r > currentPrice);
     
     if (nearestResistance && nearestResistance < atrStop) {
@@ -133,24 +138,32 @@ function calculateRiskReward(
 function generateReasoning(
   pattern: DetectedPattern,
   indicators: TechnicalIndicators,
-  rr: { target1: number; target2: number; target3: number }
+  rr: { target1: number; target2: number; target3: number },
+  atrMultiple: number,
+  riskPercent: number
 ): string {
   const parts: string[] = [];
   
   // Pattern-based reasoning
   parts.push(`Entry based on ${pattern.name} pattern (${pattern.confidence}% confidence).`);
   
-  // Stop loss reasoning
-  parts.push(`Stop loss placed at ${indicators.atr.toFixed(2)} ATR distance to allow for normal volatility.`);
+  // Stop loss reasoning with proper ATR explanation
+  parts.push(`ATR(14) = $${indicators.atr.toFixed(2)}. Stop placed ${atrMultiple.toFixed(2)}× ATR ${pattern.type === "bullish" ? "below" : "above"} entry (${riskPercent.toFixed(2)}% per-share risk).`);
   
   // Target reasoning
-  parts.push(`Targets set at ${rr.target1.toFixed(1)}:1, ${rr.target2.toFixed(1)}:1, and ${rr.target3.toFixed(1)}:1 R:R ratios.`);
+  parts.push(`Targets at ${rr.target1.toFixed(1)}:1, ${rr.target2.toFixed(1)}:1, and ${rr.target3.toFixed(1)}:1 R:R.`);
   
   // Trend consideration
-  if (indicators.trend === "bullish") {
-    parts.push("Trend alignment supports upside targets.");
-  } else if (indicators.trend === "bearish") {
-    parts.push("Trend alignment supports downside targets.");
+  if (pattern.type === "bullish" && indicators.trend === "bullish") {
+    parts.push("Bullish trend alignment supports upside targets.");
+  } else if (pattern.type === "bearish" && indicators.trend === "bearish") {
+    parts.push("Bearish trend alignment supports downside targets.");
+  } else if (pattern.type === "bullish" && indicators.trend === "bearish") {
+    parts.push("⚠️ Counter-trend trade (bullish vs bearish trend) - higher risk.");
+  } else if (pattern.type === "bearish" && indicators.trend === "bullish") {
+    parts.push("⚠️ Counter-trend trade (bearish vs bullish trend) - higher risk.");
+  } else {
+    parts.push("Neutral trend - watch for directional confirmation.");
   }
   
   return parts.join(" ");
@@ -188,13 +201,17 @@ export function createRiskManagementPlan(
   // Calculate risk/reward ratios
   const riskReward = calculateRiskReward(entry, stopLoss, targets);
   
-  // Generate reasoning
-  const reasoning = generateReasoning(pattern, indicators, riskReward);
+  // Calculate ATR multiple and risk metrics
+  const riskPerShare = Math.abs(entry - stopLoss);
+  const atrMultiple = riskPerShare / indicators.atr;
+  const riskPercent = (riskPerShare / entry) * 100;
   
-  // Position sizing guidance (1% risk rule)
-  const riskPercent = Math.abs((entry - stopLoss) / entry) * 100;
-  const positionSize = `Risk ${riskPercent.toFixed(2)}% per share. Size position for 1-2% account risk.`;
-  const riskAmount = `If account is $10,000, risk $100-200 total on this trade.`;
+  // Generate reasoning with proper ATR explanation
+  const reasoning = generateReasoning(pattern, indicators, riskReward, atrMultiple, riskPercent);
+  
+  // Position sizing guidance (1-2% account risk rule)
+  const positionSize = `Per-share risk: $${riskPerShare.toFixed(2)} (~${riskPercent.toFixed(2)}%). Size position so total account risk = 1-2%.`;
+  const riskAmount = `Example: $10,000 account → risk $100-200 total → position size = ${Math.floor(100 / riskPerShare)} - ${Math.floor(200 / riskPerShare)} shares.`;
   
   return {
     entry: Number(entry.toFixed(2)),
@@ -209,9 +226,14 @@ export function createRiskManagementPlan(
       target2: Number(riskReward.target2.toFixed(2)),
       target3: Number(riskReward.target3.toFixed(2))
     },
+    atrValue: Number(indicators.atr.toFixed(2)),
+    atrMultiple: Number(atrMultiple.toFixed(2)),
+    riskPerShare: Number(riskPerShare.toFixed(2)),
+    riskPercent: Number(riskPercent.toFixed(2)),
     positionSize,
     riskAmount,
-    reasoning
+    reasoning,
+    direction: pattern.type === "bullish" ? "long" : "short"
   };
 }
 

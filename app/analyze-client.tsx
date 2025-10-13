@@ -125,22 +125,91 @@ export default function AnalyzeClient() {
       {/* Analysis Report */}
       {report && !isLoading && (
         <div className="space-y-6">
+          {/* Data Freshness Warning */}
+          {report.marketData.dataAgeDays > 7 && (
+            <div className="bg-red-500/20 backdrop-blur-lg rounded-2xl p-6 border border-red-500/50">
+              <div className="flex items-start gap-4">
+                <div className="text-3xl">🛑</div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-red-300 mb-2">Critical: Very Stale Data</h3>
+                  <p className="text-red-100 mb-3">
+                    This analysis is based on data from <strong>{new Date(report.marketData.lastBarDate).toLocaleDateString()}</strong> 
+                    - that's <strong>{report.marketData.dataAgeDays} days ago</strong>!
+                  </p>
+                  <p className="text-red-100 mb-3">
+                    <strong>⚠️ This stock may be delisted, suspended, or have no recent trading activity.</strong> Data this old is NOT suitable for trading decisions.
+                  </p>
+                  <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mt-3">
+                    <p className="text-red-200 font-semibold mb-2">DO NOT TRADE based on this analysis!</p>
+                    <ul className="text-red-100 text-sm space-y-1">
+                      <li>✓ Verify the stock is still actively trading</li>
+                      <li>✓ Check if company was delisted or acquired</li>
+                      <li>✓ Use TradingView or your broker for current status</li>
+                      <li>✓ If trading, get current data before any decisions</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {report.marketData.dataAgeDays > 1 && report.marketData.dataAgeDays <= 7 && (
+            <div className="bg-yellow-500/20 backdrop-blur-lg rounded-2xl p-6 border border-yellow-500/50">
+              <div className="flex items-start gap-4">
+                <div className="text-3xl">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-yellow-300 mb-2">Data Freshness Note</h3>
+                  <p className="text-yellow-100 mb-3">
+                    This analysis uses data from <strong>{new Date(report.marketData.lastBarDate).toLocaleDateString()}</strong> 
+                    ({report.marketData.dataAgeDays} day{report.marketData.dataAgeDays > 1 ? 's' : ''} ago). 
+                    Price shown: ${report.currentPrice.toFixed(2)}
+                  </p>
+                  <p className="text-yellow-100 mb-3">
+                    Polygon's free tier provides <strong>end-of-day data</strong>. For daily timeframe swing trading, 
+                    data updates after market close. Weekend/holiday gaps are normal.
+                  </p>
+                  <p className="text-yellow-100 mb-3">
+                    <strong>⚠️ No new bar yet</strong> — Verify with latest data before acting. The most recent candle may still be forming.
+                  </p>
+                  <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mt-3">
+                    <p className="text-yellow-200 font-semibold mb-2">Before Trading:</p>
+                    <ul className="text-yellow-100 text-sm space-y-1">
+                      <li>✓ Verify current price hasn't gapped significantly</li>
+                      <li>✓ Check for major news or earnings</li>
+                      <li>✓ Confirm technical setup still valid</li>
+                      <li>✓ Use TradingView or broker for current price</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header Card */}
           <div className="bg-gradient-to-r from-slate-900/80 to-blue-900/80 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-3xl font-bold text-white mb-2">
                   {report.symbol} — {report.timeframe}
-                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
-                    {report.pattern.name}
+                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${report.riskManagement.direction === 'long' ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 'bg-red-500/20 text-red-300 border border-red-500/50'}`}>
+                    {report.riskManagement.direction === 'long' ? '📈 LONG' : '📉 SHORT'} Setup
+                  </span>
+                  <span className={`ml-2 px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
+                    {report.pattern.name} ({report.pattern.confidence}%)
                   </span>
                 </h2>
                 <p className="text-blue-200">{report.name}</p>
                 <p className="text-sm text-blue-300 mt-1">
-                  Current Price: <span className="text-white font-semibold">${report.currentPrice.toFixed(2)}</span>
+                  Price (from data): <span className="text-white font-semibold">${report.currentPrice.toFixed(2)}</span>
                   {report.marketData.exchange && <span className="ml-4">• {report.marketData.exchange}</span>}
                   {report.marketData.marketCap && (
                     <span className="ml-4">• Market Cap: ${(report.marketData.marketCap / 1e9).toFixed(2)}B</span>
+                  )}
+                </p>
+                <p className="text-xs text-blue-400 mt-1">
+                  Last data: {new Date(report.marketData.lastBarDate).toLocaleDateString()} 
+                  {report.marketData.dataAgeDays > 0 && (
+                    <span className="text-yellow-400"> ({report.marketData.dataAgeDays} day{report.marketData.dataAgeDays > 1 ? 's' : ''} old)</span>
                   )}
                 </p>
               </div>
@@ -150,7 +219,13 @@ export default function AnalyzeClient() {
                   {report.score.rating}
                 </div>
                 <div className="text-white font-semibold mt-2">{report.score.overall}/100</div>
-                <div className="text-blue-200 text-sm">{report.score.recommendation}</div>
+                <div className="text-blue-200 text-sm mb-1">{report.score.recommendation}</div>
+                <div className="text-blue-300 text-xs italic">
+                  {report.score.overall >= 76 ? "High conviction setup" : 
+                   report.score.overall >= 61 ? "Solid setup, watch confirmation" : 
+                   report.score.overall >= 41 ? "Neutral - wait for confirmation" : 
+                   "Low conviction - avoid"}
+                </div>
               </div>
             </div>
           </div>
@@ -158,6 +233,15 @@ export default function AnalyzeClient() {
           {/* Risk Management */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">📊 Risk Management Plan</h3>
+            
+            {/* ATR Info Box */}
+            <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+              <div className="text-purple-200 text-sm">
+                <strong>ATR(14):</strong> ${report.riskManagement.atrValue} • 
+                <strong className="ml-2">Stop Distance:</strong> {report.riskManagement.atrMultiple}× ATR • 
+                <strong className="ml-2">Risk/Share:</strong> ${report.riskManagement.riskPerShare} ({report.riskManagement.riskPercent.toFixed(2)}%)
+              </div>
+            </div>
             
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
               <div className="p-4 rounded-lg bg-white/5 border border-white/10">
@@ -167,6 +251,7 @@ export default function AnalyzeClient() {
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
                 <div className="text-red-200 text-sm mb-1">Stop Loss</div>
                 <div className="text-red-400 font-bold text-lg">${report.riskManagement.stopLoss}</div>
+                <div className="text-red-300 text-xs">{report.riskManagement.direction === 'long' ? 'Below' : 'Above'} entry</div>
               </div>
               <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                 <div className="text-green-200 text-sm mb-1">Target 1</div>
@@ -185,11 +270,21 @@ export default function AnalyzeClient() {
               </div>
             </div>
 
-            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
               <p className="text-blue-200 text-sm mb-2"><strong>Position Sizing:</strong> {report.riskManagement.positionSize}</p>
-              <p className="text-blue-200 text-sm mb-2"><strong>Risk Amount:</strong> {report.riskManagement.riskAmount}</p>
+              <p className="text-blue-200 text-sm mb-2"><strong>Example:</strong> {report.riskManagement.riskAmount}</p>
               <p className="text-blue-200 text-sm"><strong>Reasoning:</strong> {report.riskManagement.reasoning}</p>
             </div>
+            
+            {/* Low Volume Warning */}
+            {report.technical.volumeZScore < 0 && report.pattern.name.includes("Engulfing") && (
+              <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+                <p className="text-yellow-200 text-sm">
+                  ⚠️ <strong>Caution:</strong> {report.pattern.name} pattern on below-average volume (z-score: {report.technical.volumeZScore.toFixed(2)}). 
+                  Engulfing patterns work best with strong volume confirmation. Consider waiting for better setup or reducing position size.
+                </p>
+              </div>
+            )}
 
             {!report.riskManagement.isValid && (
               <div className="mt-4 p-4 rounded-lg bg-yellow-500/20 border border-yellow-500/50 text-yellow-200">
@@ -271,6 +366,21 @@ export default function AnalyzeClient() {
           {/* Score Breakdown */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">⭐ Score Breakdown</h3>
+            
+            {/* Pattern Score Adjustment Explanation */}
+            {Math.abs(report.score.breakdown.pattern - report.pattern.confidence) > 5 && (
+              <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                <p className="text-purple-200 text-sm">
+                  <strong>Pattern Score Adjusted:</strong> Original confidence {report.pattern.confidence}%, 
+                  adjusted to {report.score.breakdown.pattern}/100 due to 
+                  {report.technical.volumeZScore < 0 ? " low volume" : " volume confirmation"}
+                  {report.technical.trend === "neutral" ? " and neutral trend" : ""}.
+                  {(report.pattern.name.includes("Engulfing") || report.pattern.name.includes("Breakout")) && 
+                    " (These patterns require strong volume confirmation)"}
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-3">
               {Object.entries(report.score.breakdown).map(([key, value]) => (
                 <div key={key}>
@@ -309,9 +419,9 @@ export default function AnalyzeClient() {
               {report.analysis.strengths.length > 0 && (
                 <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                   <h4 className="text-green-300 font-semibold mb-2">✅ Strengths</h4>
-                  <ul className="space-y-1">
+                  <ul className="list-disc list-inside space-y-1">
                     {report.analysis.strengths.map((item, idx) => (
-                      <li key={idx} className="text-green-200 text-sm">• {item}</li>
+                      <li key={idx} className="text-green-200 text-sm">{item}</li>
                     ))}
                   </ul>
                 </div>
@@ -320,9 +430,9 @@ export default function AnalyzeClient() {
               {report.analysis.warnings.length > 0 && (
                 <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                   <h4 className="text-yellow-300 font-semibold mb-2">⚠️ Warnings</h4>
-                  <ul className="space-y-1">
+                  <ul className="list-disc list-inside space-y-1">
                     {report.analysis.warnings.map((item, idx) => (
-                      <li key={idx} className="text-yellow-200 text-sm">• {item}</li>
+                      <li key={idx} className="text-yellow-200 text-sm">{item}</li>
                     ))}
                   </ul>
                 </div>
@@ -330,10 +440,10 @@ export default function AnalyzeClient() {
 
               {report.analysis.reasoning.length > 0 && (
                 <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                  <h4 className="text-blue-300 font-semibold mb-2">🔍 Rules Fired</h4>
-                  <ul className="space-y-1">
+                  <h4 className="text-blue-300 font-semibold mb-2">🔍 Rules Triggered</h4>
+                  <ul className="list-disc list-inside space-y-1">
                     {report.analysis.reasoning.map((item, idx) => (
-                      <li key={idx} className="text-blue-200 text-sm">• {item}</li>
+                      <li key={idx} className="text-blue-200 text-sm">{item}</li>
                     ))}
                   </ul>
                 </div>
