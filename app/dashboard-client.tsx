@@ -3,13 +3,14 @@
 import { signOut } from "next-auth/react";
 import { Session } from "next-auth";
 import { useState } from "react";
+import AnalyzeClient from "./analyze-client";
 
 interface DashboardClientProps {
   session: Session;
 }
 
 export default function DashboardClient({ session }: DashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<"scanner" | "analysis">("scanner");
+  const [activeTab, setActiveTab] = useState<"scanner" | "analysis">("analysis");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -169,64 +170,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         )}
 
         {/* Deep Analysis Mode */}
-        {activeTab === "analysis" && (
-          <div className="space-y-6">
-            {/* Analysis Card */}
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-2xl">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Deep Analysis</h3>
-                  <p className="text-blue-200">
-                    Get a comprehensive, evidence-backed report for any ticker
-                  </p>
-                </div>
-                <div className="px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-sm font-medium border border-teal-500/30">
-                  Coming Soon
-                </div>
-              </div>
-
-              {/* Analysis Features */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-2xl mb-2">📊</div>
-                  <h4 className="text-white font-semibold mb-1">Technical State</h4>
-                  <p className="text-sm text-blue-200">
-                    Complete technical analysis with indicators, support/resistance, and trend analysis
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-2xl mb-2">🎲</div>
-                  <h4 className="text-white font-semibold mb-1">Probabilities</h4>
-                  <p className="text-sm text-blue-200">
-                    Data-driven probability estimates based on historical cohort analysis
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-2xl mb-2">⚠️</div>
-                  <h4 className="text-white font-semibold mb-1">Risk Management</h4>
-                  <p className="text-sm text-blue-200">
-                    Entry points, stop losses, and target levels with R:R ratios
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="text-2xl mb-2">🤖</div>
-                  <h4 className="text-white font-semibold mb-1">AI Explanations</h4>
-                  <p className="text-sm text-blue-200">
-                    Clear, facts-only explanations from your AI trading mentor
-                  </p>
-                </div>
-              </div>
-
-              {/* Coming Soon Notice */}
-              <div className="p-4 rounded-xl bg-gradient-to-r from-teal-500/10 to-blue-500/10 border border-teal-500/30">
-                <p className="text-teal-200 text-sm">
-                  🚀 Deep analysis reports are under development. Soon you'll receive comprehensive trading
-                  reports with technical analysis, risk assessment, and AI-powered insights for any stock.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeTab === "analysis" && <AnalyzeClient />}
 
         {/* Principles Section */}
         <div className="mt-8 bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
