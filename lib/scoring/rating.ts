@@ -168,6 +168,7 @@ export function calculateSetupScore(
   let rating: SetupScore["rating"];
   let recommendation: SetupScore["recommendation"];
   
+  // Use pattern type for direction
   const isBullish = pattern.type === "bullish";
   const isBearish = pattern.type === "bearish";
   
@@ -206,7 +207,8 @@ export function calculateSetupScore(
  */
 export function calculateCompositeScore(
   indicators: TechnicalIndicators,
-  compositePattern: CompositePattern
+  compositePattern: CompositePattern,
+  executionDirection?: "bullish" | "bearish" | "neutral"
 ): SetupScore {
   const technical = scoreTechnical(indicators);
   const momentum = scoreMomentum(indicators);
@@ -250,10 +252,9 @@ export function calculateCompositeScore(
   let rating: SetupScore["rating"];
   let recommendation: SetupScore["recommendation"];
   
-  // Use the fused confidence pattern type for direction
-  const patternType = compositePattern.chartPattern?.type || compositePattern.candlestickPattern.type;
-  const isBullish = patternType === "bullish";
-  const isBearish = patternType === "bearish";
+  // Use execution direction if provided, otherwise fall back to pattern type
+  const isBullish = executionDirection === "bullish" || (executionDirection === undefined && (compositePattern.chartPattern?.type === "bullish" || compositePattern.candlestickPattern.type === "bullish"));
+  const isBearish = executionDirection === "bearish" || (executionDirection === undefined && (compositePattern.chartPattern?.type === "bearish" || compositePattern.candlestickPattern.type === "bearish"));
   
   if (overall >= 90) {
     rating = "A+";

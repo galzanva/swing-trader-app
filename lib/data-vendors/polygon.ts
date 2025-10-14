@@ -126,7 +126,7 @@ export class PolygonClient {
         throw new Error(`No data available for ${symbol}. This symbol may be delisted, invalid, or have no trading history.`);
       }
       
-      console.log(`[Polygon] Received ${data.results.length} bars. Status: ${data.status}`);
+      console.log(`[Polygon] Received ${data.results.length} bars. Status: ${data.status} (Stocks Starter: 15-min delayed)`);
       console.log(`[Polygon] Results count: ${data.resultsCount}, Actual bars: ${data.results.length}`);
 
       // Get ticker details

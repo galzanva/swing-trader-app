@@ -8,6 +8,7 @@ import { TechnicalIndicators } from "../indicators/technical";
 import { DetectedPattern, CompositePattern } from "../patterns/detector";
 import { SetupScore } from "../scoring/rating";
 import { RiskManagementPlan } from "../risk/management";
+import { ExecutionPlan } from "../execution/confirmation-entries";
 
 export interface AIAnalysis {
   narrative: string;
@@ -217,16 +218,20 @@ Be concise, clear, and educational. Stick to the facts.`;
     return `Technical analysis reveals a ${pattern.type} setup with ${pattern.name} pattern showing ${pattern.confidence}% confidence. The ${indicators.trend} trend is supported by EMA alignment with ${indicators.strength} strength. RSI at ${indicators.rsi.toFixed(1)} indicates ${indicators.rsi > 70 ? 'overbought' : indicators.rsi < 30 ? 'oversold' : 'neutral'} conditions. Overall setup scores ${score.overall}/100 (${score.rating}) with ${score.recommendation} recommendation.`;
   }
 
-  private getDefaultMentorNotes(indicators: TechnicalIndicators): string {
+  private getDefaultMentorNotes(indicators: TechnicalIndicators, executionPlan?: ExecutionPlan): string {
     const notes: string[] = [];
     
-    notes.push(`• RSI (${indicators.rsi.toFixed(1)}): Measures momentum. 30-70 is normal, below 30 is oversold, above 70 is overbought.`);
-    notes.push(`• MACD (${indicators.macd.histogram > 0 ? 'Positive' : 'Negative'}): Trend-following indicator. Positive histogram suggests bullish momentum.`);
-    notes.push(`• EMAs: Moving averages smooth price action. Price above EMAs suggests uptrend, below suggests downtrend.`);
-    notes.push(`• Volume Z-Score (${indicators.volumeZScore.toFixed(2)}): Measures volume relative to average. Above 1 is high interest.`);
-    notes.push(`• ATR (${indicators.atr.toFixed(2)}): Average True Range shows volatility. Used for stop-loss placement.`);
+    // Simplified to 3 concise bullets
+    notes.push(`• Pattern absence → neutral bias.`);
+    notes.push(`• Volume ${indicators.volumeZScore < 0 ? 'sub-avg' : 'adequate'} → ${indicators.volumeZScore < 0 ? 'weak' : 'strong'} conviction.`);
     
-    return notes.join('\n');
+    if (executionPlan) {
+      notes.push(`• Confirmation ${executionPlan.entry.type === 'breakdown' ? 'below' : 'above'} $${executionPlan.entry.triggerPrice} + avg volume required.`);
+    } else {
+      notes.push(`• Confirmation at key level + avg volume required.`);
+    }
+    
+    return notes.join('\n\n');
   }
 
   private getDefaultReasoning(indicators: TechnicalIndicators, pattern: DetectedPattern): string[] {
@@ -318,7 +323,8 @@ Be concise, clear, and educational. Stick to the facts.`;
     indicators: TechnicalIndicators,
     compositePattern: CompositePattern,
     score: SetupScore,
-    risk: RiskManagementPlan
+    risk: RiskManagementPlan,
+    executionPlan?: ExecutionPlan
   ): Promise<AIAnalysis> {
     const prompt = this.buildCompositePrompt(symbol, timeframe, indicators, compositePattern, score, risk);
 
@@ -358,7 +364,7 @@ Key principles:
       console.error("Error generating composite AI analysis:", error);
       
       // Fallback to rule-based analysis
-      return this.generateFallbackCompositeAnalysis(symbol, indicators, compositePattern, score, risk);
+      return this.generateFallbackCompositeAnalysis(symbol, indicators, compositePattern, score, risk, executionPlan);
     }
   }
 
@@ -463,7 +469,8 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     indicators: TechnicalIndicators,
     compositePattern: CompositePattern,
     score: SetupScore,
-    risk: RiskManagementPlan
+    risk: RiskManagementPlan,
+    executionPlan?: ExecutionPlan
   ): AIAnalysis {
     const { candlestickPattern, chartPattern, analysis } = compositePattern;
     
@@ -478,8 +485,8 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     }
 
     const mentorNotes = chartPattern
-      ? `Chart Structure: ${chartPattern.name} defines the expected price path and provides ${chartPattern.priceTarget ? `target of $${chartPattern.priceTarget.toFixed(2)}` : 'directional bias'}.\n\nEntry Timing: ${candlestickPattern.name} signals when to enter based on immediate price action.\n\nVolume Analysis: ${chartPattern.volumeConfirmation ? 'Strong volume confirms the pattern validity' : 'Low volume suggests caution - wait for volume confirmation'}.\n\nTrend Context: Price is ${indicators.trend} with strength ${indicators.strength}/100. EMAs show ${indicators.ema9 > indicators.ema20 ? 'bullish' : 'bearish'} short-term alignment.\n\nRisk Management: Stop at $${risk.stopLoss} protects against invalidation. Targets at ${risk.riskReward.target1.toFixed(1)}:1, ${risk.riskReward.target2.toFixed(1)}:1, ${risk.riskReward.target3.toFixed(1)}:1 R:R ratios.`
-      : this.getDefaultMentorNotes(indicators);
+      ? `• Pattern absence → neutral bias.\n\n• Volume ${indicators.volumeZScore < 0 ? 'sub-avg' : 'adequate'} → ${indicators.volumeZScore < 0 ? 'weak' : 'strong'} conviction.\n\n• Confirmation ${executionPlan ? `below $${executionPlan.entry.triggerPrice}` : 'at key level'} + avg volume required.`
+      : this.getDefaultMentorNotes(indicators, executionPlan);
 
     const reasoning: string[] = [
       `Candlestick: ${candlestickPattern.name} (${candlestickPattern.confidence}%)`,

@@ -9,6 +9,8 @@ import { detectAllPatterns } from "@/lib/patterns/detector-v2";
 import { calculateSetupScore, calculateCompositeScore } from "@/lib/scoring/rating";
 import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/management";
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
+import { calculateConfirmationEntry } from "@/lib/execution/confirmation-entries";
+import { validateReport, formatQAReport, type AnalysisReportForQA } from "@/lib/validation/qa-checklist";
 
 export interface AnalysisReport {
   symbol: string;
@@ -165,6 +167,34 @@ export interface AnalysisReport {
     isValid: boolean;
     validationMessage: string;
     direction: "long" | "short";
+  };
+  
+  // Execution Plan (Confirmation Entry Logic)
+  execution: {
+    entry: {
+      type: "breakout" | "breakdown" | "retest" | "market";
+      triggerPrice: number;
+      note: string;
+    };
+    stopLoss: {
+      price: number;
+      movePct: number;
+    };
+    targets: Array<{
+      name: string;
+      price: number;
+      movePct: number;
+      rr: number;
+    }>;
+    status: "ready" | "candidate" | "missed" | "blocked" | "neutral";
+    viabilityIndex?: number;
+    viabilityLabel?: string;
+    warnings: string[];
+    patternTarget?: {
+      price: number;
+      movePct: number;
+      confluence?: string;
+    };
   };
   
   // Technical facts
@@ -351,8 +381,29 @@ export async function POST(request: Request) {
     }
 
     // 5. Calculate setup score (with chart pattern fusion)
-    const score = calculateCompositeScore(indicators, compositePattern);
-    console.log(`[Analyze] Setup score: ${score.overall}/100 (${score.rating})`);
+    // Determine execution direction for scoring
+    let executionDirection: "bullish" | "bearish" | "neutral" = "neutral";
+    if (useV2 && patternsV2) {
+      if (patternsV2.institutional) {
+        executionDirection = patternsV2.institutional.direction as "bullish" | "bearish" | "neutral";
+      } else if (patternsV2.candidate) {
+        executionDirection = patternsV2.candidate.direction as "bullish" | "bearish" | "neutral";
+      } else if (compositePattern.candlestickPattern.type === 'bullish') {
+        executionDirection = 'bullish';
+      } else if (compositePattern.candlestickPattern.type === 'bearish') {
+        executionDirection = 'bearish';
+      }
+    } else {
+      // Fallback to candlestick pattern
+      if (compositePattern.candlestickPattern.type === 'bullish') {
+        executionDirection = 'bullish';
+      } else if (compositePattern.candlestickPattern.type === 'bearish') {
+        executionDirection = 'bearish';
+      }
+    }
+    
+    const score = calculateCompositeScore(indicators, compositePattern, executionDirection);
+    console.log(`[Analyze] Setup score: ${score.overall}/100 (${score.rating}) - ${executionDirection} direction`);
 
     // 6. Create risk management plan (using candlestick pattern for entry/stop placement)
     const riskPlan = createRiskManagementPlan(
@@ -363,6 +414,39 @@ export async function POST(request: Request) {
     );
     const rrValidation = validateRiskReward(riskPlan.riskReward);
     console.log(`[Analyze] Risk/Reward: ${riskPlan.riskReward.target1}:1 (Valid: ${rrValidation.isValid})`);
+
+    // 6.5. Calculate confirmation entry with rule-based triggers
+    const avgDollarVolume = marketData.bars.slice(-20).reduce((sum, bar) => 
+      sum + (bar.close * bar.volume), 0) / 20;
+
+    const executionPlan = calculateConfirmationEntry({
+      currentPrice: marketData.currentPrice,
+      bars: marketData.bars,
+      atr: indicators.atr,
+      direction: executionDirection,
+      chartPattern: compositePattern.chartPattern ? {
+        name: compositePattern.chartPattern.name,
+        breakoutLevel: compositePattern.chartPattern.keyLevels?.breakoutLevel,
+        breakoutStatus: compositePattern.chartPattern.breakoutStatus,
+        priceTarget: compositePattern.chartPattern.priceTarget,
+        keyLevels: {
+          support: compositePattern.chartPattern.keyLevels?.support || [],
+          resistance: compositePattern.chartPattern.keyLevels?.resistance || []
+        }
+      } : undefined,
+      candlestickPattern: {
+        name: compositePattern.candlestickPattern.name,
+        type: compositePattern.candlestickPattern.type as "bullish" | "bearish" | "neutral",
+        confirmationNeeded: ['Inside Bar', 'Doji'].includes(compositePattern.candlestickPattern.name)
+      },
+      isInstitutional: !!(useV2 && patternsV2 && patternsV2.institutional),
+      isCandidate: !!(useV2 && patternsV2 && patternsV2.candidate),
+      daysToEarnings: null, // TODO: integrate earnings calendar
+      avgDollarVolume,
+      ema200: indicators.ema200,
+      volumeZScore: indicators.volumeZScore
+    });
+    console.log(`[Analyze] Execution: ${executionPlan.status}, Entry ${executionPlan.entry.type} @ $${executionPlan.entry.triggerPrice}`);
 
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
@@ -375,7 +459,8 @@ export async function POST(request: Request) {
           indicators,
           compositePattern,
           score,
-          riskPlan
+          riskPlan,
+          executionPlan
         );
         console.log(`[Analyze] Generated AI analysis with chart pattern context`);
       } catch (error) {
@@ -556,6 +641,8 @@ export async function POST(request: Request) {
         direction: riskPlan.direction
       },
       
+      execution: executionPlan,
+      
       technical: {
         ema9: indicators.ema9,
         ema20: indicators.ema20,
@@ -585,6 +672,29 @@ export async function POST(request: Request) {
     };
 
     console.log(`[Analyze] Analysis complete for ${symbol}`);
+
+    // 9. Run QA validation
+    const qaReport = report as unknown as AnalysisReportForQA;
+    const qaResult = validateReport(qaReport);
+    
+    console.log(`[QA] Validation Score: ${qaResult.score}/100 - ${qaResult.passed ? 'PASSED' : 'FAILED'}`);
+    if (qaResult.issues.length > 0) {
+      console.log(`[QA] Issues found: ${qaResult.issues.length}`);
+      qaResult.issues.forEach(issue => {
+        console.log(`  - [${issue.severity.toUpperCase()}] ${issue.category}: ${issue.message}`);
+      });
+    }
+    if (qaResult.warnings.length > 0) {
+      console.log(`[QA] Warnings: ${qaResult.warnings.length}`);
+      qaResult.warnings.forEach(warning => {
+        console.log(`  - ${warning.category}: ${warning.message}`);
+      });
+    }
+    
+    // Log full QA report in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log(formatQAReport(qaResult));
+    }
 
     return NextResponse.json(report, { status: 200 });
 

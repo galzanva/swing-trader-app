@@ -170,9 +170,9 @@ export default function AnalyzeClient() {
                     Weekend/holiday gaps are normal.
                   </p>
                   <p className="text-yellow-100 mb-3">
-                    <strong>Free Tier Limitations:</strong> Polygon's free tier data may be marked as "DELAYED" and could be 
-                    15 minutes to several days behind real-time, depending on the ticker. This is expected behavior for free API access.
-                    For most recent data, Polygon typically updates after market close + settlement (6-8 PM ET).
+                    <strong>Stocks Starter Plan (15-min Delayed):</strong> Your Polygon Stocks Starter plan provides 15-minute delayed data, 
+                    which is significantly fresher than the free tier. Data typically updates within 15 minutes of real-time during market hours.
+                    End-of-day data becomes available 2-4 hours after market close (around 6:00-8:00 PM ET) once settlement is complete.
                   </p>
                   <p className="text-yellow-100 mb-3">
                     <strong>⚠️ No new bar yet</strong> — Verify with latest intraday data before acting. The most recent daily candle may still be forming.
@@ -731,79 +731,169 @@ export default function AnalyzeClient() {
             </div>
           )}
 
-          {/* Risk Management */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-            <h3 className="text-xl font-bold text-white mb-4">📊 Risk Management Plan</h3>
-            
-            {/* ATR Info Box */}
-            <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
-              <div className="text-purple-200 text-sm">
-                <strong>ATR(14):</strong> ${report.riskManagement.atrValue} • 
-                <strong className="ml-2">Stop Distance:</strong> {report.riskManagement.atrMultiple}× ATR • 
-                <strong className="ml-2">Risk/Share:</strong> ${report.riskManagement.riskPerShare} ({report.riskManagement.riskPercent.toFixed(2)}%)
+          {/* Execution Plan - Confirmation Entry */}
+          {report.execution && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-white">🎯 Execution Plan</h3>
+                {/* Status Badge */}
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  report.execution.status === 'ready' ? 'bg-green-500 text-white' :
+                  report.execution.status === 'candidate' ? 'bg-orange-500 text-white' :
+                  report.execution.status === 'missed' ? 'bg-yellow-500 text-black' :
+                  report.execution.status === 'blocked' ? 'bg-red-500 text-white' :
+                  'bg-gray-500 text-white'
+                }`}>
+                  {report.execution.status === 'ready' ? '✅ READY (Institutional)' :
+                   report.execution.status === 'candidate' ? 
+                     (report.score.overall < 65 ? `🔸 CANDIDATE (${report.score.overall}/100)` : '🔸 CANDIDATE - Capped at 65') :
+                   report.execution.status === 'missed' ? '⏱️ MISSED - Wait for Retest' :
+                   report.execution.status === 'blocked' ? '⛔ BLOCKED - Earnings/Liquidity' :
+                   'NEUTRAL'}
+                </span>
               </div>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <div className="text-blue-200 text-sm mb-1">Entry</div>
-                <div className="text-white font-bold text-lg">${report.riskManagement.entry}</div>
-              </div>
-              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
-                <div className="text-red-200 text-sm mb-1">Stop Loss</div>
-                <div className="text-red-400 font-bold text-lg">${report.riskManagement.stopLoss}</div>
-                <div className="text-red-300 text-xs">
-                  ${Math.abs(report.riskManagement.stopLoss - report.riskManagement.entry).toFixed(2)} ({report.riskManagement.riskPercent.toFixed(2)}%) {report.riskManagement.direction === 'long' ? 'below' : 'above'} entry
+              
+              {/* Entry Trigger */}
+              <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="text-blue-200 text-sm uppercase tracking-wide mb-1">
+                      {report.execution.entry.type === 'breakout' ? '📈 Breakout Entry' :
+                       report.execution.entry.type === 'breakdown' ? '📉 Breakdown Entry' :
+                       report.execution.entry.type === 'retest' ? '🔁 Retest Entry' :
+                       '💹 Market Entry'}
+                    </div>
+                    <div className="text-white font-bold text-2xl">${report.execution.entry.triggerPrice}</div>
+                  </div>
+                    {report.execution.viabilityIndex && (
+                      <div className="text-right">
+                        <div className="text-xs text-gray-300 uppercase">Viability Index</div>
+                        <div className={`text-lg font-bold ${
+                          report.execution.viabilityIndex >= 2.0 ? 'text-green-400' :
+                          report.execution.viabilityIndex >= 1.2 ? 'text-yellow-400' :
+                          'text-red-400'
+                        }`}>
+                          {report.execution.viabilityIndex.toFixed(2)} {report.execution.viabilityLabel && `(${report.execution.viabilityLabel})`}
+                        </div>
+                        {report.technical.volumeZScore < -0.5 && (
+                          <div className="text-xs text-red-300 mt-1">
+                            Vol penalty: ×0.5 (volZ = {report.technical.volumeZScore.toFixed(2)})
+                          </div>
+                        )}
+                        {report.technical.volumeZScore >= 1.2 && (
+                          <div className="text-xs text-green-300 mt-1">
+                            Vol bonus: ×1.25 (volZ = {report.technical.volumeZScore.toFixed(2)})
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </div>
+                <p className="text-blue-100 text-sm">{report.execution.entry.note}</p>
+                {report.execution.entry.note.includes('neckline') && (
+                  <p className="text-blue-200 text-xs mt-1">
+                    📏 <strong>Structure Level:</strong> Breaking ${report.execution.entry.triggerPrice} neckline confirms bearish structure.
+                  </p>
+                )}
               </div>
-              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <div className="text-green-200 text-sm mb-1">Target 1</div>
-                <div className="text-green-400 font-bold text-lg">${report.riskManagement.targets.target1}</div>
-                <div className="text-green-300 text-xs">{report.riskManagement.riskReward.target1.toFixed(1)}:1 R:R</div>
-              </div>
-              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <div className="text-green-200 text-sm mb-1">Target 2</div>
-                <div className="text-green-400 font-bold text-lg">${report.riskManagement.targets.target2}</div>
-                <div className="text-green-300 text-xs">{report.riskManagement.riskReward.target2.toFixed(1)}:1 R:R</div>
-              </div>
-              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <div className="text-green-200 text-sm mb-1">Target 3</div>
-                <div className="text-green-400 font-bold text-lg">${report.riskManagement.targets.target3}</div>
-                <div className="text-green-300 text-xs">{report.riskManagement.riskReward.target3.toFixed(1)}:1 R:R</div>
-              </div>
-            </div>
 
-            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
-              <p className="text-blue-200 text-sm mb-2"><strong>📊 Position Sizing:</strong> {report.riskManagement.positionSize}</p>
-              <p className="text-blue-200 text-sm mb-2"><strong>💰 Risk Amount:</strong> {report.riskManagement.riskAmount}</p>
-              <p className="text-blue-200 text-sm"><strong>📝 Reasoning:</strong> {report.riskManagement.reasoning}</p>
-            </div>
-            
-            {/* Pattern Validation */}
-            {report.pattern.validation && (
-              <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30 mb-3">
-                <p className="text-purple-200 text-sm">
-                  <strong>Pattern Validation:</strong> {report.pattern.validation.note}
+              {/* Warnings */}
+              {report.execution.warnings && report.execution.warnings.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {report.execution.warnings.map((warning, idx) => (
+                    <div key={idx} className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+                      <p className="text-yellow-200 text-sm">{warning}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Stop & Targets with % Moves */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                {/* Stop Loss */}
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <div className="text-red-200 text-sm mb-1">Stop Loss</div>
+                  <div className="text-red-400 font-bold text-lg">${report.execution.stopLoss.price}</div>
+                  <div className={`text-xs font-semibold ${report.execution.stopLoss.movePct < 0 ? 'text-red-300' : 'text-red-300'}`}>
+                    {report.execution.stopLoss.movePct > 0 ? '+' : ''}{report.execution.stopLoss.movePct}%
+                  </div>
+                </div>
+
+                {/* Targets */}
+                {report.execution.targets.map((target, idx) => (
+                  <div key={idx} className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+                    <div className="text-green-200 text-sm mb-1">{target.name}</div>
+                    <div className="text-green-400 font-bold text-lg">${target.price}</div>
+                    <div className="text-green-300 text-xs">
+                      {target.movePct > 0 ? '+' : ''}{target.movePct}% • {target.rr.toFixed(1)}:1 R:R
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pattern Target (if exists) */}
+              {report.execution.patternTarget && (
+                <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                  <div className="text-purple-200 text-sm font-semibold mb-1">📏 Pattern Target</div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-white font-bold text-lg">${report.execution.patternTarget.price}</span>
+                      <span className="text-purple-300 text-sm ml-2">
+                        ({report.execution.patternTarget.movePct > 0 ? '+' : ''}{report.execution.patternTarget.movePct}%)
+                      </span>
+                    </div>
+                    {report.execution.patternTarget.confluence && (
+                      <span className="text-purple-200 text-sm italic">{report.execution.patternTarget.confluence}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Risk Summary */}
+              <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <p className="text-blue-200 text-sm">
+                  <strong>Risk/Reward Summary:</strong> {report.execution.stopLoss.movePct > 0 ? '+' : ''}{report.execution.stopLoss.movePct}% risk for {report.execution.targets.map(t => `${t.movePct > 0 ? '+' : ''}${t.movePct}%`).join(' / ')} reward ({report.execution.targets.map(t => t.rr.toFixed(0)).join('–')}×).
                 </p>
               </div>
-            )}
-            
-            {/* Low Volume Warning */}
-            {report.technical.volumeZScore < 0 && report.pattern.name.includes("Engulfing") && (
-              <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+
+              {/* Institutional Verdict */}
+              <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                 <p className="text-yellow-200 text-sm">
-                  ⚠️ <strong>Caution:</strong> {report.pattern.name} pattern on below-average volume (z-score: {report.technical.volumeZScore.toFixed(2)}). 
-                  Engulfing patterns work best with strong volume confirmation. Consider waiting for better setup or reducing position size.
+                  🟡 <strong>Verdict:</strong> {(() => {
+                    const isShort = report.riskManagement.direction === 'short';
+                    const isLong = report.riskManagement.direction === 'long';
+                    const volZ = report.technical.volumeZScore;
+                    const isCounterTrend = (isShort && report.currentPrice > report.technical.ema200) || 
+                                         (isLong && report.currentPrice < report.technical.ema200);
+                    const status = report.execution.status;
+                    
+                    let verdict = '';
+                    if (status === 'candidate') {
+                      verdict = `Candidate ${isShort ? 'short' : 'long'} setup (weak volume, ${isCounterTrend ? 'counter-trend' : 'trend-aligned'}). `;
+                      verdict += `Wait for ${isShort ? 'breakdown' : 'breakout'} < $${report.execution.entry.triggerPrice} with volZ ≥ 0 before entry. `;
+                      verdict += `Institutional grade = Pending (needs separation ≥ 10 bars).`;
+                    } else if (status === 'ready') {
+                      verdict = `Institutional ${isShort ? 'short' : 'long'} setup ready for execution. `;
+                      verdict += `Entry trigger: $${report.execution.entry.triggerPrice} with ${volZ >= 0 ? 'adequate' : 'low'} volume confirmation.`;
+                    } else if (status === 'blocked') {
+                      verdict = `Setup blocked by ${report.execution.warnings?.some(w => w.includes('Earnings')) ? 'earnings proximity' : 'liquidity constraints'}. `;
+                      verdict += `Wait for clearance before considering entry.`;
+                    } else {
+                      verdict = `Neutral setup - no clear institutional signal. Monitor for pattern development.`;
+                    }
+                    return verdict;
+                  })()}
                 </p>
               </div>
-            )}
 
-            {!report.riskManagement.isValid && (
-              <div className="mt-4 p-4 rounded-lg bg-yellow-500/20 border border-yellow-500/50 text-yellow-200">
-                ⚠️ {report.riskManagement.validationMessage}
+              <div className="mt-4 p-3 rounded-lg bg-teal-500/10 border border-teal-500/30">
+                <p className="text-teal-200 text-xs">
+                  💡 <strong>Confirmation-Based Entry:</strong> This system uses rule-based triggers instead of "entry at current price." 
+                  Wait for confirmation (breakout/breakdown) before entering. All % moves and R:R calculated from trigger price.
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
 
           {/* Technical Indicators */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
@@ -850,7 +940,16 @@ export default function AnalyzeClient() {
               <div className="p-4 rounded-lg bg-white/5">
                 <div className="text-blue-200 text-sm mb-1">Trend</div>
                 <div className={`font-semibold capitalize ${report.technical.trend === 'bullish' ? 'text-green-400' : report.technical.trend === 'bearish' ? 'text-red-400' : 'text-white'}`}>
-                  {report.technical.trend} ({report.technical.trendStrength})
+                  {report.technical.trend} ({report.technical.trendStrength}){(() => {
+                    const isShortBias = report.riskManagement.direction === 'short';
+                    const isLongBias = report.riskManagement.direction === 'long';
+                    const priceBelow200 = report.currentPrice < report.technical.ema200;
+                    const priceAbove200 = report.currentPrice > report.technical.ema200;
+                    
+                    if (isShortBias && priceAbove200) return ' • Counter-trend short setup';
+                    if (isLongBias && priceBelow200) return ' • Counter-trend long setup';
+                    return '';
+                  })()}
                 </div>
               </div>
             </div>
@@ -877,10 +976,10 @@ export default function AnalyzeClient() {
             {/* EMA Compression Insight */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
               <p className="text-blue-200 text-sm">
-                <strong>📊 EMA Proximity:</strong> The 9, 20, and 50 EMAs are compressed within {report.technical.emaCompression.toFixed(2)}%
-                {report.technical.emaCompression < 2 ? " — expect expansion (breakout or chop)." : 
-                 report.technical.emaCompression < 5 ? " — moderate spacing, trend forming." : 
-                 " — wide spacing, strong trending environment."}
+                <strong>📊 EMA Proximity:</strong> The 9, 20, and 50 EMAs span {report.technical.emaCompression.toFixed(1)}%
+                {report.technical.emaCompression < 2 ? " — compressed, expect expansion (breakout or chop)." : 
+                 report.technical.emaCompression < 5 ? " — moderate spread, trend forming." : 
+                 " — wide spread, consistent with trending environment."}
               </p>
             </div>
             
@@ -958,7 +1057,16 @@ export default function AnalyzeClient() {
                   <>
                     <div>• Technical ({report.score.breakdown.technical}/100): EMA alignment & trend strength - 25% weight</div>
                     <div>• Momentum ({report.score.breakdown.momentum}/100): RSI & MACD signals - 20% weight</div>
-                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 15% weight</div>
+                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 15% weight{(() => {
+                      const isShortBias = report.riskManagement.direction === 'short';
+                      const isLongBias = report.riskManagement.direction === 'long';
+                      const priceBelow200 = report.currentPrice < report.technical.ema200;
+                      const priceAbove200 = report.currentPrice > report.technical.ema200;
+                      
+                      if (isShortBias && priceAbove200) return ' (Counter-trend short)';
+                      if (isLongBias && priceBelow200) return ' (Counter-trend long)';
+                      return '';
+                    })()}</div>
                     <div>• Pattern Fusion ({report.score.breakdown.pattern}/100): Structure + timing combo - 25% weight</div>
                     <div>• Chart Pattern: {report.chartPattern.confidence}% ({report.chartPattern.confidenceLabel}) - 10% weight</div>
                     <div>• Volume ({report.score.breakdown.volume}/100): Confirmation strength - 5% weight</div>
@@ -967,11 +1075,30 @@ export default function AnalyzeClient() {
                   <>
                     <div>• Technical ({report.score.breakdown.technical}/100): EMA alignment & trend - 30% weight</div>
                     <div>• Momentum ({report.score.breakdown.momentum}/100): RSI & MACD signals - 25% weight</div>
-                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 20% weight</div>
+                    <div>• Trend ({report.score.breakdown.trend}/100): Directional strength - 20% weight{(() => {
+                      const isShortBias = report.riskManagement.direction === 'short';
+                      const isLongBias = report.riskManagement.direction === 'long';
+                      const priceBelow200 = report.currentPrice < report.technical.ema200;
+                      const priceAbove200 = report.currentPrice > report.technical.ema200;
+                      
+                      if (isShortBias && priceAbove200) return ' (Counter-trend short)';
+                      if (isLongBias && priceBelow200) return ' (Counter-trend long)';
+                      return '';
+                    })()}</div>
                     <div>• Pattern ({report.score.breakdown.pattern}/100): Candlestick signal - 15% weight</div>
                     <div>• Volume ({report.score.breakdown.volume}/100): Confirmation strength - 10% weight</div>
                   </>
                 )}
+              </div>
+              <div className="mt-3 p-2 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                <p className="text-blue-200 text-xs">
+                  <strong>Composite {report.score.overall} = Σ(weighted factors × weights)</strong>
+                  {report.execution.status === 'candidate' && report.score.overall < 65 ? 
+                    ` • candidate cap 65 applied` : 
+                    report.execution.status === 'candidate' ? 
+                    ` • candidate cap 65 (current: ${report.score.overall})` : 
+                    ''}
+                </p>
               </div>
               <p className="text-blue-300 text-xs mt-3 italic">
                 Grade: 90+=A+, 76-89=A, 61-75=B, 41-60=C, 0-40=D. All confidences capped at 95% for realism.
