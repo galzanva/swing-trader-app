@@ -785,6 +785,10 @@ export default function AnalyzeClient() {
                             Vol bonus: ×1.25 (volZ = {report.technical.volumeZScore.toFixed(2)})
                           </div>
                         )}
+                        {/* Volume Impact Rules Tooltip */}
+                        <div className="text-xs text-gray-400 mt-1 italic">
+                          volZ &lt; -0.5 → ×0.5 penalty | volZ &gt; +1.2 → ×1.25 bonus
+                        </div>
                       </div>
                     )}
                 </div>
@@ -1094,7 +1098,7 @@ export default function AnalyzeClient() {
                 <p className="text-blue-200 text-xs">
                   <strong>Composite {report.score.overall} = Σ(weighted factors × weights)</strong>
                   {report.execution.status === 'candidate' && report.score.overall < 65 ? 
-                    ` • candidate cap 65 applied` : 
+                    ` • candidate cap 65 applied (base score was higher)` : 
                     report.execution.status === 'candidate' ? 
                     ` • candidate cap 65 (current: ${report.score.overall})` : 
                     ''}

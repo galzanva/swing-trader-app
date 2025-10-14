@@ -485,7 +485,7 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     }
 
     const mentorNotes = chartPattern
-      ? `• Pattern absence → neutral bias.\n\n• Volume ${indicators.volumeZScore < 0 ? 'sub-avg' : 'adequate'} → ${indicators.volumeZScore < 0 ? 'weak' : 'strong'} conviction.\n\n• Confirmation ${executionPlan ? `below $${executionPlan.entry.triggerPrice}` : 'at key level'} + avg volume required.`
+      ? `• ${chartPattern.name} pattern → ${chartPattern.type} bias.\n\n• Volume ${indicators.volumeZScore < 0 ? 'sub-avg' : 'adequate'} → ${indicators.volumeZScore < 0 ? 'weak' : 'strong'} conviction.\n\n• Confirmation ${executionPlan ? `${executionPlan.entry.type === 'breakdown' ? 'below' : 'above'} $${executionPlan.entry.triggerPrice}` : 'at key level'} + avg volume required.`
       : this.getDefaultMentorNotes(indicators, executionPlan);
 
     const reasoning: string[] = [
