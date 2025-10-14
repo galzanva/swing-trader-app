@@ -18,6 +18,7 @@ export interface DetectionResult {
   // Two-tier chart patterns
   institutional: InstitutionalPattern | null;
   candidate: CandidatePattern | null;
+  discarded: InstitutionalPattern | null; // For extreme rule violations
   allTwoTierResults: TwoTierPatternResult[];
   
   // Candlestick pattern
@@ -60,18 +61,33 @@ export function detectAllPatterns(
   
   const primaryInstitutional = institutionalPatterns.length > 0 ? institutionalPatterns[0] : null;
   
-  // If no institutional, find the primary candidate pattern
-  const candidatePatterns = allTwoTierResults
-    .map(r => r.candidate)
-    .filter((p): p is CandidatePattern => p !== null)
+  // CRITICAL RULE: If institutional exists, ignore candidates (ONE pattern rule)
+  let primaryCandidate: CandidatePattern | null = null;
+  let primaryDiscarded: InstitutionalPattern | null = null;
+  
+  if (!primaryInstitutional) {
+    // Only show candidate if NO institutional pattern
+    const candidatePatterns = allTwoTierResults
+      .map(r => r.candidate)
+      .filter((p): p is CandidatePattern => p !== null)
+      .sort((a, b) => b.confidence - a.confidence);
+    
+    primaryCandidate = candidatePatterns.length > 0 ? candidatePatterns[0] : null;
+  }
+  
+  // Find the primary discarded pattern (extreme violations)
+  const discardedPatterns = allTwoTierResults
+    .map(r => r.discarded)
+    .filter((p): p is InstitutionalPattern => p !== null)
     .sort((a, b) => b.confidence - a.confidence);
   
-  const primaryCandidate = candidatePatterns.length > 0 ? candidatePatterns[0] : null;
+  primaryDiscarded = discardedPatterns.length > 0 ? discardedPatterns[0] : null;
   
   // Create TwoTierPatternResult for fusion
   const twoTierResult: TwoTierPatternResult = {
     institutional: primaryInstitutional,
-    candidate: primaryCandidate
+    candidate: primaryCandidate,
+    discarded: primaryDiscarded
   };
   
   // Detect candlestick pattern
@@ -92,6 +108,7 @@ export function detectAllPatterns(
   return {
     institutional: primaryInstitutional,
     candidate: primaryCandidate,
+    discarded: primaryDiscarded,
     allTwoTierResults,
     candlestickPattern,
     composite,

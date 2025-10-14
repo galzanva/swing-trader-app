@@ -48,6 +48,7 @@ export interface CandidatePattern {
 export interface TwoTierPatternResult {
   institutional: InstitutionalPattern | null;
   candidate: CandidatePattern | null;
+  discarded: InstitutionalPattern | null; // For extreme rule violations
 }
 
 /**

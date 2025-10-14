@@ -26,7 +26,7 @@ import {
  * Window: 30-50 bars within last ~300
  */
 export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 30) return { institutional: null, candidate: null };
+  if (bars.length < 30) return { institutional: null, candidate: null, discarded: null };
 
   const window = bars.slice(-50); // Last 50 bars
   const highs = window.map(b => b.high);
@@ -36,7 +36,7 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
 
   // Find peaks
   const peakIndices = findPeaks(highs, 3);
-  if (peakIndices.length < 2) return { institutional: null, candidate: null };
+  if (peakIndices.length < 2) return { institutional: null, candidate: null, discarded: null };
 
   // Get the two highest peaks
   const sortedPeaks = peakIndices
@@ -79,7 +79,15 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
   const instTouches = totalTouches >= 5;
   const instBreakout = breakoutStatus === 'confirmed' && volZ >= 1.2;
 
+  // DISCARDED PATTERN GATES (extreme violations)
+  const discardedSymmetry = symmetryPct > 10.0; // >5× threshold (2% × 5 = 10%)
+  const discardedSeparation = separationBars < 5; // <0.5× threshold (10 × 0.5 = 5)
+  const discardedHeight = heightATR < 0.5; // <0.5× threshold (1.0 × 0.5 = 0.5)
+  const discardedConfidence = false; // Will be calculated later
+  const isDiscarded = discardedSymmetry || discardedSeparation || discardedHeight;
+
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instSymmetry && instSeparation && instHeight && instTouches) {
     // Calculate confidence
@@ -98,7 +106,7 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
 
     // Price target
     const targetMove = avgPeakPrice - neckline;
-    const priceTarget = neckline - targetMove;
+    const priceTarget = Number((neckline - targetMove).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Symmetry ${symmetryPct.toFixed(1)}% (≤2.0% required)`,
@@ -136,7 +144,43 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
     };
   }
 
-  // CANDIDATE GATES (relaxed)
+  // DISCARDED PATTERN (extreme violations - excluded from scoring)
+  if (isDiscarded) {
+    const targetMove = avgPeakPrice - neckline;
+    const discardedPriceTarget = Number((neckline - targetMove).toFixed(2));
+    
+    discarded = {
+      name: 'Double Top',
+      type: 'reversal',
+      direction: 'bearish',
+      confidence: 0, // Always 0 for discarded
+      confidenceLabel: 'Discarded - Excluded from scoring',
+      breakoutStatus,
+      priceTarget: discardedPriceTarget,
+      keyLevels: {
+        support: [neckline],
+        resistance: [peak1Price, peak2Price]
+      },
+      volumeZScore: volZ,
+      reasons: [
+        `Symmetry ${symmetryPct.toFixed(1)}% (${discardedSymmetry ? '>10% - extreme violation' : 'OK'})`,
+        `Separation ${separationBars} bars (${discardedSeparation ? '<5 bars - extreme violation' : 'OK'})`,
+        `Height ${heightATR.toFixed(2)}× ATR (${discardedHeight ? '<0.5× - extreme violation' : 'OK'})`
+      ],
+      metadata: {
+        symmetryPct: Number(symmetryPct.toFixed(2)),
+        separationBars,
+        heightATR: Number(heightATR.toFixed(2)),
+        totalTouches,
+        peak1Price: Number(peak1Price.toFixed(2)),
+        peak2Price: Number(peak2Price.toFixed(2)),
+        neckline: Number(neckline.toFixed(2)),
+        breakoutVolZ: Number(volZ.toFixed(2))
+      }
+    };
+  }
+
+  // CANDIDATE GATES (relaxed) - only if not discarded
   const candSymmetry = symmetryPct <= 3.5;
   const candSeparation = separationBars >= 6;
   const candHeight = heightATR >= 0.8;
@@ -144,8 +188,8 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
 
   let candidate: CandidatePattern | null = null;
 
-  if (!institutional && (candSymmetry || candSeparation || candHeight || candTouches)) {
-    // Only create candidate if some criteria are met but not institutional
+  if (!institutional && !isDiscarded && (candSymmetry || candSeparation || candHeight || candTouches)) {
+    // Only create candidate if some criteria are met but not institutional and not discarded
     const metCriteria: string[] = [];
     const unmetCriteria: string[] = [];
     const nextSteps: string[] = [];
@@ -210,14 +254,14 @@ export function detectDoubleTop(bars: OHLCV[], atr: number): TwoTierPatternResul
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**
  * DOUBLE BOTTOM - Two-Tier Detection
  */
 export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 30) return { institutional: null, candidate: null };
+  if (bars.length < 30) return { institutional: null, candidate: null, discarded: null };
 
   const window = bars.slice(-50);
   const lows = window.map(b => b.low);
@@ -226,7 +270,7 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
   const volZ = calculateVolumeZScore(window);
 
   const troughIndices = findTroughs(lows, 3);
-  if (troughIndices.length < 2) return { institutional: null, candidate: null };
+  if (troughIndices.length < 2) return { institutional: null, candidate: null, discarded: null };
 
   const sortedTroughs = troughIndices
     .map(idx => ({ idx, value: lows[idx] }))
@@ -263,7 +307,14 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
   const instHeight = heightATR >= 1.0;
   const instTouches = totalTouches >= 5;
 
+  // DISCARDED PATTERN GATES (extreme violations)
+  const discardedSymmetry = symmetryPct > 10.0; // >5× threshold
+  const discardedSeparation = separationBars < 5; // <0.5× threshold
+  const discardedHeight = heightATR < 0.5; // <0.5× threshold
+  const isDiscarded = discardedSymmetry || discardedSeparation || discardedHeight;
+
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instSymmetry && instSeparation && instHeight && instTouches) {
     let confidence = 50;
@@ -279,7 +330,7 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
 
     const cappedConfidence = Math.min(95, confidence);
     const targetMove = neckline - avgTroughPrice;
-    const priceTarget = neckline + targetMove;
+    const priceTarget = Number((neckline + targetMove).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Symmetry ${symmetryPct.toFixed(1)}% (≤2.0% required)`,
@@ -313,6 +364,38 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
     };
   }
 
+  // DISCARDED PATTERN (extreme violations - excluded from scoring)
+  if (isDiscarded) {
+    const targetMove = neckline - avgTroughPrice;
+    const discardedPriceTarget = Number((neckline + targetMove).toFixed(2));
+    
+    discarded = {
+      name: 'Double Bottom',
+      type: 'reversal',
+      direction: 'bullish',
+      confidence: 0, // Always 0 for discarded
+      confidenceLabel: 'Discarded - Excluded from scoring',
+      breakoutStatus,
+      priceTarget: discardedPriceTarget,
+      keyLevels: {
+        support: [avgTroughPrice],
+        resistance: [neckline]
+      },
+      volumeZScore: volZ,
+      reasons: [
+        `Symmetry ${symmetryPct.toFixed(1)}% (${discardedSymmetry ? '>10% - extreme violation' : 'OK'})`,
+        `Separation ${separationBars} bars (${discardedSeparation ? '<5 bars - extreme violation' : 'OK'})`,
+        `Height ${heightATR.toFixed(2)}× ATR (${discardedHeight ? '<0.5× - extreme violation' : 'OK'})`
+      ],
+      metadata: {
+        symmetryPct: Number(symmetryPct.toFixed(2)),
+        separationBars,
+        heightATR: Number(heightATR.toFixed(2)),
+        totalTouches
+      }
+    };
+  }
+
   // CANDIDATE GATES
   const candSymmetry = symmetryPct <= 3.5;
   const candSeparation = separationBars >= 6;
@@ -321,7 +404,7 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
 
   let candidate: CandidatePattern | null = null;
 
-  if (!institutional && (candSymmetry || candSeparation || candHeight || candTouches)) {
+  if (!institutional && !isDiscarded && (candSymmetry || candSeparation || candHeight || candTouches)) {
     const metCriteria: string[] = [];
     const unmetCriteria: string[] = [];
     const nextSteps: string[] = [];
@@ -359,14 +442,14 @@ export function detectDoubleBottom(bars: OHLCV[], atr: number): TwoTierPatternRe
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**
  * BULLISH FLAG - Two-Tier Detection
  */
 export function detectBullishFlag(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 45) return { institutional: null, candidate: null };
+  if (bars.length < 45) return { institutional: null, candidate: null, discarded: null };
 
   const poleStart = bars.slice(-40, -20);
   const consolidation = bars.slice(-20);
@@ -374,7 +457,7 @@ export function detectBullishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
   const poleGain = (poleStart[poleStart.length - 1].close - poleStart[0].close) / poleStart[0].close * 100;
   const duration = consolidation.length;
 
-  if (duration < 5 || duration > 25) return { institutional: null, candidate: null };
+  if (duration < 5 || duration > 25) return { institutional: null, candidate: null, discarded: null };
 
   const highs = consolidation.map(b => b.high);
   const lows = consolidation.map(b => b.low);
@@ -416,7 +499,14 @@ export function detectBullishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
   const instVolume = volDeclining;
   const instBreakout = breakoutStatus === 'confirmed' || breakoutStatus === 'retest';
 
+  // DISCARDED PATTERN GATES (extreme violations)
+  const discardedPole = poleGain < 2.0; // <0.25× threshold (8.0 × 0.25 = 2.0)
+  const discardedParallel = parallelDelta > 0.75; // >5× threshold (0.15 × 5 = 0.75)
+  const discardedWidth = widthPct > 15.0; // >5× threshold (3.0 × 5 = 15.0)
+  const isDiscarded = discardedPole || discardedParallel || discardedWidth;
+
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instPole && instSlopes && instParallel && instWidth && instVolume && totalTouches >= 5) {
     let confidence = 50;
@@ -430,7 +520,7 @@ export function detectBullishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
 
     const cappedConfidence = Math.min(95, confidence);
     const poleHeight = poleStart[poleStart.length - 1].close - poleStart[0].close;
-    const priceTarget = upperChannel + poleHeight;
+    const priceTarget = Number((upperChannel + poleHeight).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Pole: ${poleGain.toFixed(1)}% gain (≥8% required)`,
@@ -509,14 +599,14 @@ export function detectBullishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**
  * BEARISH FLAG - Two-Tier Detection
  */
 export function detectBearishFlag(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 45) return { institutional: null, candidate: null };
+  if (bars.length < 45) return { institutional: null, candidate: null, discarded: null };
 
   const poleStart = bars.slice(-40, -20);
   const consolidation = bars.slice(-20);
@@ -524,7 +614,7 @@ export function detectBearishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
   const poleDrop = (poleStart[0].close - poleStart[poleStart.length - 1].close) / poleStart[0].close * 100;
   const duration = consolidation.length;
 
-  if (duration < 5 || duration > 25) return { institutional: null, candidate: null };
+  if (duration < 5 || duration > 25) return { institutional: null, candidate: null, discarded: null };
 
   const highs = consolidation.map(b => b.high);
   const lows = consolidation.map(b => b.low);
@@ -566,6 +656,7 @@ export function detectBearishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
   const instVolume = volDeclining;
 
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instPole && instSlopes && instParallel && instWidth && instVolume && totalTouches >= 5) {
     let confidence = 50;
@@ -578,7 +669,7 @@ export function detectBearishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
 
     const cappedConfidence = Math.min(95, confidence);
     const poleHeight = poleStart[0].close - poleStart[poleStart.length - 1].close;
-    const priceTarget = lowerChannel - poleHeight;
+    const priceTarget = Number((lowerChannel - poleHeight).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Pole: ${poleDrop.toFixed(1)}% drop (≥8% required)`,
@@ -646,17 +737,17 @@ export function detectBearishFlag(bars: OHLCV[], atr: number): TwoTierPatternRes
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**
  * ASCENDING TRIANGLE - Two-Tier Detection
  */
 export function detectAscendingTriangle(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 20) return { institutional: null, candidate: null };
+  if (bars.length < 20) return { institutional: null, candidate: null, discarded: null };
 
   const window = bars.slice(-80);
-  if (window.length < 20) return { institutional: null, candidate: null };
+  if (window.length < 20) return { institutional: null, candidate: null, discarded: null };
 
   const highs = window.map(b => b.high);
   const lows = window.map(b => b.low);
@@ -689,6 +780,7 @@ export function detectAscendingTriangle(bars: OHLCV[], atr: number): TwoTierPatt
   const instWidth = widthPct <= 3.0 || widthATR <= 1.0;
 
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instFlatUpper && instRisingLower && instTouches && instWidth) {
     let confidence = 50;
@@ -700,7 +792,7 @@ export function detectAscendingTriangle(bars: OHLCV[], atr: number): TwoTierPatt
 
     const cappedConfidence = Math.min(95, confidence);
     const triangleHeight = upperLevel - lowerLevel;
-    const priceTarget = upperLevel + triangleHeight;
+    const priceTarget = Number((upperLevel + triangleHeight).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Flat upper: slope ${slopeUpperPct.toFixed(2)}%/bar, R² ${upperReg.r2.toFixed(2)}`,
@@ -769,17 +861,17 @@ export function detectAscendingTriangle(bars: OHLCV[], atr: number): TwoTierPatt
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**
  * DESCENDING TRIANGLE - Two-Tier Detection
  */
 export function detectDescendingTriangle(bars: OHLCV[], atr: number): TwoTierPatternResult {
-  if (bars.length < 20) return { institutional: null, candidate: null };
+  if (bars.length < 20) return { institutional: null, candidate: null, discarded: null };
 
   const window = bars.slice(-80);
-  if (window.length < 20) return { institutional: null, candidate: null };
+  if (window.length < 20) return { institutional: null, candidate: null, discarded: null };
 
   const highs = window.map(b => b.high);
   const lows = window.map(b => b.low);
@@ -812,6 +904,7 @@ export function detectDescendingTriangle(bars: OHLCV[], atr: number): TwoTierPat
   const instWidth = widthPct <= 3.0 || widthATR <= 1.0;
 
   let institutional: InstitutionalPattern | null = null;
+  let discarded: InstitutionalPattern | null = null;
 
   if (instFlatLower && instFallingUpper && instTouches && instWidth) {
     let confidence = 50;
@@ -823,7 +916,7 @@ export function detectDescendingTriangle(bars: OHLCV[], atr: number): TwoTierPat
 
     const cappedConfidence = Math.min(95, confidence);
     const triangleHeight = upperLevel - lowerLevel;
-    const priceTarget = lowerLevel - triangleHeight;
+    const priceTarget = Number((lowerLevel - triangleHeight).toFixed(2)); // Clean decimal
 
     const reasons: string[] = [
       `Flat lower: slope ${slopeLowerPct.toFixed(2)}%/bar, R² ${lowerReg.r2.toFixed(2)}`,
@@ -891,7 +984,7 @@ export function detectDescendingTriangle(bars: OHLCV[], atr: number): TwoTierPat
     };
   }
 
-  return { institutional, candidate };
+  return { institutional, candidate, discarded };
 }
 
 /**

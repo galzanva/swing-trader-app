@@ -7,6 +7,28 @@ import { detectPatterns, getPrimaryPattern, getCompositePattern } from "@/lib/pa
 import { detectAllChartPatterns } from "@/lib/patterns/chart-patterns";
 import { detectAllPatterns } from "@/lib/patterns/detector-v2";
 import { calculateSetupScore, calculateCompositeScore } from "@/lib/scoring/rating";
+
+// Helper functions for rating and recommendation
+function getRatingFromScore(score: number): "A+" | "A" | "B" | "C" | "D" {
+  if (score >= 90) return "A+";
+  if (score >= 76) return "A";
+  if (score >= 61) return "B";
+  if (score >= 41) return "C";
+  return "D";
+}
+
+function getRecommendationFromScore(score: number, direction: "bullish" | "bearish" | "neutral"): string {
+  if (direction === "bullish") {
+    if (score >= 76) return "Strong Buy";
+    if (score >= 61) return "Buy";
+    return "Watch";
+  } else if (direction === "bearish") {
+    if (score >= 76) return "Strong Short";
+    if (score >= 61) return "Short";
+    return "Watch";
+  }
+  return "Watch";
+}
 import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/management";
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
 import { calculateConfirmationEntry } from "@/lib/execution/confirmation-entries";
@@ -98,6 +120,23 @@ export interface AnalysisReport {
       metCriteria: string[];
       unmetCriteria: string[];
       nextSteps: string[];
+      metadata: Record<string, any>;
+    };
+    // Discarded pattern (extreme violations - excluded from scoring)
+    discarded?: {
+      name: string;
+      type: string;
+      direction: string;
+      confidence: number;
+      confidenceLabel: string;
+      breakoutStatus: string;
+      priceTarget?: number;
+      keyLevels: {
+        support: number[];
+        resistance: number[];
+      };
+      volumeZScore: number;
+      reasons: string[];
       metadata: Record<string, any>;
     };
     // Explainability
@@ -196,6 +235,11 @@ export interface AnalysisReport {
       confluence?: string;
     };
   };
+  
+  // Execution Metadata
+  executionDirection: "bullish" | "bearish" | "neutral";
+  patternSource: "institutional" | "candidate" | "candle-only";
+  hasConflict: boolean;
   
   // Technical facts
   technical: {
@@ -381,36 +425,76 @@ export async function POST(request: Request) {
     }
 
     // 5. Calculate setup score (with chart pattern fusion)
-    // Determine execution direction for scoring
+    // CRITICAL: Determine execution direction from pattern hierarchy (institutional > candidate > candle)
     let executionDirection: "bullish" | "bearish" | "neutral" = "neutral";
+    let patternSource: "institutional" | "candidate" | "candle-only" = "candle-only";
+    
     if (useV2 && patternsV2) {
       if (patternsV2.institutional) {
+        // Institutional pattern drives direction (highest priority)
         executionDirection = patternsV2.institutional.direction as "bullish" | "bearish" | "neutral";
+        patternSource = "institutional";
+        console.log(`[Analyze] Direction from INSTITUTIONAL: ${patternsV2.institutional.name} (${executionDirection})`);
       } else if (patternsV2.candidate) {
+        // Candidate pattern drives direction (medium priority)
         executionDirection = patternsV2.candidate.direction as "bullish" | "bearish" | "neutral";
-      } else if (compositePattern.candlestickPattern.type === 'bullish') {
-        executionDirection = 'bullish';
-      } else if (compositePattern.candlestickPattern.type === 'bearish') {
-        executionDirection = 'bearish';
+        patternSource = "candidate";
+        console.log(`[Analyze] Direction from CANDIDATE: ${patternsV2.candidate.name} (${executionDirection})`);
+      } else {
+        // Candlestick only (lowest priority)
+        executionDirection = compositePattern.candlestickPattern.type === 'bullish' ? 'bullish' :
+                            compositePattern.candlestickPattern.type === 'bearish' ? 'bearish' : 'neutral';
+        patternSource = "candle-only";
+        console.log(`[Analyze] Direction from CANDLE: ${compositePattern.candlestickPattern.name} (${executionDirection})`);
       }
     } else {
-      // Fallback to candlestick pattern
-      if (compositePattern.candlestickPattern.type === 'bullish') {
-        executionDirection = 'bullish';
-      } else if (compositePattern.candlestickPattern.type === 'bearish') {
-        executionDirection = 'bearish';
+      // V1 fallback: use candlestick pattern
+      executionDirection = compositePattern.candlestickPattern.type === 'bullish' ? 'bullish' :
+                          compositePattern.candlestickPattern.type === 'bearish' ? 'bearish' : 'neutral';
+      patternSource = "candle-only";
+    }
+    
+    // Detect conflicts between candle and chart patterns
+    let hasConflict = false;
+    if (useV2 && patternsV2) {
+      const chartDirection = patternsV2.institutional?.direction || patternsV2.candidate?.direction;
+      const candleDirection = compositePattern.candlestickPattern.type;
+      
+      if (chartDirection && candleDirection && 
+          chartDirection !== 'neutral' && candleDirection !== 'neutral' &&
+          chartDirection !== candleDirection) {
+        hasConflict = true;
+        console.log(`[Analyze] CONFLICT DETECTED: Chart ${chartDirection} vs Candle ${candleDirection}`);
       }
     }
     
     const score = calculateCompositeScore(indicators, compositePattern, executionDirection);
-    console.log(`[Analyze] Setup score: ${score.overall}/100 (${score.rating}) - ${executionDirection} direction`);
+    
+    // Apply candidate cap rule globally
+    let mainScore: number;
+    if (useV2 && patternsV2 && patternsV2.institutional) {
+      // Institutional: use pattern score (composite)
+      mainScore = score.pattern;
+    } else if (useV2 && patternsV2 && patternsV2.candidate) {
+      // Candidate: apply cap at 65
+      mainScore = Math.min(score.pattern, 65);
+    } else {
+      // Candle-only or V1: use overall score
+      mainScore = score.overall;
+    }
+    
+    const mainRating = getRatingFromScore(mainScore);
+    const mainRecommendation = getRecommendationFromScore(mainScore, executionDirection);
+    
+    console.log(`[Analyze] Setup score: ${mainScore}/100 (${mainRating}) - ${executionDirection} direction`);
 
-    // 6. Create risk management plan (using candlestick pattern for entry/stop placement)
+    // 6. Create risk management plan (using executionDirection for correct direction)
     const riskPlan = createRiskManagementPlan(
       marketData.currentPrice,
       indicators,
       compositePattern.candlestickPattern,
-      supportResistance
+      supportResistance,
+      executionDirection // Pass execution direction from pattern hierarchy
     );
     const rrValidation = validateRiskReward(riskPlan.riskReward);
     console.log(`[Analyze] Risk/Reward: ${riskPlan.riskReward.target1}:1 (Valid: ${rrValidation.isValid})`);
@@ -604,6 +688,19 @@ export async function POST(request: Request) {
             nextSteps: patternsV2.candidate.nextSteps,
             metadata: patternsV2.candidate.metadata
           } : undefined,
+          discarded: patternsV2.discarded ? {
+            name: patternsV2.discarded.name,
+            type: patternsV2.discarded.type as string,
+            direction: patternsV2.discarded.direction as string,
+            confidence: patternsV2.discarded.confidence,
+            confidenceLabel: patternsV2.discarded.confidenceLabel,
+            breakoutStatus: patternsV2.discarded.breakoutStatus as string,
+            priceTarget: (patternsV2.discarded.priceTarget === null ? undefined : patternsV2.discarded.priceTarget) as number | undefined,
+            keyLevels: patternsV2.discarded.keyLevels,
+            volumeZScore: patternsV2.discarded.volumeZScore,
+            reasons: patternsV2.discarded.reasons,
+            metadata: patternsV2.discarded.metadata
+          } : undefined,
           compositeReasons: patternsV2.composite.reasons,
           chartPatternReasons: patternsV2.institutional?.reasons || patternsV2.candidate?.metCriteria,
           candlestickFacts: patternsV2.candlestickPattern.facts,
@@ -612,9 +709,9 @@ export async function POST(request: Request) {
       } : {}),
       
       score: {
-        overall: score.overall,
-        rating: score.rating,
-        recommendation: score.recommendation,
+        overall: mainScore, // Use composite score for institutional, overall for others
+        rating: mainRating,
+        recommendation: mainRecommendation,
         breakdown: {
           technical: score.technical,
           momentum: score.momentum,
@@ -642,6 +739,11 @@ export async function POST(request: Request) {
       },
       
       execution: executionPlan,
+      
+      // Execution Metadata
+      executionDirection,
+      patternSource,
+      hasConflict,
       
       technical: {
         ema9: indicators.ema9,

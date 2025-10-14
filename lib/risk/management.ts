@@ -176,7 +176,8 @@ export function createRiskManagementPlan(
   currentPrice: number,
   indicators: TechnicalIndicators,
   pattern: DetectedPattern,
-  supportResistance: SupportResistance
+  supportResistance: SupportResistance,
+  executionDirection?: "bullish" | "bearish" | "neutral"
 ): RiskManagementPlan {
   // Entry is current price (assuming immediate entry)
   const entry = currentPrice;
@@ -233,7 +234,10 @@ export function createRiskManagementPlan(
     positionSize,
     riskAmount,
     reasoning,
-    direction: pattern.type === "bullish" ? "long" : "short"
+    // CRITICAL: Use executionDirection if provided, otherwise fall back to pattern type
+    direction: executionDirection === "bullish" ? "long" :
+               executionDirection === "bearish" ? "short" :
+               pattern.type === "bullish" ? "long" : "short"
   };
 }
 

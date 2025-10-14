@@ -202,8 +202,8 @@ export function calculateSetupScore(
 }
 
 /**
- * Calculate setup score with chart pattern fusion
- * This version considers both candlestick and chart patterns
+ * Calculate setup score with chart pattern fusion (Institutional Rules)
+ * This version implements the exact institutional scoring rules
  */
 export function calculateCompositeScore(
   indicators: TechnicalIndicators,
@@ -216,69 +216,120 @@ export function calculateCompositeScore(
   const candlestickScore = scorePattern(compositePattern.candlestickPattern, indicators.volumeZScore);
   const volume = scoreVolume(indicators.volumeZScore);
   
-  // If we have a chart pattern, factor it in
-  let chartPatternScore = 0;
-  if (compositePattern.chartPattern) {
-    chartPatternScore = compositePattern.chartPattern.confidence;
+  // INSTITUTIONAL SCORING RULES
+  // Base calculation depends on whether we have a chart pattern
+  let baseScore = 0;
+  const hasChartPattern = compositePattern.chartPattern !== null;
+  
+  if (hasChartPattern) {
+    // 60% chart + 40% candle when structure exists
+    const chartScore = compositePattern.chartPattern!.confidence;
+    baseScore = (0.6 * chartScore) + (0.4 * candlestickScore);
+  } else {
+    // 100% candle, capped at 55 (no structure)
+    baseScore = Math.min(55, candlestickScore);
+  }
+  
+  // Apply bonuses and penalties ONLY if chart pattern exists
+  let bonuses = 0;
+  let penalties = 0;
+  
+  if (hasChartPattern) {
+    const chartType = compositePattern.chartPattern!.type as string;
+    const candleType = compositePattern.candlestickPattern.type;
+    const breakoutStatus = compositePattern.chartPattern!.breakoutStatus;
     
-    // Bonus for confirmed breakout
-    if (compositePattern.chartPattern.breakoutStatus === "confirmed") {
-      chartPatternScore = Math.min(100, chartPatternScore + 10);
+    // Direction alignment bonus (+15)
+    if (chartType === candleType && chartType !== "neutral" && candleType !== "neutral") {
+      bonuses += 15;
+    }
+    
+    // Breakout status bonus
+    if (breakoutStatus === "confirmed") bonuses += 15;
+    else if (breakoutStatus === "retest") bonuses += 20;
+    else if (breakoutStatus === "pending") bonuses += 5;
+    
+    // Volume bonus (pattern-specific thresholds)
+    const volZ = indicators.volumeZScore;
+    const patternName = compositePattern.chartPattern!.name.toLowerCase();
+    
+    if (patternName.includes("flag") || patternName.includes("triangle")) {
+      if (volZ >= 1.0) bonuses += 5;
+    } else if (patternName.includes("double")) {
+      if (volZ >= 1.2) bonuses += 5;
+    }
+    
+    // Opposition penalty (-10)
+    if (chartType !== candleType && chartType !== "neutral" && candleType !== "neutral") {
+      penalties += 10;
     }
   }
   
-  // Use fused confidence which already accounts for pattern alignment
-  const fusedPatternScore = compositePattern.fusedConfidence;
+  // Calculate composite
+  let composite = baseScore + bonuses - penalties;
   
-  // Weighted average with chart pattern factored in
-  const overall = compositePattern.chartPattern
-    ? (
-        technical * 0.25 +
-        momentum * 0.20 +
-        trend * 0.15 +
-        fusedPatternScore * 0.25 + // Increased weight for fused pattern
-        chartPatternScore * 0.10 +  // Additional chart pattern influence
-        volume * 0.05
-      )
-    : (
-        technical * 0.30 +
-        momentum * 0.25 +
-        trend * 0.20 +
-        fusedPatternScore * 0.15 +
-        volume * 0.10
-      );
+  // Apply opposition cap at 70 (when patterns conflict)
+  if (penalties > 0) {
+    composite = Math.min(70, composite);
+  }
   
-  // Determine rating and recommendation (direction-aware)
+  // Hard cap at 95 (nothing is 100% certain)
+  composite = Math.min(95, composite);
+  
+  // Note: Candidate cap (65) and blocked status caps are applied in the API route
+  // based on execution status, not here
+  
+  // Weight overall score with technical factors
+  const overall = (
+    technical * 0.25 +
+    momentum * 0.20 +
+    trend * 0.15 +
+    composite * 0.25 +      // Pattern composite
+    volume * 0.15
+  );
+  
+  // Determine rating and recommendation (direction-aware, using executionDirection)
   let rating: SetupScore["rating"];
   let recommendation: SetupScore["recommendation"];
   
-  // Use execution direction if provided, otherwise fall back to pattern type
-  const isBullish = executionDirection === "bullish" || (executionDirection === undefined && (compositePattern.chartPattern?.type === "bullish" || compositePattern.candlestickPattern.type === "bullish"));
-  const isBearish = executionDirection === "bearish" || (executionDirection === undefined && (compositePattern.chartPattern?.type === "bearish" || compositePattern.candlestickPattern.type === "bearish"));
+  // CRITICAL: Use execution direction explicitly
+  const direction = executionDirection || "neutral";
+  const finalScore = Math.round(overall);
   
-  if (overall >= 90) {
+  // Grade mapping: 0-40=D, 41-60=C, 61-75=B, 76-90=A, 90+=A+
+  if (finalScore >= 90) {
     rating = "A+";
-    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
-  } else if (overall >= 76) {
+  } else if (finalScore >= 76) {
     rating = "A";
-    recommendation = isBullish ? "Strong Buy" : isBearish ? "Strong Short" : "Strong Buy";
-  } else if (overall >= 61) {
+  } else if (finalScore >= 61) {
     rating = "B";
-    recommendation = isBullish ? "Buy" : isBearish ? "Short" : "Buy";
-  } else if (overall >= 41) {
+  } else if (finalScore >= 41) {
     rating = "C";
-    recommendation = "Watch";
   } else {
     rating = "D";
-    recommendation = "Pass";
+  }
+  
+  // Recommendation matches direction
+  if (direction === "bullish") {
+    if (finalScore >= 76) recommendation = "Strong Buy";
+    else if (finalScore >= 61) recommendation = "Buy";
+    else if (finalScore >= 41) recommendation = "Watch";
+    else recommendation = "Pass";
+  } else if (direction === "bearish") {
+    if (finalScore >= 76) recommendation = "Strong Short";
+    else if (finalScore >= 61) recommendation = "Short";
+    else if (finalScore >= 41) recommendation = "Watch";
+    else recommendation = "Pass";
+  } else {
+    recommendation = "Watch"; // Neutral
   }
   
   return {
-    overall: Math.round(overall),
+    overall: finalScore,
     technical: Math.round(technical),
     momentum: Math.round(momentum),
     trend: Math.round(trend),
-    pattern: Math.round(fusedPatternScore),
+    pattern: Math.round(composite), // Return the pattern composite score
     volume: Math.round(volume),
     rating,
     recommendation

@@ -109,7 +109,13 @@ export function calculateConfirmationEntry(inputs: ConfirmationInputs): Executio
   // Set initial status based on pattern type
   if (status !== 'blocked') {
     if (isInstitutional) {
-      status = 'ready';
+      // Institutional pattern exists, but check volume for readiness
+      if (volumeZScore >= 0) {
+        status = 'ready'; // Adequate volume
+      } else {
+        status = 'candidate'; // Pattern valid but waiting for volume confirmation
+        warnings.push(`Volume Pending: Institutional pattern detected but volZ = ${volumeZScore.toFixed(2)} (sub-average). Wait for volZ ≥ 0 on breakout.`);
+      }
     } else if (isCandidate) {
       status = 'candidate';
     }
@@ -196,7 +202,13 @@ export function calculateConfirmationEntry(inputs: ConfirmationInputs): Executio
   // Calculate pattern target if available
   let patternTarget: ExecutionPlan['patternTarget'] | undefined;
   if (chartPattern?.priceTarget) {
-    const movePct = ((chartPattern.priceTarget - triggerPrice) / triggerPrice) * 100;
+    let movePct = ((chartPattern.priceTarget - triggerPrice) / triggerPrice) * 100;
+    
+    // Clamp unrealistic percentage moves (unless penny stock < $1)
+    if (triggerPrice >= 1.0) {
+      movePct = Math.max(-200, Math.min(200, movePct)); // Clamp to ±200%
+    }
+    
     patternTarget = {
       price: chartPattern.priceTarget,
       movePct: Number(movePct.toFixed(1))
@@ -447,7 +459,12 @@ function calculateStopLoss(
     stopPrice = entry - (ATR_STOP_MULTIPLE * atr);
   }
 
-  const movePct = ((stopPrice - entry) / entry) * 100;
+  let movePct = ((stopPrice - entry) / entry) * 100;
+  
+  // Clamp unrealistic percentage moves (unless penny stock < $1)
+  if (entry >= 1.0) {
+    movePct = Math.max(-200, Math.min(200, movePct)); // Clamp to ±200%
+  }
 
   return {
     price: Number(stopPrice.toFixed(2)),
@@ -479,7 +496,17 @@ function calculateTargets(
       targetPrice = entry - (rrRatios[i] * risk);
     }
 
-    const movePct = ((targetPrice - entry) / entry) * 100;
+    // Sanity check: clamp negative targets to 0 (unless penny stock < $1)
+    if (targetPrice < 0 && entry >= 1.0) {
+      targetPrice = 0;
+    }
+
+    let movePct = ((targetPrice - entry) / entry) * 100;
+    
+    // Clamp unrealistic percentage moves (unless penny stock < $1)
+    if (entry >= 1.0) {
+      movePct = Math.max(-200, Math.min(200, movePct)); // Clamp to ±200%
+    }
 
     targets.push({
       name: names[i],
@@ -515,29 +542,27 @@ function calculateViabilityIndex(
     confirmationStrength += 0.2;
   }
 
-  // Volume multiplier for Viability Index
+  // Volume multiplier for Viability Index (standardized)
   let volumeMultiplier = 1.0;
-  if (volumeZScore >= 1.2) {
-    confirmationStrength += 0.1;
-    volumeMultiplier = 1.25; // Bonus for strong volume
-  } else if (volumeZScore >= 1.0) {
-    confirmationStrength += 0.05;
-    volumeMultiplier = 1.1; // Small bonus for above-average volume
-  } else if (volumeZScore >= 0.3) {
-    volumeMultiplier = 1.0; // Neutral for average volume
-  } else if (volumeZScore < -0.5) {
-    confirmationStrength -= 0.5;
+  if (volumeZScore < -0.5) {
     volumeMultiplier = 0.5; // Penalty for significantly below-average volume
+  } else if (volumeZScore > 1.2) {
+    volumeMultiplier = 1.25; // Bonus for strong volume
   } else {
-    volumeMultiplier = 0.8; // Small penalty for below-average volume
+    volumeMultiplier = 1.0; // Neutral for -0.5 ≤ volZ ≤ +1.2
   }
 
+  // Trend alignment factor
+  let trendFactor = 1.0;
   if (trendAligned) {
-    confirmationStrength += 0.1;
+    trendFactor = 1.0; // Aligned with trend
+  } else {
+    // Counter-trend penalty (multiplicative only, no negative signs)
+    trendFactor = 0.8; // Multiplicative penalty (as per spec)
   }
 
-  const pvi = (rewardPct / riskPct) * (1 + confirmationStrength) * volumeMultiplier;
-  const index = Number(Math.max(0.5, Math.min(2.5, pvi)).toFixed(2)); // Clamp 0.5-2.5
+  const pvi = (rewardPct / riskPct) * volumeMultiplier * trendFactor;
+  const index = Number(Math.max(0.5, Math.min(3.0, pvi)).toFixed(2)); // Clamp 0.5-3.0
 
   let label: string;
   if (index >= 2.0) {

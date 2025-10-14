@@ -3,6 +3,18 @@
 import { useState } from "react";
 import { AnalysisReport } from "./api/analyze/route";
 
+// Normalize pattern names for consistent tone
+function normalizePatternName(name: string): string {
+  switch (name.toLowerCase()) {
+    case 'uptrend':
+      return 'Bullish Continuation';
+    case 'downtrend':
+      return 'Bearish Continuation';
+    default:
+      return name;
+  }
+}
+
 export default function AnalyzeClient() {
   const [symbol, setSymbol] = useState("");
   const [timeframe, setTimeframe] = useState("1day");
@@ -158,24 +170,16 @@ export default function AnalyzeClient() {
               <div className="flex items-start gap-4">
                 <div className="text-3xl">⚠️</div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-yellow-300 mb-2">Data Freshness Note</h3>
+                  <h3 className="text-xl font-bold text-yellow-300 mb-2">📊 Data Source & Freshness</h3>
                   <p className="text-yellow-100 mb-3">
-                    This analysis uses data from <strong>{new Date(report.marketData.lastBarDate).toLocaleDateString()}</strong> 
-                    ({report.marketData.dataAgeDays} day{report.marketData.dataAgeDays > 1 ? 's' : ''} ago). 
-                    Price shown: ${report.currentPrice.toFixed(2)}
+                    <strong>Data Source:</strong> Polygon.io Stocks Starter (15-min delayed data)<br/>
+                    <strong>Last data:</strong> {new Date(report.marketData.lastBarDate).toLocaleDateString()} 
+                    {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' : ' (End-of-Day complete)'}<br/>
+                    <strong>Current Price (from data):</strong> ${report.currentPrice.toFixed(2)}
                   </p>
                   <p className="text-yellow-100 mb-3">
-                    <strong>End-of-Day Data Timing:</strong> Polygon provides end-of-day data that typically becomes available 
-                    2-4 hours after market close (around 6:00-8:00 PM ET) once settlement is complete. 
-                    Weekend/holiday gaps are normal.
-                  </p>
-                  <p className="text-yellow-100 mb-3">
-                    <strong>Stocks Starter Plan (15-min Delayed):</strong> Your Polygon Stocks Starter plan provides 15-minute delayed data, 
-                    which is significantly fresher than the free tier. Data typically updates within 15 minutes of real-time during market hours.
-                    End-of-day data becomes available 2-4 hours after market close (around 6:00-8:00 PM ET) once settlement is complete.
-                  </p>
-                  <p className="text-yellow-100 mb-3">
-                    <strong>⚠️ No new bar yet</strong> — Verify with latest intraday data before acting. The most recent daily candle may still be forming.
+                    ⚠️ <strong>Confirmation Required:</strong> Verify price on broker/TradingView before acting. 
+                    {report.marketData.dataAgeDays === 0 ? ' Intraday may still be forming.' : ' Data is from previous session.'}
                   </p>
                   <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mt-3">
                     <p className="text-yellow-200 font-semibold mb-2">Before Trading:</p>
@@ -197,12 +201,20 @@ export default function AnalyzeClient() {
               <div>
                 <h2 className="text-3xl font-bold text-white mb-2">
                   {report.symbol} — {report.timeframe}
-                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${report.riskManagement.direction === 'long' ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 'bg-red-500/20 text-red-300 border border-red-500/50'}`}>
-                    {report.riskManagement.direction === 'long' ? '📈 LONG' : '📉 SHORT'} Setup
+                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${
+                    report.hasConflict ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' :
+                    report.executionDirection === 'bullish' ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 
+                    report.executionDirection === 'bearish' ? 'bg-red-500/20 text-red-300 border border-red-500/50' : 
+                    'bg-gray-500/20 text-gray-300 border border-gray-500/50'
+                  }`}>
+                    {report.hasConflict ? '⚖️ CONFLICTING' : 
+                     report.executionDirection === 'bullish' ? '📈 LONG' : 
+                     report.executionDirection === 'bearish' ? '📉 SHORT' : 
+                     '➡️ NEUTRAL'} Setup
                   </span>
                   <span className="mx-2 text-blue-300">•</span>
                   <span className={`px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
-                    Candlestick: {report.pattern.name} ({report.pattern.confidence}%)
+                    Candlestick: {normalizePatternName(report.pattern.name)} ({report.pattern.confidence}%)
                   </span>
                 </h2>
                 <p className="text-blue-200">{report.name}</p>
@@ -215,9 +227,9 @@ export default function AnalyzeClient() {
                 </p>
                 <p className="text-xs text-blue-400 mt-1">
                   Last data: {new Date(report.marketData.lastBarDate).toLocaleDateString()} 
-                  {report.marketData.dataAgeDays > 0 && (
-                    <span className="text-yellow-400"> ({report.marketData.dataAgeDays} day{report.marketData.dataAgeDays > 1 ? 's' : ''} old)</span>
-                  )}
+                  {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' : 
+                   report.marketData.dataAgeDays > 0 ? ` (${report.marketData.dataAgeDays} day${report.marketData.dataAgeDays > 1 ? 's' : ''} old)` : 
+                   ' (End-of-Day complete)'}
                 </p>
               </div>
 
@@ -229,7 +241,8 @@ export default function AnalyzeClient() {
                 <div className="text-blue-200 text-sm mb-1">{report.score.recommendation}</div>
                 <div className="text-blue-300 text-xs italic">
                   {report.score.overall >= 76 ? "High conviction setup" : 
-                   report.score.overall >= 61 ? "Solid setup, watch confirmation" : 
+                   report.score.overall >= 70 ? "Solid setup, watch confirmation" : 
+                   report.score.overall >= 61 ? "Moderate setup — watch confirmation" : 
                    report.score.overall >= 41 ? "Neutral - wait for confirmation" : 
                    "Low conviction - avoid"}
                 </div>
@@ -498,10 +511,20 @@ export default function AnalyzeClient() {
           )}
 
           {/* Two-Tier Pattern System - Candidate (Not Confirmed) */}
-          {report.patternV2?.candidate && (
-            <div className="bg-gradient-to-br from-orange-900/40 to-amber-900/40 backdrop-blur-lg rounded-2xl p-6 border-2 border-orange-500/50 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">⚠️</span>
+          {/* CRITICAL: Only show candidate if NO institutional pattern */}
+          {!report.patternV2?.institutional && report.patternV2?.candidate && (
+            <>
+              {/* Notice: No Institutional Pattern */}
+              <div className="bg-blue-900/40 backdrop-blur-lg rounded-xl p-4 border border-blue-500/50 mb-4">
+                <p className="text-blue-200 text-sm">
+                  ℹ️ <strong>No institutional chart pattern detected.</strong> A candidate structure is shown below for learning and monitoring; 
+                  it is capped at 65 until confirmation criteria are met.
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-orange-900/40 to-amber-900/40 backdrop-blur-lg rounded-2xl p-6 border-2 border-orange-500/50 shadow-xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-2xl">⚠️</span>
                 <h3 className="text-xl font-bold text-white">
                   Candidate (Not Confirmed) — {report.patternV2.candidate.name}
                 </h3>
@@ -557,10 +580,48 @@ export default function AnalyzeClient() {
                 </div>
               )}
             </div>
+            </>
+          )}
+
+          {/* Two-Tier Pattern System - Discarded (Extreme Violations) */}
+          {report.patternV2?.discarded && (
+            <div className="bg-red-800/40 backdrop-blur-lg rounded-2xl p-6 border border-red-600/50">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">❌</span>
+                <h3 className="text-xl font-bold text-white">
+                  Discarded Pattern — Excluded from scoring
+                </h3>
+              </div>
+              <p className="text-red-200 text-sm mb-4 font-medium">
+                {report.patternV2.discarded.name} detected but failed extreme violation thresholds. 
+                This pattern is excluded from composite scoring due to severe rule violations.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-red-900/30 rounded-lg p-3 border border-red-700/50">
+                  <div className="text-red-300 text-xs mb-1">Pattern Type</div>
+                  <div className="text-white font-semibold">{report.patternV2.discarded.name}</div>
+                </div>
+                <div className="bg-red-900/30 rounded-lg p-3 border border-red-700/50">
+                  <div className="text-red-300 text-xs mb-1">Confidence</div>
+                  <div className="text-red-400 font-bold">0% (Excluded)</div>
+                </div>
+              </div>
+
+              {/* Violation Details */}
+              <div className="bg-red-900/20 rounded-lg p-4 border border-red-700/30">
+                <h4 className="text-red-300 font-semibold mb-2">🚫 Extreme Violations Detected</h4>
+                <ul className="space-y-1">
+                  {report.patternV2.discarded.reasons.map((reason, idx) => (
+                    <li key={idx} className="text-red-100 text-sm">• {reason}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           )}
 
           {/* No Chart Pattern Detected */}
-          {report.patternV2 && !report.patternV2.institutional && !report.patternV2.candidate && (
+          {report.patternV2 && !report.patternV2.institutional && !report.patternV2.candidate && !report.patternV2.discarded && (
             <div className="bg-gray-800/40 backdrop-blur-lg rounded-2xl p-6 border border-gray-600/50">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">ℹ️</span>
@@ -746,7 +807,8 @@ export default function AnalyzeClient() {
                 }`}>
                   {report.execution.status === 'ready' ? '✅ READY (Institutional)' :
                    report.execution.status === 'candidate' ? 
-                     (report.score.overall < 65 ? `🔸 CANDIDATE (${report.score.overall}/100)` : '🔸 CANDIDATE - Capped at 65') :
+                     (report.patternSource === 'institutional' ? '🟡 INSTITUTIONAL - Pending Volume' :
+                      report.score.overall < 65 ? `🔸 CANDIDATE (${report.score.overall}/100)` : '🔸 CANDIDATE - Capped at 65') :
                    report.execution.status === 'missed' ? '⏱️ MISSED - Wait for Retest' :
                    report.execution.status === 'blocked' ? '⛔ BLOCKED - Earnings/Liquidity' :
                    'NEUTRAL'}
@@ -774,6 +836,9 @@ export default function AnalyzeClient() {
                           'text-red-400'
                         }`}>
                           {report.execution.viabilityIndex.toFixed(2)} {report.execution.viabilityLabel && `(${report.execution.viabilityLabel})`}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          = base {((report.execution.targets[0].price - report.execution.entry.triggerPrice) / (report.execution.stopLoss.price - report.execution.entry.triggerPrice)).toFixed(1)} × vol {report.technical.volumeZScore < -0.5 ? '0.5' : report.technical.volumeZScore > 0.3 ? '1.25' : '1.0'} × CT {report.currentPrice > report.technical.ema200 && report.executionDirection === 'bearish' ? '0.8' : '1.0'}
                         </div>
                         {report.technical.volumeZScore < -0.5 && (
                           <div className="text-xs text-red-300 mt-1">
@@ -863,24 +928,41 @@ export default function AnalyzeClient() {
               <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                 <p className="text-yellow-200 text-sm">
                   🟡 <strong>Verdict:</strong> {(() => {
-                    const isShort = report.riskManagement.direction === 'short';
-                    const isLong = report.riskManagement.direction === 'long';
+                    const direction = report.executionDirection; // 'bullish', 'bearish', or 'neutral'
+                    const directionLabel = direction === 'bullish' ? 'long' : direction === 'bearish' ? 'short' : 'neutral';
                     const volZ = report.technical.volumeZScore;
-                    const isCounterTrend = (isShort && report.currentPrice > report.technical.ema200) || 
-                                         (isLong && report.currentPrice < report.technical.ema200);
+                    const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) || 
+                                         (direction === 'bullish' && report.currentPrice < report.technical.ema200);
                     const status = report.execution.status;
+                    const source = report.patternSource; // 'institutional', 'candidate', or 'candle-only'
                     
                     let verdict = '';
-                    if (status === 'candidate') {
-                      verdict = `Candidate ${isShort ? 'short' : 'long'} setup (weak volume, ${isCounterTrend ? 'counter-trend' : 'trend-aligned'}). `;
-                      verdict += `Wait for ${isShort ? 'breakdown' : 'breakout'} < $${report.execution.entry.triggerPrice} with volZ ≥ 0 before entry. `;
-                      verdict += `Institutional grade = Pending (needs separation ≥ 10 bars).`;
-                    } else if (status === 'ready') {
-                      verdict = `Institutional ${isShort ? 'short' : 'long'} setup ready for execution. `;
-                      verdict += `Entry trigger: $${report.execution.entry.triggerPrice} with ${volZ >= 0 ? 'adequate' : 'low'} volume confirmation.`;
+                    if (source === 'institutional') {
+                      if (status === 'ready') {
+                        verdict = `Institutional ${directionLabel} setup ready for execution. `;
+                        verdict += `Entry trigger: $${report.execution.entry.triggerPrice} with ${volZ >= 0 ? 'adequate' : 'low'} volume confirmation.`;
+                      } else if (status === 'candidate') {
+                        verdict = `Institutional ${directionLabel} setup (pending volume confirmation). `;
+                        const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) || 
+                                             (direction === 'bullish' && report.currentPrice < report.technical.ema200);
+                        if (isCounterTrend) {
+                          verdict += `Counter-trend trade — confirm ${direction === 'bearish' ? 'breakdown' : 'breakout'} below $${report.execution.entry.triggerPrice} with volZ ≥ 0.`;
+                        } else {
+                          verdict += `Confirm ${direction === 'bearish' ? 'breakdown' : 'breakout'} below $${report.execution.entry.triggerPrice} with volZ ≥ 0.`;
+                        }
+                      } else {
+                        verdict = `Institutional ${directionLabel} setup (${status}). `;
+                        verdict += `Entry trigger: $${report.execution.entry.triggerPrice}.`;
+                      }
+                    } else if (source === 'candidate') {
+                      verdict = `Candidate ${directionLabel} setup (capped at 65 until confirmed). `;
+                      verdict += `Wait for ${direction === 'bearish' ? 'breakdown' : 'breakout'} at $${report.execution.entry.triggerPrice} with volZ ≥ 0 before entry.`;
                     } else if (status === 'blocked') {
                       verdict = `Setup blocked by ${report.execution.warnings?.some(w => w.includes('Earnings')) ? 'earnings proximity' : 'liquidity constraints'}. `;
                       verdict += `Wait for clearance before considering entry.`;
+                    } else if (source === 'candle-only') {
+                      verdict = `Candle-only ${directionLabel} signal (capped at 55 - no structure). `;
+                      verdict += `Entry trigger: $${report.execution.entry.triggerPrice}. Monitor for pattern development.`;
                     } else {
                       verdict = `Neutral setup - no clear institutional signal. Monitor for pattern development.`;
                     }
