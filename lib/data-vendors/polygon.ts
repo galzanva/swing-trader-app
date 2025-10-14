@@ -68,32 +68,34 @@ export class PolygonClient {
   ): Promise<MarketData> {
     try {
       // Calculate date range - get data up to today
-      const to = new Date();
-      const from = new Date();
+      // Use UTC to avoid timezone issues
+      const now = new Date();
+      const to = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const from = new Date(to);
       
       // Adjust date range based on timeframe
       switch (timeframe) {
         case "1min":
-          from.setDate(from.getDate() - 7);
+          from.setUTCDate(from.getUTCDate() - 7);
           break;
         case "5min":
-          from.setDate(from.getDate() - 21);
+          from.setUTCDate(from.getUTCDate() - 21);
           break;
         case "15min":
-          from.setDate(from.getDate() - 60);
+          from.setUTCDate(from.getUTCDate() - 60);
           break;
         case "1hour":
-          from.setDate(from.getDate() - 120);
+          from.setUTCDate(from.getUTCDate() - 120);
           break;
         case "1day":
-          from.setFullYear(from.getFullYear() - 2); // 2 years of daily data
+          from.setUTCFullYear(from.getUTCFullYear() - 2); // 2 years of daily data
           break;
       }
 
       const fromStr = from.toISOString().split("T")[0];
       const toStr = to.toISOString().split("T")[0];
       
-      console.log(`[Polygon] Requesting data from ${fromStr} to ${toStr} for ${symbol}`);
+      console.log(`[Polygon] Requesting data from ${fromStr} to ${toStr} for ${symbol} (current date: ${now.toISOString().split("T")[0]})`);
 
       // Map timeframe to Polygon format
       const timeframeMap: Record<string, string> = {
@@ -110,6 +112,8 @@ export class PolygonClient {
         timeframeMap[timeframe]
       }/${fromStr}/${toStr}?adjusted=true&sort=desc&limit=${limit}&apiKey=${this.apiKey}`;
 
+      console.log(`[Polygon] Request URL: ${url.replace(this.apiKey, 'API_KEY_HIDDEN')}`);
+      
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -123,6 +127,7 @@ export class PolygonClient {
       }
       
       console.log(`[Polygon] Received ${data.results.length} bars. Status: ${data.status}`);
+      console.log(`[Polygon] Results count: ${data.resultsCount}, Actual bars: ${data.results.length}`);
 
       // Get ticker details
       const details = await this.getTickerDetails(symbol);
@@ -142,13 +147,18 @@ export class PolygonClient {
       
       // Check data freshness - IMPORTANT for trading decisions
       const lastBarDate = new Date(bars[bars.length - 1].timestamp);
-      const daysSinceLastBar = Math.floor((Date.now() - lastBarDate.getTime()) / (1000 * 60 * 60 * 24));
+      const lastBarDay = new Date(lastBarDate);
+      
+      // Use UTC for date comparison to avoid timezone issues
+      const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const lastBarDayUTC = new Date(Date.UTC(lastBarDay.getFullYear(), lastBarDay.getMonth(), lastBarDay.getDate()));
+      const daysSinceLastBar = Math.floor((todayUTC.getTime() - lastBarDayUTC.getTime()) / (1000 * 60 * 60 * 24));
       
       console.log(`[Polygon] Symbol: ${symbol}`);
       console.log(`[Polygon] Total bars received: ${bars.length}`);
       console.log(`[Polygon] Date range: ${new Date(bars[0].timestamp).toISOString().split('T')[0]} to ${lastBarDate.toISOString().split('T')[0]}`);
       console.log(`[Polygon] Last bar date: ${lastBarDate.toISOString()}`);
-      console.log(`[Polygon] Days since last bar: ${daysSinceLastBar}`);
+      console.log(`[Polygon] Data age calculation - Today (UTC): ${todayUTC.toISOString().split('T')[0]}, Last bar (UTC): ${lastBarDayUTC.toISOString().split('T')[0]}, Age: ${daysSinceLastBar} days`);
       console.log(`[Polygon] Last close price: $${currentPrice}`);
       
       // Warning if data is very stale (might be delisted)

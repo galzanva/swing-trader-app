@@ -280,8 +280,13 @@ Be concise, clear, and educational. Stick to the facts.`;
   private getDefaultStrengths(indicators: TechnicalIndicators, pattern: DetectedPattern, score: SetupScore): string[] {
     const strengths: string[] = [];
     
-    if (indicators.trend !== "neutral") {
-      strengths.push(`Clear ${indicators.trend} trend alignment`);
+    // Avoid contradictory trend statements
+    if (indicators.trend !== "neutral" && pattern.type !== "neutral") {
+      if (indicators.trend === pattern.type) {
+        strengths.push(`${pattern.type === 'bullish' ? 'Bullish' : 'Bearish'} trend alignment confirmed`);
+      } else {
+        strengths.push(`${pattern.type === 'bullish' ? 'Short-term bullish' : 'Short-term bearish'} candle structure within broader ${indicators.trend} trend`);
+      }
     }
     
     if (pattern.confidence > 75) {
@@ -289,7 +294,7 @@ Be concise, clear, and educational. Stick to the facts.`;
     }
     
     if (indicators.volumeZScore > 1) {
-      strengths.push("Strong volume confirmation");
+      strengths.push(`Strong volume confirmation (Z-score: +${indicators.volumeZScore.toFixed(1)})`);
     }
     
     if (score.momentum > 70) {
@@ -331,7 +336,11 @@ Key principles:
 - Both must align for the strongest signals
 - Use clear, educational language that helps traders understand WHY patterns matter
 - Be factual and data-driven - no hype
-- Highlight both opportunities AND risks`
+- Highlight both opportunities AND risks
+- For setups below B grade (75/100), suggest waiting for better confirmation
+- Avoid contradictory statements about trend direction
+- Include specific volume Z-scores in strengths when relevant
+- End mentor notes with a coach-style reminder about patience and structure`
           },
           {
             role: "user",

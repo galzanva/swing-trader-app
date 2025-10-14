@@ -25,7 +25,9 @@ export interface TechnicalIndicators {
   };
   volumeZScore: number;
   atr: number;
-  trend: "bullish" | "bearish" | "neutral";
+  trend: "bullish" | "bearish" | "neutral"; // EMA alignment: 9>20>50>200 = bullish, 9<20<20<200 = bearish, else neutral
+  alignment: "bullish" | "bearish" | "mixed"; // Same as trend (for clarity)
+  longTermBias: "bullish" | "bearish"; // Based on price vs EMA200
   strength: number; // 0-100
   emaCompression: number; // Max % difference between EMA9, 20, 50 - indicates choppy/trending
 }
@@ -154,53 +156,71 @@ export function calculateVolumeZScore(volumes: number[], period: number = 20): n
 
 /**
  * Determine trend based on EMAs
+ * Source of Truth: Bullish if 9>20>50>200, Bearish if 9<20<50<200, else Mixed
  */
-export function determineTrend(ema9: number, ema20: number, ema50: number, ema200: number): {
+export function determineTrend(ema9: number, ema20: number, ema50: number, ema200: number, price: number): {
   trend: "bullish" | "bearish" | "neutral";
+  alignment: "bullish" | "bearish" | "mixed";
+  longTermBias: "bullish" | "bearish";
   strength: number;
+  emaOrderingString: string; // Actual EMA ordering for display
 } {
-  const emaAlignment = [ema9, ema20, ema50, ema200];
+  // Check strict alignment: 9>20>50>200 for bullish, 9<20<50<200 for bearish
+  const bullishAlignment = ema9 > ema20 && ema20 > ema50 && ema50 > ema200;
+  const bearishAlignment = ema9 < ema20 && ema20 < ema50 && ema50 < ema200;
   
-  // Check if EMAs are in bullish alignment
-  const bullishAlignment = emaAlignment.every((val, i) => 
-    i === 0 || val > emaAlignment[i - 1]
-  );
-  
-  // Check if EMAs are in bearish alignment
-  const bearishAlignment = emaAlignment.every((val, i) => 
-    i === 0 || val < emaAlignment[i - 1]
-  );
+  // Determine alignment
+  let alignment: "bullish" | "bearish" | "mixed";
+  let trend: "bullish" | "bearish" | "neutral";
+  let strength: number;
   
   if (bullishAlignment) {
+    alignment = "bullish";
+    trend = "bullish";
     const spread = ((ema9 - ema200) / ema200) * 100;
-    return { trend: "bullish", strength: Math.min(100, 60 + Math.abs(spread) * 10) };
+    strength = Math.min(100, 60 + Math.abs(spread) * 10);
   } else if (bearishAlignment) {
+    alignment = "bearish";
+    trend = "bearish";
     const spread = ((ema200 - ema9) / ema200) * 100;
-    return { trend: "bearish", strength: Math.max(0, 40 - Math.abs(spread) * 10) };
+    strength = Math.max(0, 40 - Math.abs(spread) * 10);
   } else {
-    // Partial alignment - determine bias
-    // Check short-term trend (EMA9 vs EMA20)
+    alignment = "mixed";
+    trend = "neutral";
+    // Determine bias for strength
     const shortTermBullish = ema9 > ema20;
-    const shortTermBearish = ema9 < ema20;
-    
-    // Check mid-term trend (EMA20 vs EMA50)
     const midTermBullish = ema20 > ema50;
-    const midTermBearish = ema20 < ema50;
-    
-    // Count bullish signals (0-2)
     const bullishCount = (shortTermBullish ? 1 : 0) + (midTermBullish ? 1 : 0);
     
     if (bullishCount === 2) {
-      // Bullish bias but not perfect alignment
-      return { trend: "neutral", strength: 60 };
+      strength = 60; // Bullish bias
     } else if (bullishCount === 0) {
-      // Bearish bias but not perfect alignment
-      return { trend: "neutral", strength: 40 };
+      strength = 40; // Bearish bias
     } else {
-      // Mixed signals - truly neutral
-      return { trend: "neutral", strength: 50 };
+      strength = 50; // Truly neutral
     }
   }
+  
+  // Long-term bias: based on price vs EMA200
+  const longTermBias: "bullish" | "bearish" = price > ema200 ? "bullish" : "bearish";
+  
+  // Generate EMA ordering string (actual ordering)
+  const emas = [
+    { name: '9', value: ema9 },
+    { name: '20', value: ema20 },
+    { name: '50', value: ema50 },
+    { name: '200', value: ema200 }
+  ].sort((a, b) => b.value - a.value); // Sort descending
+  
+  const emaOrderingString = emas.map(e => `EMA${e.name}`).join(' > ');
+  
+  return {
+    trend,
+    alignment,
+    longTermBias,
+    strength,
+    emaOrderingString
+  };
 }
 
 /**
@@ -233,8 +253,11 @@ export function calculateTechnicalIndicators(ohlcv: OHLCV[]): TechnicalIndicator
   // Calculate ATR
   const atr = calculateATR(ohlcv);
   
-  // Determine trend
-  const { trend, strength } = determineTrend(ema9, ema20, ema50, ema200);
+  // Get current price
+  const currentPrice = closes[closes.length - 1];
+  
+  // Determine trend (with alignment and long-term bias)
+  const { trend, alignment, longTermBias, strength } = determineTrend(ema9, ema20, ema50, ema200, currentPrice);
   
   // Calculate EMA compression (max % difference between 9, 20, 50)
   // Lower values = choppy/compression, higher = trending
@@ -253,6 +276,8 @@ export function calculateTechnicalIndicators(ohlcv: OHLCV[]): TechnicalIndicator
     volumeZScore,
     atr,
     trend,
+    alignment,
+    longTermBias,
     strength,
     emaCompression
   };

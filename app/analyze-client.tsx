@@ -165,11 +165,17 @@ export default function AnalyzeClient() {
                     Price shown: ${report.currentPrice.toFixed(2)}
                   </p>
                   <p className="text-yellow-100 mb-3">
-                    Polygon's free tier provides <strong>end-of-day data</strong>. For daily timeframe swing trading, 
-                    data updates after market close. Weekend/holiday gaps are normal.
+                    <strong>End-of-Day Data Timing:</strong> Polygon provides end-of-day data that typically becomes available 
+                    2-4 hours after market close (around 6:00-8:00 PM ET) once settlement is complete. 
+                    Weekend/holiday gaps are normal.
                   </p>
                   <p className="text-yellow-100 mb-3">
-                    <strong>⚠️ No new bar yet</strong> — Verify with latest data before acting. The most recent candle may still be forming.
+                    <strong>Free Tier Limitations:</strong> Polygon's free tier data may be marked as "DELAYED" and could be 
+                    15 minutes to several days behind real-time, depending on the ticker. This is expected behavior for free API access.
+                    For most recent data, Polygon typically updates after market close + settlement (6-8 PM ET).
+                  </p>
+                  <p className="text-yellow-100 mb-3">
+                    <strong>⚠️ No new bar yet</strong> — Verify with latest intraday data before acting. The most recent daily candle may still be forming.
                   </p>
                   <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mt-3">
                     <p className="text-yellow-200 font-semibold mb-2">Before Trading:</p>
@@ -196,7 +202,7 @@ export default function AnalyzeClient() {
                   </span>
                   <span className="mx-2 text-blue-300">•</span>
                   <span className={`px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
-                    {report.pattern.name} ({report.pattern.confidence}%)
+                    Candlestick: {report.pattern.name} ({report.pattern.confidence}%)
                   </span>
                 </h2>
                 <p className="text-blue-200">{report.name}</p>
@@ -357,6 +363,374 @@ export default function AnalyzeClient() {
             </div>
           )}
 
+          {/* All Detected Chart Patterns */}
+          {report.allChartPatterns && report.allChartPatterns.length > 0 && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">📊 All Detected Patterns ({report.allChartPatterns.length})</h3>
+              <p className="text-blue-200 text-sm mb-4">
+                Multiple chart patterns detected. The primary pattern is used for analysis, but all patterns are shown for context.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {report.allChartPatterns.map((pattern, idx) => (
+                  <div 
+                    key={idx}
+                    className={`p-4 rounded-lg border ${
+                      idx === 0 
+                        ? 'bg-blue-500/20 border-blue-500/50' 
+                        : 'bg-white/5 border-white/10'
+                    }`}
+                  >
+                    {idx === 0 && (
+                      <div className="text-blue-300 text-xs font-semibold mb-2">PRIMARY PATTERN</div>
+                    )}
+                    <div className="flex justify-between items-start mb-2">
+                      <div className={`font-semibold ${
+                        pattern.type === 'bullish' ? 'text-green-400' : 
+                        pattern.type === 'bearish' ? 'text-red-400' : 'text-white'
+                      }`}>
+                        {pattern.name}
+                      </div>
+                      <div className="text-white text-sm font-bold">
+                        {pattern.confidence}%
+                      </div>
+                    </div>
+                    <div className="text-blue-300 text-xs mb-1">
+                      {pattern.confidenceLabel}
+                    </div>
+                    <div className={`text-xs ${
+                      pattern.breakoutStatus === 'confirmed' ? 'text-green-400' :
+                      pattern.breakoutStatus === 'pending' ? 'text-yellow-400' : 'text-blue-400'
+                    }`}>
+                      Breakout: {pattern.breakoutStatus}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {report.allChartPatterns.length > 1 && (
+                <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                  <p className="text-yellow-200 text-xs">
+                    💡 <strong>Multiple Patterns:</strong> When multiple patterns are detected, the highest confidence pattern determines the analysis.
+                    Other patterns can provide additional context about market structure.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Two-Tier Pattern System - Institutional (Tradeable) */}
+          {report.patternV2?.institutional && (
+            <div className="bg-gradient-to-br from-green-900/40 to-emerald-900/40 backdrop-blur-lg rounded-2xl p-6 border-2 border-green-500/50 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">✅</span>
+                <h3 className="text-xl font-bold text-white">
+                  Institutional (Valid/Tradeable) — {report.patternV2.institutional.name}
+                </h3>
+              </div>
+              <p className="text-green-200 text-sm mb-4 font-medium">
+                Meets strict criteria. Tradeable structure.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-green-200 text-xs mb-1">Direction</div>
+                  <div className="text-white font-bold text-lg capitalize">{report.patternV2.institutional.direction}</div>
+                </div>
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-green-200 text-xs mb-1">Confidence</div>
+                  <div className="text-white font-bold text-lg">{report.patternV2.institutional.confidence}% ({report.patternV2.institutional.confidenceLabel})</div>
+                </div>
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-green-200 text-xs mb-1">Breakout Status</div>
+                  <div className="text-white font-bold text-lg capitalize">{report.patternV2.institutional.breakoutStatus}</div>
+                </div>
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-green-200 text-xs mb-1">Volume Z-Score</div>
+                  <div className={`font-bold text-lg ${
+                    report.patternV2.institutional.volumeZScore >= 1.0 ? 'text-green-400' : 
+                    report.patternV2.institutional.volumeZScore >= 0.5 ? 'text-yellow-400' : 'text-white'
+                  }`}>
+                    {report.patternV2.institutional.volumeZScore.toFixed(2)}σ
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Target */}
+              {report.patternV2.institutional.priceTarget && (
+                <div className="bg-white/10 rounded-lg p-3 mb-4">
+                  <div className="text-green-200 text-xs mb-1">📍 Price Target</div>
+                  <div className="text-white font-bold text-lg">${report.patternV2.institutional.priceTarget.toFixed(2)}</div>
+                  <div className="text-green-300 text-sm mt-1">
+                    {((report.patternV2.institutional.priceTarget / report.currentPrice - 1) * 100).toFixed(1)}% from current price
+                  </div>
+                </div>
+              )}
+
+              {/* Key Levels */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                {report.patternV2.institutional.keyLevels.support.length > 0 && (
+                  <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30">
+                    <div className="text-emerald-300 text-xs font-semibold mb-2">💚 Support Levels</div>
+                    {report.patternV2.institutional.keyLevels.support.map((level, idx) => (
+                      <div key={idx} className="text-white font-mono text-sm">${level.toFixed(2)}</div>
+                    ))}
+                  </div>
+                )}
+                {report.patternV2.institutional.keyLevels.resistance.length > 0 && (
+                  <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/30">
+                    <div className="text-red-300 text-xs font-semibold mb-2">❤️ Resistance Levels</div>
+                    {report.patternV2.institutional.keyLevels.resistance.map((level, idx) => (
+                      <div key={idx} className="text-white font-mono text-sm">${level.toFixed(2)}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Top 3 Reasons (numeric facts) */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <h4 className="text-green-300 font-semibold mb-2">✔️ Validation Criteria</h4>
+                <ul className="space-y-1">
+                  {report.patternV2.institutional.reasons.map((reason, idx) => (
+                    <li key={idx} className="text-white text-sm">• {reason}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Two-Tier Pattern System - Candidate (Not Confirmed) */}
+          {report.patternV2?.candidate && (
+            <div className="bg-gradient-to-br from-orange-900/40 to-amber-900/40 backdrop-blur-lg rounded-2xl p-6 border-2 border-orange-500/50 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">⚠️</span>
+                <h3 className="text-xl font-bold text-white">
+                  Candidate (Not Confirmed) — {report.patternV2.candidate.name}
+                </h3>
+              </div>
+              <p className="text-orange-200 text-sm mb-4 font-medium">
+                Fails institutional criteria. For learning; monitor for confirmation.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-orange-200 text-xs mb-1">Direction</div>
+                  <div className="text-white font-bold text-lg capitalize">{report.patternV2.candidate.direction}</div>
+                </div>
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="text-orange-200 text-xs mb-1">Confidence (Capped at 80)</div>
+                  <div className="text-white font-bold text-lg">{report.patternV2.candidate.confidence}% ({report.patternV2.candidate.confidenceLabel})</div>
+                </div>
+              </div>
+
+              {/* Met Criteria */}
+              {report.patternV2.candidate.metCriteria.length > 0 && (
+                <div className="bg-green-500/10 rounded-lg p-4 mb-4 border border-green-500/30">
+                  <h4 className="text-green-300 font-semibold mb-2">✅ Met Criteria</h4>
+                  <ul className="space-y-1">
+                    {report.patternV2.candidate.metCriteria.map((criterion, idx) => (
+                      <li key={idx} className="text-green-100 text-sm">• {criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Unmet Criteria (what's missing for institutional) */}
+              {report.patternV2.candidate.unmetCriteria.length > 0 && (
+                <div className="bg-red-500/10 rounded-lg p-4 mb-4 border border-red-500/30">
+                  <h4 className="text-red-300 font-semibold mb-2">❌ Unmet Criteria (for Institutional Grade)</h4>
+                  <ul className="space-y-1">
+                    {report.patternV2.candidate.unmetCriteria.map((criterion, idx) => (
+                      <li key={idx} className="text-red-100 text-sm">• {criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Next Steps (what confirmations are needed) */}
+              {report.patternV2.candidate.nextSteps.length > 0 && (
+                <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/30">
+                  <h4 className="text-blue-300 font-semibold mb-2">🎯 Next Steps (Confirmations Needed)</h4>
+                  <ul className="space-y-1">
+                    {report.patternV2.candidate.nextSteps.map((step, idx) => (
+                      <li key={idx} className="text-blue-100 text-sm">• {step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No Chart Pattern Detected */}
+          {report.patternV2 && !report.patternV2.institutional && !report.patternV2.candidate && (
+            <div className="bg-gray-800/40 backdrop-blur-lg rounded-2xl p-6 border border-gray-600/50">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">ℹ️</span>
+                <h3 className="text-xl font-bold text-white">No Institutional or Candidate Chart Pattern Detected</h3>
+              </div>
+              <p className="text-gray-300 text-sm">
+                No major chart pattern (flags, triangles, double tops/bottoms) meets detection criteria. Analysis is based on candlestick pattern and technical indicators only.
+              </p>
+            </div>
+          )}
+
+          {/* V2 Pattern Detection - Explainability */}
+          {report.patternV2 && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">🔍 Pattern Detection V2 - Explainability</h3>
+              <p className="text-blue-200 text-sm mb-4">
+                Deterministic pattern analysis with full transparency. All confidence scores computed by explicit rules.
+              </p>
+              
+              {/* Composite Reasons */}
+              {report.patternV2.compositeReasons && report.patternV2.compositeReasons.length > 0 && (
+                <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <h4 className="text-teal-300 font-semibold mb-2">🎯 Composite Score Breakdown</h4>
+                  <ul className="space-y-1">
+                    {report.patternV2.compositeReasons.map((reason, idx) => (
+                      <li key={idx} className="text-blue-100 text-sm">• {reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Chart Pattern Reasons */}
+              {report.patternV2.chartPatternReasons && report.patternV2.chartPatternReasons.length > 0 && (
+                <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <h4 className="text-green-300 font-semibold mb-2">📐 Chart Pattern Facts</h4>
+                  <ul className="space-y-1">
+                    {report.patternV2.chartPatternReasons.map((reason, idx) => (
+                      <li key={idx} className="text-green-100 text-sm">• {reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Chart Pattern Metadata */}
+              {report.patternV2.chartPatternMetadata && (
+                <div className="mb-4 p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                  <h4 className="text-purple-300 font-semibold mb-3">📊 Chart Pattern Metrics</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {report.patternV2.chartPatternMetadata.totalTouches !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Total Touches</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.totalTouches}</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.widthPct !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Width %</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.widthPct}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.widthATR !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Width (ATR)</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.widthATR.toFixed(2)}×</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.r2Upper !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">R² Upper</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.r2Upper.toFixed(2)}</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.r2Lower !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">R² Lower</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.r2Lower.toFixed(2)}</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.breakoutVolZ !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Breakout VolZ</div>
+                        <div className={`font-bold ${
+                          report.patternV2.chartPatternMetadata.breakoutVolZ > 1 ? 'text-green-400' : 
+                          report.patternV2.chartPatternMetadata.breakoutVolZ < -1 ? 'text-red-400' : 'text-white'
+                        }`}>
+                          {report.patternV2.chartPatternMetadata.breakoutVolZ.toFixed(1)}σ
+                        </div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.symmetryPct !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Symmetry</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.symmetryPct.toFixed(1)}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.chartPatternMetadata.heightATR !== undefined && (
+                      <div>
+                        <div className="text-purple-200 text-xs">Height (ATR)</div>
+                        <div className="text-white font-bold">{report.patternV2.chartPatternMetadata.heightATR.toFixed(2)}×</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Candlestick Facts */}
+              {report.patternV2.candlestickFacts && Object.keys(report.patternV2.candlestickFacts).length > 0 && (
+                <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                  <h4 className="text-yellow-300 font-semibold mb-3">🕯️ Candlestick Facts</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {report.patternV2.candlestickFacts.bodyPct !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Body %</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.bodyPct.toFixed(1)}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.wickTopPct !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Top Wick %</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.wickTopPct.toFixed(1)}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.wickBotPct !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Bottom Wick %</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.wickBotPct.toFixed(1)}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.engulfPct !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Engulfment %</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.engulfPct.toFixed(0)}%</div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.volRatio !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Vol Ratio</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.volRatio.toFixed(2)}×</div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.volZ !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Vol Z-Score</div>
+                        <div className={`font-bold ${
+                          report.patternV2.candlestickFacts.volZ > 1 ? 'text-green-400' : 
+                          report.patternV2.candlestickFacts.volZ < -1 ? 'text-red-400' : 'text-white'
+                        }`}>
+                          {report.patternV2.candlestickFacts.volZ.toFixed(1)}σ
+                        </div>
+                      </div>
+                    )}
+                    {report.patternV2.candlestickFacts.closeLocationPct !== undefined && (
+                      <div>
+                        <div className="text-yellow-200 text-xs">Close Location</div>
+                        <div className="text-white font-bold">{report.patternV2.candlestickFacts.closeLocationPct.toFixed(0)}%</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-4 p-3 rounded-lg bg-teal-500/10 border border-teal-500/30">
+                <p className="text-teal-200 text-xs">
+                  💡 <strong>Deterministic Analysis:</strong> All scores and confidences are computed using explicit rules. 
+                  No black-box algorithms - every number is verifiable and explainable.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Risk Management */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">📊 Risk Management Plan</h3>
@@ -378,7 +752,9 @@ export default function AnalyzeClient() {
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
                 <div className="text-red-200 text-sm mb-1">Stop Loss</div>
                 <div className="text-red-400 font-bold text-lg">${report.riskManagement.stopLoss}</div>
-                <div className="text-red-300 text-xs">{report.riskManagement.direction === 'long' ? 'Below' : 'Above'} entry</div>
+                <div className="text-red-300 text-xs">
+                  ${Math.abs(report.riskManagement.stopLoss - report.riskManagement.entry).toFixed(2)} ({report.riskManagement.riskPercent.toFixed(2)}%) {report.riskManagement.direction === 'long' ? 'below' : 'above'} entry
+                </div>
               </div>
               <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                 <div className="text-green-200 text-sm mb-1">Target 1</div>
@@ -398,9 +774,9 @@ export default function AnalyzeClient() {
             </div>
 
             <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
-              <p className="text-blue-200 text-sm mb-2"><strong>Position Sizing:</strong> {report.riskManagement.positionSize}</p>
-              <p className="text-blue-200 text-sm mb-2"><strong>Example:</strong> {report.riskManagement.riskAmount}</p>
-              <p className="text-blue-200 text-sm"><strong>Reasoning:</strong> {report.riskManagement.reasoning}</p>
+              <p className="text-blue-200 text-sm mb-2"><strong>📊 Position Sizing:</strong> {report.riskManagement.positionSize}</p>
+              <p className="text-blue-200 text-sm mb-2"><strong>💰 Risk Amount:</strong> {report.riskManagement.riskAmount}</p>
+              <p className="text-blue-200 text-sm"><strong>📝 Reasoning:</strong> {report.riskManagement.reasoning}</p>
             </div>
             
             {/* Pattern Validation */}
@@ -501,25 +877,63 @@ export default function AnalyzeClient() {
             {/* EMA Compression Insight */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
               <p className="text-blue-200 text-sm">
-                <strong>EMA Proximity:</strong> The 9, 20, and 50 EMAs are within {report.technical.emaCompression.toFixed(2)}% of each other
-                {report.technical.emaCompression < 2 ? " — tight compression, expect breakout or choppy action." : 
+                <strong>📊 EMA Proximity:</strong> The 9, 20, and 50 EMAs are compressed within {report.technical.emaCompression.toFixed(2)}%
+                {report.technical.emaCompression < 2 ? " — expect expansion (breakout or chop)." : 
                  report.technical.emaCompression < 5 ? " — moderate spacing, trend forming." : 
                  " — wide spacing, strong trending environment."}
               </p>
             </div>
             
-            {/* Countertrend Warning */}
-            {((report.riskManagement.direction === 'short' && report.technical.ema9 > report.technical.ema200) ||
-              (report.riskManagement.direction === 'long' && report.technical.ema9 < report.technical.ema200)) && (
-              <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
-                <p className="text-yellow-200 text-sm">
-                  ⚠️ <strong>Countertrend Setup:</strong> This is a {report.riskManagement.direction} setup against the longer-term{' '}
-                  {report.technical.ema9 > report.technical.ema200 ? 'uptrend' : 'downtrend'} (price{' '}
-                  {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA). Countertrend trades have lower probability. 
-                  Use tighter stops and smaller position sizes.
-                </p>
-              </div>
-            )}
+            {/* Trend vs Bias Clarity */}
+            {(() => {
+              const isShortBias = report.riskManagement.direction === 'short';
+              const isLongBias = report.riskManagement.direction === 'long';
+              const priceBelow20 = report.currentPrice < report.technical.ema20;
+              const priceBelow50 = report.currentPrice < report.technical.ema50;
+              const priceAbove20 = report.currentPrice > report.technical.ema20;
+              const priceAbove50 = report.currentPrice > report.technical.ema50;
+              const priceAbove200 = report.technical.ema9 > report.technical.ema200;
+              const priceBelow200 = report.technical.ema9 < report.technical.ema200;
+              const trendNeutral = report.technical.trend === "neutral";
+              
+              // Countertrend setup (short in uptrend or long in downtrend)
+              if ((isShortBias && priceAbove200) || (isLongBias && priceBelow200)) {
+                return (
+                  <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+                    <p className="text-yellow-200 text-sm">
+                      ⚠️ <strong>Countertrend Setup:</strong> This is a {report.riskManagement.direction} setup against the longer-term{' '}
+                      {priceAbove200 ? 'uptrend' : 'downtrend'} (price {priceAbove200 ? 'above' : 'below'} 200 EMA). 
+                      Countertrend trades have lower probability. Use tighter stops and smaller position sizes.
+                    </p>
+                  </div>
+                );
+              }
+              
+              // Conflicting trend classification (e.g., "neutral trend" but clear directional bias)
+              if (trendNeutral && isShortBias && priceBelow20 && priceBelow50) {
+                return (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <p className="text-blue-200 text-sm">
+                      📊 <strong>Trend Classification:</strong> Short bias despite neutral trend score — price below 20/50 EMA cluster signals near-term weakness. 
+                      The 200 EMA context creates the "neutral" label, but the setup favors downside based on recent price action.
+                    </p>
+                  </div>
+                );
+              }
+              
+              if (trendNeutral && isLongBias && priceAbove20 && priceAbove50) {
+                return (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <p className="text-blue-200 text-sm">
+                      📊 <strong>Trend Classification:</strong> Long bias despite neutral trend score — price above 20/50 EMA cluster signals near-term strength. 
+                      The 200 EMA context creates the "neutral" label, but the setup favors upside based on recent price action.
+                    </p>
+                  </div>
+                );
+              }
+              
+              return null;
+            })()}
             
             {/* Earnings Proximity */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
@@ -601,14 +1015,31 @@ export default function AnalyzeClient() {
             <h3 className="text-xl font-bold text-white mb-4">🤖 AI Analysis</h3>
             
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-teal-300 mb-2">Narrative</h4>
-              <p className="text-blue-100 leading-relaxed">{report.analysis.narrative}</p>
+              <h4 className="text-lg font-semibold text-teal-300 mb-2">📖 Narrative</h4>
+              <p className="text-blue-100 leading-relaxed">
+                {report.analysis.narrative}
+                {report.score.overall < 75 && (
+                  <span className="block mt-2 text-blue-300 italic text-sm">
+                    💡 Traders may prefer to wait for a clearer pattern or higher confirmation before entering for better risk/reward.
+                  </span>
+                )}
+              </p>
             </div>
 
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-teal-300 mb-2">Mentor Notes</h4>
+              <h4 className="text-lg font-semibold text-teal-300 mb-2">💡 Mentor Notes</h4>
               <div className="text-blue-100 whitespace-pre-line leading-relaxed">
                 {report.analysis.mentorNotes}
+                {((report.riskManagement.direction === 'short' && report.technical.ema9 > report.technical.ema200) ||
+                  (report.riskManagement.direction === 'long' && report.technical.ema9 < report.technical.ema200)) && (
+                  <p className="mt-3 text-yellow-200 text-sm">
+                    ⚠️ Because this trade goes against the long-term trend (price {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA), 
+                    confirmation of {report.riskManagement.direction === 'long' ? 'breakout' : 'breakdown'} is essential before full sizing.
+                  </p>
+                )}
+                <p className="mt-4 text-teal-200 italic text-sm border-t border-teal-500/30 pt-3">
+                  🎯 Remember — strong swing setups need structure (pattern), not just momentum. Patience pays.
+                </p>
               </div>
             </div>
 
@@ -626,7 +1057,7 @@ export default function AnalyzeClient() {
 
               {report.analysis.warnings.length > 0 && (
                 <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                  <h4 className="text-yellow-300 font-semibold mb-2">⚠️ Warnings</h4>
+                  <h4 className="text-yellow-300 font-semibold mb-2">⚠️ Risk Factors</h4>
                   <ul className="list-disc list-inside space-y-1">
                     {report.analysis.warnings.map((item, idx) => (
                       <li key={idx} className="text-yellow-200 text-sm">{item}</li>

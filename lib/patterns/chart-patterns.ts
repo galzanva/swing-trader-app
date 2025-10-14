@@ -527,9 +527,9 @@ export function detectDoubleBottom(bars: OHLCV[]): ChartPattern | null {
 }
 
 /**
- * Detect all chart patterns and return the most confident one
+ * Detect all chart patterns and return them ranked by confidence
  */
-export function detectChartPatterns(bars: OHLCV[]): ChartPattern | null {
+export function detectAllChartPatterns(bars: OHLCV[]): ChartPattern[] {
   const patterns: (ChartPattern | null)[] = [
     detectBullishFlag(bars),
     detectBearishFlag(bars),
@@ -541,12 +541,16 @@ export function detectChartPatterns(bars: OHLCV[]): ChartPattern | null {
 
   const validPatterns = patterns.filter((p): p is ChartPattern => p !== null);
   
-  if (validPatterns.length === 0) return null;
+  // Sort by confidence (highest first)
+  return validPatterns.sort((a, b) => b.confidence - a.confidence);
+}
 
-  // Return the pattern with highest confidence
-  return validPatterns.reduce((prev, current) => 
-    current.confidence > prev.confidence ? current : prev
-  );
+/**
+ * Detect all chart patterns and return the most confident one
+ */
+export function detectChartPatterns(bars: OHLCV[]): ChartPattern | null {
+  const patterns = detectAllChartPatterns(bars);
+  return patterns.length > 0 ? patterns[0] : null;
 }
 
 // ============= Helper Functions =============

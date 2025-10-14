@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { PolygonClient } from "@/lib/data-vendors/polygon";
 import { calculateTechnicalIndicators, findSupportResistance } from "@/lib/indicators/technical";
 import { detectPatterns, getPrimaryPattern, getCompositePattern } from "@/lib/patterns/detector";
+import { detectAllChartPatterns } from "@/lib/patterns/chart-patterns";
+import { detectAllPatterns } from "@/lib/patterns/detector-v2";
 import { calculateSetupScore, calculateCompositeScore } from "@/lib/scoring/rating";
 import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/management";
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
@@ -54,6 +56,75 @@ export interface AnalysisReport {
     fusedConfidence: number;
     fusionBonus: number;
     analysis: string;
+  };
+  
+  // All detected chart patterns (ranked by confidence)
+  allChartPatterns: Array<{
+    name: string;
+    type: string;
+    confidence: number;
+    confidenceLabel: string;
+    breakoutStatus: string;
+  }>;
+  
+  // V2 Pattern Detection - Two-Tier System
+  patternV2?: {
+    // Institutional pattern (valid/tradeable)
+    institutional?: {
+      name: string;
+      type: string;
+      direction: string;
+      confidence: number;
+      confidenceLabel: string;
+      breakoutStatus: string;
+      priceTarget?: number;
+      keyLevels: {
+        support: number[];
+        resistance: number[];
+      };
+      volumeZScore: number;
+      reasons: string[];
+      metadata: Record<string, any>;
+    };
+    // Candidate pattern (not confirmed)
+    candidate?: {
+      name: string;
+      type: string;
+      direction: string;
+      confidence: number;
+      confidenceLabel: string;
+      metCriteria: string[];
+      unmetCriteria: string[];
+      nextSteps: string[];
+      metadata: Record<string, any>;
+    };
+    // Explainability
+    compositeReasons?: string[];
+    chartPatternReasons?: string[];
+    candlestickFacts?: {
+      bodyPct?: number;
+      wickTopPct?: number;
+      wickBotPct?: number;
+      engulfPct?: number;
+      volRatio?: number;
+      volZ?: number;
+      closeLocationPct?: number;
+    };
+    chartPatternMetadata?: {
+      touchesUpper?: number;
+      touchesLower?: number;
+      totalTouches?: number;
+      widthPct?: number;
+      widthATR?: number;
+      slopeUpperPctPerBar?: number;
+      slopeLowerPctPerBar?: number;
+      r2Upper?: number;
+      r2Lower?: number;
+      breakoutVolZ?: number;
+      symmetryPct?: number;
+      heightATR?: number;
+      separationBars?: number;
+    };
   };
   
   // Score
@@ -183,7 +254,7 @@ export async function POST(request: Request) {
     const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
 
     if (marketData.bars.length < 200) {
-      return NextResponse.json(
+  return NextResponse.json(
         { error: "Insufficient data for analysis. Need at least 200 bars." },
         { status: 400 }
       );
@@ -199,11 +270,85 @@ export async function POST(request: Request) {
     const supportResistance = findSupportResistance(marketData.bars);
     console.log(`[Analyze] Found ${supportResistance.support.length} support and ${supportResistance.resistance.length} resistance levels`);
 
-    // 4. Detect patterns (candlestick + chart patterns)
-    const patterns = detectPatterns(marketData.bars);
-    const compositePattern = getCompositePattern(marketData.bars);
-    console.log(`[Analyze] Candlestick: ${compositePattern.candlestickPattern.name}, Chart: ${compositePattern.chartPattern?.name || 'None'}`);
-    console.log(`[Analyze] Pattern fusion: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus} bonus, Fused confidence: ${compositePattern.fusedConfidence}%`);
+    // 4. Detect patterns (V2: deterministic, explainable)
+    const useV2 = process.env.PATTERN_DETECTION_V2 !== 'false'; // Default to V2
+    
+    let compositePattern;
+    let allChartPatterns;
+    let patternsV2;
+    
+    if (useV2) {
+      console.log(`[Analyze] Using Pattern Detection V2`);
+      // Calculate avg dollar volume from recent bars
+      const avgDollarVolume = marketData.bars.slice(-20).reduce((sum, bar) => 
+        sum + (bar.close * bar.volume), 0) / 20;
+      
+      patternsV2 = detectAllPatterns(marketData.bars, {
+        avgDollarVolume,
+        minLiquidityThreshold: 1000000,
+        daysToEarnings: null // TODO: integrate earnings calendar
+      });
+      
+      // Map V2 to V1 compatible format (use institutional pattern if available, otherwise use for display only)
+      const v1ChartPattern = patternsV2.institutional ? {
+        name: patternsV2.institutional.name,
+        type: patternsV2.institutional.direction,
+        confidence: patternsV2.institutional.confidence,
+        confidenceLabel: patternsV2.institutional.confidenceLabel,
+        description: `${patternsV2.institutional.name} (${patternsV2.institutional.type})`,
+        breakoutStatus: patternsV2.institutional.breakoutStatus,
+        priceTarget: patternsV2.institutional.priceTarget,
+        keyLevels: patternsV2.institutional.keyLevels,
+        volumeConfirmation: patternsV2.institutional.volumeZScore >= 1.0,
+        volumeZScore: patternsV2.institutional.volumeZScore,
+        patternHeight: null,
+        metadata: patternsV2.institutional.metadata,
+        reasons: patternsV2.institutional.reasons
+      } : null;
+      
+      compositePattern = {
+        candlestickPattern: {
+          name: patternsV2.candlestickPattern.name,
+          type: patternsV2.candlestickPattern.type,
+          confidence: patternsV2.candlestickPattern.confidence,
+          description: patternsV2.candlestickPattern.description,
+          timeframe: patternsV2.candlestickPattern.timeframe,
+          validation: patternsV2.candlestickPattern.facts as any // Type compatibility
+        },
+        chartPattern: v1ChartPattern,
+        fusedConfidence: patternsV2.composite.composite,
+        fusionBonus: Object.values(patternsV2.composite.bonuses).reduce((sum, val) => sum + (val || 0), 0) - 
+                     Object.values(patternsV2.composite.penalties).reduce((sum, val) => sum + (val || 0), 0),
+        analysis: patternsV2.composite.analysis
+      } as any; // Type cast for V1/V2 compatibility
+      
+      // Map all two-tier results to old format for display
+      allChartPatterns = patternsV2.allTwoTierResults
+        .filter(r => r.institutional !== null)
+        .map(r => r.institutional!)
+        .map(p => ({
+          name: p.name,
+          type: p.direction,
+          confidence: p.confidence,
+          confidenceLabel: p.confidenceLabel,
+          breakoutStatus: p.breakoutStatus
+        }));
+      
+      const instName = patternsV2.institutional ? patternsV2.institutional.name : 'None';
+      const candName = patternsV2.candidate ? `(Candidate: ${patternsV2.candidate.name})` : '';
+      console.log(`[Analyze] V2 Candlestick: ${patternsV2.candlestickPattern.name}, Institutional: ${instName} ${candName}`);
+      console.log(`[Analyze] V2 Composite: ${patternsV2.composite.composite}/100 (${patternsV2.composite.compositeLabel})`);
+      console.log(`[Analyze] V2 Reasons:`, patternsV2.composite.reasons);
+      console.log(`[Analyze] V2 Detected ${allChartPatterns.length} institutional patterns:`, allChartPatterns.map(p => `${p.name} (${p.confidence}%)`).join(', '));
+    } else {
+      console.log(`[Analyze] Using Pattern Detection V1`);
+      const patterns = detectPatterns(marketData.bars);
+      compositePattern = getCompositePattern(marketData.bars);
+      allChartPatterns = detectAllChartPatterns(marketData.bars);
+      console.log(`[Analyze] Candlestick: ${compositePattern.candlestickPattern.name}, Chart: ${compositePattern.chartPattern?.name || 'None'}`);
+      console.log(`[Analyze] Pattern fusion: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus} bonus, Fused confidence: ${compositePattern.fusedConfidence}%`);
+      console.log(`[Analyze] Detected ${allChartPatterns.length} chart patterns:`, allChartPatterns.map(p => `${p.name} (${p.confidence}%)`).join(', '));
+    }
 
     // 5. Calculate setup score (with chart pattern fusion)
     const score = calculateCompositeScore(indicators, compositePattern);
@@ -252,18 +397,54 @@ export async function POST(request: Request) {
       }
     } else {
       // Fallback without AI
-      const chartInfo = compositePattern.chartPattern 
-        ? ` ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus}) provides market structure.`
-        : '';
+      // Handle narrative based on pattern type
+      let chartInfo = '';
+      let chartBanner = '';
+      
+      if (compositePattern.chartPattern) {
+        // Institutional pattern
+        chartInfo = ` ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus}) provides market structure.`;
+        chartBanner = compositePattern.chartPattern.name;
+      } else if (useV2 && patternsV2 && patternsV2.candidate) {
+        // Candidate pattern
+        const candidate = patternsV2.candidate;
+        const topUnmet = candidate.unmetCriteria.length > 0 ? candidate.unmetCriteria[0] : '';
+        const nextStep = candidate.nextSteps.length > 0 ? candidate.nextSteps[0] : 'monitor for confirmation';
+        chartInfo = ` Candidate (Not Confirmed): ${candidate.name} — structure nearly fits institutional rules but fails: ${topUnmet}. Next: ${nextStep}.`;
+        chartBanner = `Candidate pattern detected (not institutional)`;
+      } else {
+        // No pattern
+        chartInfo = '';
+        chartBanner = '';
+      }
+      
+      // Build mentor notes with candidate pattern guidance if applicable
+      let mentorNotes = compositePattern.analysis + ` Technical setup with ${score.rating} rating. ${score.recommendation} recommendation.`;
+      
+      // Add candidate pattern guidance
+      if (useV2 && patternsV2 && patternsV2.candidate && !patternsV2.institutional) {
+        const candidate = patternsV2.candidate;
+        mentorNotes += `\n\n📚 Pattern Education — Why Not Institutional:\nThe ${candidate.name} pattern shows potential but doesn't yet meet professional-grade criteria. `;
+        
+        if (candidate.unmetCriteria.length > 0) {
+          mentorNotes += `Key missing element: ${candidate.unmetCriteria[0].toLowerCase()}. `;
+        }
+        
+        if (candidate.nextSteps.length > 0) {
+          mentorNotes += `To upgrade to institutional (tradeable) status: ${candidate.nextSteps[0].toLowerCase()}. `;
+        }
+        
+        mentorNotes += `Until then, treat this as a learning opportunity rather than a trade signal. Institutional patterns have stricter requirements to reduce false signals and improve edge.`;
+      }
       
       aiAnalysis = {
-        narrative: `${symbol} shows ${compositePattern.candlestickPattern.name} on ${timeframe}.${chartInfo} ${indicators.trend} trend. RSI: ${indicators.rsi.toFixed(1)}, Overall score: ${score.overall}/100.`,
-        mentorNotes: compositePattern.analysis + ` Technical setup with ${score.rating} rating. ${score.recommendation} recommendation.`,
+        narrative: `${symbol} shows ${compositePattern.candlestickPattern.name} on ${timeframe}.${chartInfo} ${indicators.alignment} alignment (${indicators.trend}). Long-term bias: ${indicators.longTermBias}. RSI: ${indicators.rsi.toFixed(1)}, Overall score: ${score.overall}/100.`,
+        mentorNotes,
         reasoning: [
           `Candlestick: ${compositePattern.candlestickPattern.name}`,
-          compositePattern.chartPattern ? `Chart: ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus})` : 'No chart pattern',
+          chartBanner || 'No chart pattern',
           `Fusion bonus: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus}`,
-          `${indicators.trend} trend with ${indicators.strength} strength`
+          `${indicators.alignment} alignment, ${indicators.longTermBias} long-term bias`
         ],
         warnings: indicators.rsi > 70 ? ["RSI overbought"] : indicators.rsi < 30 ? ["RSI oversold"] : [],
         strengths: score.overall > 70 ? ["High setup quality", compositePattern.fusionBonus > 10 ? "Strong pattern alignment" : "Favorable technical alignment"] : []
@@ -302,6 +483,48 @@ export async function POST(request: Request) {
         fusionBonus: compositePattern.fusionBonus,
         analysis: compositePattern.analysis
       },
+      
+      allChartPatterns: allChartPatterns.map(p => ({
+        name: p.name,
+        type: p.type,
+        confidence: p.confidence,
+        confidenceLabel: p.confidenceLabel,
+        breakoutStatus: p.breakoutStatus
+      })),
+      
+      // V2 Pattern Detection Data - Two-Tier System
+      ...(useV2 && patternsV2 ? {
+        patternV2: {
+          institutional: patternsV2.institutional ? {
+            name: patternsV2.institutional.name,
+            type: patternsV2.institutional.type as string,
+            direction: patternsV2.institutional.direction as string,
+            confidence: patternsV2.institutional.confidence,
+            confidenceLabel: patternsV2.institutional.confidenceLabel,
+            breakoutStatus: patternsV2.institutional.breakoutStatus as string,
+            priceTarget: (patternsV2.institutional.priceTarget === null ? undefined : patternsV2.institutional.priceTarget) as number | undefined,
+            keyLevels: patternsV2.institutional.keyLevels,
+            volumeZScore: patternsV2.institutional.volumeZScore,
+            reasons: patternsV2.institutional.reasons,
+            metadata: patternsV2.institutional.metadata
+          } : undefined,
+          candidate: patternsV2.candidate ? {
+            name: patternsV2.candidate.name,
+            type: patternsV2.candidate.type as string,
+            direction: patternsV2.candidate.direction as string,
+            confidence: patternsV2.candidate.confidence,
+            confidenceLabel: patternsV2.candidate.confidenceLabel,
+            metCriteria: patternsV2.candidate.metCriteria,
+            unmetCriteria: patternsV2.candidate.unmetCriteria,
+            nextSteps: patternsV2.candidate.nextSteps,
+            metadata: patternsV2.candidate.metadata
+          } : undefined,
+          compositeReasons: patternsV2.composite.reasons,
+          chartPatternReasons: patternsV2.institutional?.reasons || patternsV2.candidate?.metCriteria,
+          candlestickFacts: patternsV2.candlestickPattern.facts,
+          chartPatternMetadata: patternsV2.institutional?.metadata || patternsV2.candidate?.metadata
+        }
+      } : {}),
       
       score: {
         overall: score.overall,
