@@ -252,6 +252,7 @@ export async function evaluateAllStrategies(
       passedRR: validEvaluations.length,
       patternContexts: input.patternContexts, // Add pattern contexts
       volZ: input.volZ, // Add volume Z-score for warnings
+      currentPrice: input.price, // For % movement badges
     },
   };
   

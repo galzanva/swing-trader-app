@@ -294,20 +294,34 @@ export default function StrategyAnalyzeClient() {
                 <div>
                   <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
                   <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-blue-200">Direction:</span>
-                      <span className={`font-medium ${result.evaluation.plan.direction === 'long' ? 'text-green-600' : 'text-red-600'}`}>
-                        {result.evaluation.plan.direction.toUpperCase()}
-                      </span>
-                    </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-200">Entry:</span>
-                        <span className="font-medium text-white">${result.evaluation.plan.entry.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-200">Stop Loss:</span>
-                        <span className="font-medium text-white">${result.evaluation.plan.stop.toFixed(2)}</span>
-                      </div>
+                    {(() => {
+                      const plan = result.evaluation.plan!;
+                      const entry = plan.entry;
+                      const stop = plan.stop;
+                      const current = result.context.currentPrice;
+                      const dir = plan.direction;
+                      const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+                      const entryOffset = (entry - current) / current; // entry vs current
+                      const stopPct = (stop - entry) / entry; // signed for both long/short
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-blue-200">Direction:</span>
+                            <span className={`font-medium ${dir === 'long' ? 'text-green-600' : 'text-red-600'}`}>
+                              {dir.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-blue-200">Entry:</span>
+                            <span className="font-medium text-white">${entry.toFixed(2)} • {formatPct(entryOffset)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-blue-200">Stop Loss:</span>
+                            <span className="font-medium text-white">${stop.toFixed(2)} • {formatPct(stopPct)}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                       <div className="flex justify-between">
                         <span className="text-blue-200">Risk per Share:</span>
                         <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
@@ -321,16 +335,24 @@ export default function StrategyAnalyzeClient() {
                 <div>
                   <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
                   <div className="space-y-2">
-                    {result.evaluation.plan.targets.map((target, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span className="text-blue-200">
-                          {target.label || `T${index + 1}`}:
-                        </span>
-                        <span className="font-medium text-white">
-                          ${target.level.toFixed(2)} (R:R {target.rr.toFixed(2)})
-                        </span>
-                      </div>
-                    ))}
+                    {(() => {
+                      const plan = result.evaluation.plan!;
+                      const entry = plan.entry;
+                      const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+                      return plan.targets.map((target, index) => {
+                        const targetPct = plan.direction === 'long' ? (target.level - entry) / entry : (entry - target.level) / entry;
+                        return (
+                          <div key={index} className="flex justify-between">
+                            <span className="text-blue-200">
+                              {target.label || `T${index + 1}`}:
+                            </span>
+                            <span className="font-medium text-white">
+                              ${target.level.toFixed(2)} (R:R {target.rr.toFixed(2)}) • {formatPct(targetPct)}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>

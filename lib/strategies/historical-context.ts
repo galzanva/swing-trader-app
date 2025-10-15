@@ -58,27 +58,28 @@ export function getBacktestedHistorical(
     };
   }
   
-  // Convert enhanced backtest results to HistoricalRecent format
+  // Convert enhanced backtest results to HistoricalRecent format (rounded & clamped)
   return {
     samples: backtest.totalSignals,
     hasMinSamples: backtest.hasMinSamples,
-    winRate5d: backtest.winRate5d,
-    winRate10d: backtest.winRate10d,
-    winRate20d: backtest.winRate20d,
-    avgPnL5d: backtest.avgPnL5d / 100, // Convert from % to decimal
-    avgPnL10d: backtest.avgPnL10d / 100,
-    avgPnL20d: backtest.avgPnL20d / 100,
-    firstTouchT1: backtest.firstTouchT1,
-    firstTouchT2: backtest.firstTouchT2,
-    firstTouchT3: backtest.firstTouchT3,
-    firstTouchStop: backtest.firstTouchStop,
-    avgDaysHeld: backtest.avgDaysHeld,
-    isWeakHistory: backtest.isWeakHistory,
+    winRate5d: Math.max(0, Math.min(1, Number(backtest.winRate5d.toFixed(3)))),
+    winRate10d: Math.max(0, Math.min(1, Number(backtest.winRate10d.toFixed(3)))),
+    winRate20d: Math.max(0, Math.min(1, Number(backtest.winRate20d.toFixed(3)))),
+    avgPnL5d: Number((backtest.avgPnL5d / 100).toFixed(3)), // to decimal, rounded
+    avgPnL10d: Number((backtest.avgPnL10d / 100).toFixed(3)),
+    avgPnL20d: Number((backtest.avgPnL20d / 100).toFixed(3)),
+    firstTouchT1: Math.round(backtest.firstTouchT1),
+    firstTouchT2: Math.round(backtest.firstTouchT2),
+    firstTouchT3: Math.round(backtest.firstTouchT3),
+    firstTouchStop: Math.round(backtest.firstTouchStop),
+    avgDaysHeld: Number(backtest.avgDaysHeld.toFixed(1)),
+    // Strong/Weak logic: mark strong if avgPnL10d > 0.05 (5%) even if win rate low
+    isWeakHistory: backtest.avgPnL10d > 5 ? false : backtest.isWeakHistory,
     lastSignal: backtest.latestSignalDate ? {
-      date: backtest.latestSignalDate,
+      date: backtest.latestSignalDate, // UTC ISO stored
       firstTouch: backtest.latestSignalOutcome as 'T1' | 'T2' | 'T3' | 'stop',
-      daysHeld: backtest.avgDaysHeld,
-      pnl10d: backtest.avgPnL10d / 100, // Convert from % to decimal
+      daysHeld: Number(backtest.avgDaysHeld.toFixed(1)),
+      pnl10d: Number((backtest.avgPnL10d / 100).toFixed(3)),
     } : undefined,
     lastSignalNote: backtest.latestSignalDate ? 
       `Latest signal: ${backtest.latestSignalDate} (${backtest.latestSignalOutcome})` : 

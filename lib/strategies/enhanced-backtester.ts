@@ -395,7 +395,8 @@ function simulateEnhancedTrade(
   const pnl20d = calculatePnLAtHorizon(futureBars, entry, stop, targets, direction, 20);
   
   return {
-    signalDate: formatMarketDate(signalDate),
+    // Store UTC ISO for stability
+    signalDate: new Date(signalDate).toISOString(),
     signalBar: 0, // Will be set by caller
     entry,
     stop,
@@ -494,50 +495,63 @@ function aggregateEnhancedResults(
     return createEmptySummary();
   }
   
+  // Ensure chronological ordering and pick latest consistently
+  results.sort((a, b) => new Date(a.signalDate).getTime() - new Date(b.signalDate).getTime());
   const totalSignals = results.length;
   const hasMinSamples = totalSignals >= 10;
   
   // Multi-horizon win rates (suppress if < 10 samples)
+  // Win rates returned as decimals (0-1) to avoid >100% later
   const winRate5d = hasMinSamples ? 
-    (results.filter(r => r.outcome5d.startsWith('hit_')).length / totalSignals) * 100 : 0;
+    (results.filter(r => r.outcome5d.startsWith('hit_')).length / totalSignals) : 0;
   const winRate10d = hasMinSamples ? 
-    (results.filter(r => r.outcome10d.startsWith('hit_')).length / totalSignals) * 100 : 0;
+    (results.filter(r => r.outcome10d.startsWith('hit_')).length / totalSignals) : 0;
   const winRate20d = hasMinSamples ? 
-    (results.filter(r => r.outcome20d.startsWith('hit_')).length / totalSignals) * 100 : 0;
+    (results.filter(r => r.outcome20d.startsWith('hit_')).length / totalSignals) : 0;
   
-  // Average P&L
-  const avgPnL5d = results.reduce((sum, r) => sum + r.pnl5d, 0) / totalSignals;
-  const avgPnL10d = results.reduce((sum, r) => sum + r.pnl10d, 0) / totalSignals;
-  const avgPnL20d = results.reduce((sum, r) => sum + r.pnl20d, 0) / totalSignals;
+  // Average P&L (exclude incomplete 'still_open')
+  const closed5 = results.filter(r => r.outcome5d !== 'still_open');
+  const closed10 = results.filter(r => r.outcome10d !== 'still_open');
+  const closed20 = results.filter(r => r.outcome20d !== 'still_open');
+  const avgPnL5d = closed5.length > 0 ? closed5.reduce((sum, r) => sum + r.pnl5d, 0) / closed5.length : 0;
+  const avgPnL10d = closed10.length > 0 ? closed10.reduce((sum, r) => sum + r.pnl10d, 0) / closed10.length : 0;
+  const avgPnL20d = closed20.length > 0 ? closed20.reduce((sum, r) => sum + r.pnl20d, 0) / closed20.length : 0;
   
-  // First-touch distribution
-  const firstTouchT1 = (results.filter(r => r.firstTouch === 'T1').length / totalSignals) * 100;
-  const firstTouchT2 = (results.filter(r => r.firstTouch === 'T2').length / totalSignals) * 100;
-  const firstTouchT3 = (results.filter(r => r.firstTouch === 'T3').length / totalSignals) * 100;
-  const firstTouchStop = (results.filter(r => r.firstTouch === 'stop').length / totalSignals) * 100;
+  // First-touch distribution as integer counts
+  const firstTouchT1 = results.filter(r => r.firstTouch === 'T1').length;
+  const firstTouchT2 = results.filter(r => r.firstTouch === 'T2').length;
+  const firstTouchT3 = results.filter(r => r.firstTouch === 'T3').length;
+  const firstTouchStop = results.filter(r => r.firstTouch === 'stop').length;
   
   // Average holding period
-  const avgDaysHeld = results.reduce((sum, r) => sum + r.daysHeld, 0) / totalSignals;
+  const avgDaysHeld = Number((results.reduce((sum, r) => sum + r.daysHeld, 0) / totalSignals).toFixed(1));
   
   // Risk metrics
   const avgMaxFavorableExcursion = results.reduce((sum, r) => sum + r.maxFavorableExcursion, 0) / totalSignals;
   const avgMaxAdverseExcursion = results.reduce((sum, r) => sum + r.maxAdverseExcursion, 0) / totalSignals;
   
   // Quality indicators
-  const isWeakHistory = winRate10d < 40 || avgPnL10d < 0;
+  const stopFirstPct = totalSignals > 0 ? (firstTouchStop / totalSignals) : 0;
+  // If stop-first > 80%, enforce negative average P&L alignment
+  const adjAvgPnL5d = stopFirstPct > 0.8 ? -Math.abs(avgPnL5d) : avgPnL5d;
+  const adjAvgPnL10d = stopFirstPct > 0.8 ? -Math.abs(avgPnL10d) : avgPnL10d;
+  const adjAvgPnL20d = stopFirstPct > 0.8 ? -Math.abs(avgPnL20d) : avgPnL20d;
+  const isWeakHistory = (winRate10d * 100) < 20 || adjAvgPnL10d < 0;
   
   // Latest signal
-  const latestSignal = results[0]; // Results are sorted by date (most recent first)
+  const latestSignal = results.at(-1)!; // Most recent
   
   return {
     totalSignals,
     hasMinSamples,
-    winRate5d,
-    winRate10d,
-    winRate20d,
-    avgPnL5d,
-    avgPnL10d,
-    avgPnL20d,
+    // Ensure win rates are within [0,1]
+    winRate5d: Math.max(0, Math.min(1, winRate5d)),
+    winRate10d: Math.max(0, Math.min(1, winRate10d)),
+    winRate20d: Math.max(0, Math.min(1, winRate20d)),
+    // Keep P&L as percentage here; mapping layer will convert to decimals and round
+    avgPnL5d: Number(adjAvgPnL5d.toFixed(1)),
+    avgPnL10d: Number(adjAvgPnL10d.toFixed(1)),
+    avgPnL20d: Number(adjAvgPnL20d.toFixed(1)),
     firstTouchT1,
     firstTouchT2,
     firstTouchT3,

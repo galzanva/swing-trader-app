@@ -209,15 +209,20 @@ function generateTradePlan(evaluation: StrategyEvaluation): string {
   const risk = direction === 'long' ? entry - stop : stop - entry;
   const riskPct = (risk / entry * 100).toFixed(2);
   
-  const targetsText = targets.map((t, i) => 
-    `  T${i + 1}: $${t.level.toFixed(2)} (R:R ${t.rr.toFixed(2)}) ${t.label || ''}`
-  ).join('\n');
+  const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+  const currentPrice = evaluation.metadata?.currentPrice ?? entry;
+  const stopPct = (stop - entry) / entry; // signed
+  const entryOffset = (entry - currentPrice) / currentPrice;
+  const targetsText = targets.map((t, i) => {
+    const targetPct = direction === 'long' ? (t.level - entry) / entry : (entry - t.level) / entry;
+    return `  T${i + 1}: $${t.level.toFixed(2)} (R:R ${t.rr.toFixed(2)}) • ${formatPct(targetPct)}`;
+  }).join('\n');
   
   return `**Trade Plan**
 
 **Trigger:** ${trigger.description}
 **Entry:** $${entry.toFixed(2)}
-**Stop Loss:** $${stop.toFixed(2)} (${riskPct}% risk)
+**Stop Loss:** $${stop.toFixed(2)} (${riskPct}% risk) • ${formatPct(stopPct)}
 
 **Targets:**
 ${targetsText}
@@ -284,9 +289,9 @@ function generateHistoricalContext(evaluation: StrategyEvaluation): string {
       
       // Multi-horizon win rates (only show if sufficient samples)
       context += `\n**Win Rates:**\n`;
-      context += `- 5-day: ${(recent.winRate5d * 100).toFixed(1)}%\n`;
-      context += `- 10-day: ${(recent.winRate10d * 100).toFixed(1)}%\n`;
-      context += `- 20-day: ${(recent.winRate20d * 100).toFixed(1)}%\n`;
+      context += `- 5-day: ${(Math.min(1, Math.max(0, recent.winRate5d)) * 100).toFixed(1)}%\n`;
+      context += `- 10-day: ${(Math.min(1, Math.max(0, recent.winRate10d)) * 100).toFixed(1)}%\n`;
+      context += `- 20-day: ${(Math.min(1, Math.max(0, recent.winRate20d)) * 100).toFixed(1)}%\n`;
       
       // Multi-horizon average P&L (only show if sufficient samples)
       context += `\n**Average P&L:**\n`;
@@ -296,19 +301,40 @@ function generateHistoricalContext(evaluation: StrategyEvaluation): string {
       
       // First-touch distribution (only show if sufficient samples)
       context += `\n**First-Touch Outcomes:**\n`;
-      context += `- T1 first: ${recent.firstTouchT1} (${((recent.firstTouchT1 / recent.samples) * 100).toFixed(1)}%)\n`;
-      context += `- T2 first: ${recent.firstTouchT2} (${((recent.firstTouchT2 / recent.samples) * 100).toFixed(1)}%)\n`;
-      context += `- T3 first: ${recent.firstTouchT3} (${((recent.firstTouchT3 / recent.samples) * 100).toFixed(1)}%)\n`;
-      context += `- Stop first: ${recent.firstTouchStop} (${((recent.firstTouchStop / recent.samples) * 100).toFixed(1)}%)\n`;
+      const totalFT = Math.max(1, (recent.firstTouchT1 + recent.firstTouchT2 + recent.firstTouchT3 + recent.firstTouchStop));
+      context += `- T1 first: ${recent.firstTouchT1} (${((recent.firstTouchT1 / totalFT) * 100).toFixed(1)}%)\n`;
+      context += `- T2 first: ${recent.firstTouchT2} (${((recent.firstTouchT2 / totalFT) * 100).toFixed(1)}%)\n`;
+      context += `- T3 first: ${recent.firstTouchT3} (${((recent.firstTouchT3 / totalFT) * 100).toFixed(1)}%)\n`;
+      context += `- Stop first: ${recent.firstTouchStop} (${((recent.firstTouchStop / totalFT) * 100).toFixed(1)}%)\n`;
       context += `- Avg hold time: ${recent.avgDaysHeld.toFixed(1)} days\n`;
       
       if (recent.lastSignal) {
         context += `\n**Most Recent Signal:**\n`;
-        context += `- Date: ${recent.lastSignal.date}\n`;
+        // Display trimmed local-readable format (UTC ISO stored)
+        const iso = recent.lastSignal.date;
+        const trimmed = iso.split('T')[0];
+        context += `- Date: ${trimmed} (${Number(recent.lastSignal.daysHeld).toFixed(1)} days held)\n`;
         context += `- First Touch: ${recent.lastSignal.firstTouch}\n`;
-        context += `- Days Held: ${recent.lastSignal.daysHeld}\n`;
-        context += `- 10-day P&L: ${(recent.lastSignal.pnl10d * 100).toFixed(2)}%\n`;
+        context += `- 10-day P&L: ${(recent.lastSignal.pnl10d * 100).toFixed(1)}%\n`;
       }
+
+      // Reliability section
+      const samples = Math.max(0, recent.samples);
+      const confidence = Math.round(100 * (1 - Math.exp(-samples / 20)));
+      let edgeStrength = 'Weak';
+      if (recent.avgPnL10d >= 0.05) edgeStrength = 'Strong';
+      else if (recent.avgPnL10d >= 0.02) edgeStrength = 'Moderate';
+      context += `\n**Reliability:**\n`;
+      context += `- Samples: ${samples}\n`;
+      context += `- Historical Edge: ${edgeStrength}\n`;
+      context += `- Confidence: ${confidence}%\n`;
+
+      // Edge classification summary line
+      const stopPct = ((recent.firstTouchStop / Math.max(1, samples)) * 100).toFixed(1);
+      const win10 = ((Math.min(1, Math.max(0, recent.winRate10d))) * 100).toFixed(1);
+      const avg10 = (recent.avgPnL10d * 100).toFixed(1);
+      const edgeIcon = (recent.avgPnL10d < 0 || Number(stopPct) >= 80) ? '❌ Negative' : (recent.avgPnL10d >= 0.05 ? '✅ Strong' : '⚠ Moderate');
+      context += `\n**Historical Edge:** ${edgeIcon} (avg ${avg10}%, win ${win10}%, ${stopPct}% stop-first)\n`;
     }
   } else {
     context += `**Backtested (last 12 months / ≤252 bars):** No historical occurrences found (pattern is new on this ticker)\n`;

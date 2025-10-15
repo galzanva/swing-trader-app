@@ -29,8 +29,9 @@ const CACHE_TTL_HOURS = 24;
 /**
  * Generate cache key for symbol/timeframe combination
  */
-export function getCacheKey(symbol: string, timeframe: string): string {
-  return `${symbol.toUpperCase()}_${timeframe}`;
+export function getCacheKey(symbol: string, timeframe: string, barsHash?: string): string {
+  const base = `${symbol.toUpperCase()}_${timeframe.toUpperCase()}`;
+  return barsHash ? `${base}_${barsHash}` : base;
 }
 
 /**
@@ -77,8 +78,8 @@ export function getDataFreshnessInfo(symbol: string, timeframe: string): DataFre
 /**
  * Cache data with timestamp
  */
-export function cacheData<T>(symbol: string, timeframe: string, data: T): void {
-  const cacheKey = getCacheKey(symbol, timeframe);
+export function cacheData<T>(symbol: string, timeframe: string, data: T, barsHash?: string): void {
+  const cacheKey = getCacheKey(symbol, timeframe, barsHash);
   dataCache.set(cacheKey, {
     data,
     timestamp: new Date(),
@@ -90,8 +91,8 @@ export function cacheData<T>(symbol: string, timeframe: string, data: T): void {
 /**
  * Get cached data if not stale
  */
-export function getCachedData<T>(symbol: string, timeframe: string): T | null {
-  const cacheKey = getCacheKey(symbol, timeframe);
+export function getCachedData<T>(symbol: string, timeframe: string, barsHash?: string): T | null {
+  const cacheKey = getCacheKey(symbol, timeframe, barsHash);
   
   if (isDataStale(cacheKey)) {
     dataCache.delete(cacheKey); // Remove stale entry
@@ -105,8 +106,8 @@ export function getCachedData<T>(symbol: string, timeframe: string): T | null {
 /**
  * Invalidate cache for specific symbol/timeframe
  */
-export function invalidateCache(symbol: string, timeframe: string): void {
-  const cacheKey = getCacheKey(symbol, timeframe);
+export function invalidateCache(symbol: string, timeframe: string, barsHash?: string): void {
+  const cacheKey = getCacheKey(symbol, timeframe, barsHash);
   dataCache.delete(cacheKey);
 }
 
