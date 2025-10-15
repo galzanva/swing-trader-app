@@ -104,3 +104,93 @@ model ScanRun {
   @@index([presetId])
   @@index([status])
 }
+
+// Hybrid Historical Outcome Model
+// Tracks real trade outcomes with multi-horizon and first-touch data
+model StrategyBacktest {
+  id           String   @id @default(cuid())
+  symbol       String
+  timeframe    String   @default("1D")
+  strategy     String
+  signalDate   DateTime
+  
+  // Entry details
+  entry        Float
+  stop         Float
+  direction    String   // long, short
+  
+  // Targets
+  target1      Float
+  target2      Float
+  target3      Float?
+  
+  // Quality metrics at signal time
+  quality      Float
+  viability    Float
+  rrFirst      Float
+  
+  // Multi-horizon outcomes (5d/10d/20d)
+  outcome5d    String?  // hit_t1, hit_t2, hit_t3, stopped_out, still_open
+  outcome10d   String?
+  outcome20d   String?
+  
+  // Path-based first-touch outcome
+  firstTouch   String?  // T1, T2, T3, stop
+  daysHeld     Int?     // Days until first touch
+  
+  // Multi-horizon P&L percentages
+  pnl5d        Float?
+  pnl10d       Float?
+  pnl20d       Float?
+  
+  // Market context
+  spyRegime    String
+  volZ         Float
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([symbol, timeframe])
+  @@index([strategy])
+  @@index([signalDate])
+  @@index([symbol, strategy, signalDate])
+}
+
+// Aggregate statistics cache with multi-horizon data
+model StrategyStats {
+  id            String   @id @default(cuid())
+  symbol        String
+  timeframe     String   @default("1D")
+  strategy      String
+  
+  // Sample count and minimum enforcement
+  sampleCount   Int      @default(0)
+  hasMinSamples Boolean  @default(false) // true if >= 10 samples
+  
+  // Multi-horizon win rates
+  winRate5d     Float    @default(0)
+  winRate10d    Float    @default(0)
+  winRate20d    Float    @default(0)
+  
+  // Multi-horizon average P&L
+  avgPnL5d      Float    @default(0)
+  avgPnL10d     Float    @default(0)
+  avgPnL20d     Float    @default(0)
+  
+  // First-touch distribution
+  firstTouchT1  Int      @default(0)
+  firstTouchT2  Int      @default(0)
+  firstTouchT3  Int      @default(0)
+  firstTouchStop Int     @default(0)
+  avgDaysHeld   Float    @default(0)
+  
+  // Quality flags
+  isWeakHistory Boolean  @default(false) // winRate10d < 0.20 OR avgPnL10d < 0
+  
+  lastUpdated   DateTime @updatedAt
+  
+  @@unique([symbol, timeframe, strategy])
+  @@index([symbol])
+  @@index([strategy])
+  @@index([hasMinSamples])
+}
