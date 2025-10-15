@@ -5,7 +5,8 @@
 
 import OpenAI from "openai";
 import { TechnicalIndicators } from "../indicators/technical";
-import { DetectedPattern, CompositePattern } from "../patterns/detector";
+import { DetectedPattern } from "../patterns/detector"; // V1 type used only for legacy method
+import { CompositePattern } from "../patterns/fusion-v2"; // V2 composite used by generateCompositeAnalysis
 import { SetupScore } from "../scoring/rating";
 import { RiskManagementPlan } from "../risk/management";
 import { ExecutionPlan } from "../execution/confirmation-entries";
@@ -379,7 +380,9 @@ Key principles:
     score: SetupScore,
     risk: RiskManagementPlan
   ): string {
-    const { candlestickPattern, chartPattern, fusedConfidence, fusionBonus, analysis } = compositePattern;
+    const { candlestickPattern, institutionalPattern, bonuses, penalties, composite, analysis } = compositePattern;
+    const chartPattern = institutionalPattern;
+    const netFusion = (bonuses?.alignment ?? 0) + (bonuses?.breakoutState ?? 0) + (bonuses?.volume ?? 0) - (penalties?.opposition ?? 0);
     
     let prompt = `Analyze this swing trading setup for ${symbol} on ${timeframe} timeframe:
 
@@ -393,16 +396,15 @@ CANDLESTICK PATTERN (TIMING):
       prompt += `
 CHART PATTERN (STRUCTURE):
 - ${chartPattern.name} (${chartPattern.type}, ${chartPattern.confidence}% confidence)
-- ${chartPattern.description}
 - Breakout Status: ${chartPattern.breakoutStatus}
-- Volume Confirmation: ${chartPattern.volumeConfirmation ? 'Yes' : 'No'}
+- Volume Z-Score: ${chartPattern.volumeZScore.toFixed(2)}
 ${chartPattern.priceTarget ? `- Price Target: $${chartPattern.priceTarget.toFixed(2)}` : ''}
 ${chartPattern.metadata?.tightness ? `- Pattern Tightness: ${chartPattern.metadata.tightness}% (higher = coiled for move)` : ''}
 - Role: Defines market structure and expected move size
 
 PATTERN FUSION ANALYSIS:
-- Fused Confidence: ${fusedConfidence}% (from ${candlestickPattern.confidence}% and ${chartPattern.confidence}%)
-- Fusion Bonus: ${fusionBonus > 0 ? '+' : ''}${fusionBonus} points ${fusionBonus > 0 ? '(patterns align ✓)' : fusionBonus < 0 ? '(patterns conflict ⚠)' : '(neutral)'}
+- Composite: ${composite}/100 (weighted structure + timing)
+- Fusion Effect: ${netFusion > 0 ? '+' : ''}${netFusion} ${netFusion > 0 ? '(alignment/volume/breakout bonuses)' : netFusion < 0 ? '(opposition penalty)' : '(neutral)'}
 - ${analysis}
 `;
     } else {
@@ -472,12 +474,14 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     risk: RiskManagementPlan,
     executionPlan?: ExecutionPlan
   ): AIAnalysis {
-    const { candlestickPattern, chartPattern, analysis } = compositePattern;
+    const { candlestickPattern, institutionalPattern, bonuses, penalties, analysis } = compositePattern;
+    const chartPattern = institutionalPattern;
+    const netFusion = (bonuses?.alignment ?? 0) + (bonuses?.breakoutState ?? 0) + (bonuses?.volume ?? 0) - (penalties?.opposition ?? 0);
     
     let narrative = "";
     if (chartPattern) {
       narrative = `${chartPattern.name} chart pattern provides the structural context for this ${symbol} setup, showing ${chartPattern.type} bias with ${chartPattern.confidence}% confidence. `;
-      narrative += `The pattern is currently ${chartPattern.breakoutStatus} with ${chartPattern.volumeConfirmation ? 'strong' : 'weak'} volume confirmation. `;
+      narrative += `The pattern is currently ${chartPattern.breakoutStatus} with volume Z-score ${chartPattern.volumeZScore.toFixed(2)}. `;
       narrative += `${candlestickPattern.name} candlestick pattern confirms entry timing with ${candlestickPattern.confidence}% confidence. `;
       narrative += analysis;
     } else {
@@ -485,7 +489,7 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     }
 
     const mentorNotes = chartPattern
-      ? `• ${chartPattern.name} pattern → ${chartPattern.type} bias.\n\n• Volume ${indicators.volumeZScore < 0 ? 'sub-avg' : 'adequate'} → ${indicators.volumeZScore < 0 ? 'weak' : 'strong'} conviction.\n\n• Confirmation ${executionPlan ? `${executionPlan.entry.type === 'breakdown' ? 'below' : 'above'} $${executionPlan.entry.triggerPrice}` : 'at key level'} + avg volume required.`
+      ? `• ${chartPattern.name} pattern → ${chartPattern.type} bias.\n\n• Volume Z-score ${chartPattern.volumeZScore.toFixed(2)} → ${chartPattern.volumeZScore < 0 ? 'below-average (needs confirmation)' : 'adequate/strong'}.\n\n• Confirmation ${executionPlan ? `${executionPlan.entry.type === 'breakdown' ? 'below' : 'above'} $${executionPlan.entry.triggerPrice}` : 'at key level'} + avg volume required.`
       : this.getDefaultMentorNotes(indicators, executionPlan);
 
     const reasoning: string[] = [
@@ -495,7 +499,7 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     if (chartPattern) {
       reasoning.push(`Chart Pattern: ${chartPattern.name} (${chartPattern.confidence}%)`);
       reasoning.push(`Breakout Status: ${chartPattern.breakoutStatus}`);
-      reasoning.push(`Pattern Fusion: ${compositePattern.fusionBonus > 0 ? 'Aligned' : compositePattern.fusionBonus < 0 ? 'Conflicting' : 'Neutral'} (${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus})`);
+      reasoning.push(`Pattern Fusion: ${netFusion > 0 ? 'Aligned' : netFusion < 0 ? 'Conflicting' : 'Neutral'} (${netFusion > 0 ? '+' : ''}${netFusion})`);
     } else {
       reasoning.push('No chart pattern - focus on candlestick + S/R');
     }
@@ -503,17 +507,17 @@ Be educational and factual. Help traders understand the "why" behind the pattern
     reasoning.push(...this.getDefaultReasoning(indicators, candlestickPattern).slice(1));
 
     const warnings = this.getDefaultWarnings(indicators, candlestickPattern, score);
-    if (chartPattern && !chartPattern.volumeConfirmation) {
+    if (chartPattern && chartPattern.volumeZScore < 0) {
       warnings.unshift("Low volume on chart pattern - wait for confirmation");
     }
-    if (compositePattern.fusionBonus < 0) {
+    if (netFusion < 0) {
       warnings.unshift("Chart and candlestick patterns conflict - proceed with caution");
     }
 
     const strengths = chartPattern
       ? [
           `${chartPattern.name} provides clear structural bias`,
-          compositePattern.fusionBonus > 10 ? 'Strong pattern alignment (+15 confidence)' : 'Pattern fusion detected',
+          netFusion > 10 ? 'Strong pattern alignment (+15 confidence)' : 'Pattern fusion detected',
           chartPattern.breakoutStatus === 'confirmed' ? 'Breakout confirmed with volume' : `Breakout ${chartPattern.breakoutStatus}`,
           ...this.getDefaultStrengths(indicators, candlestickPattern, score)
         ].slice(0, 3)
