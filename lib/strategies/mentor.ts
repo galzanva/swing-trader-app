@@ -35,33 +35,41 @@ export function generateMentorExplanation(
   // 1. Setup Summary
   sections.push(generateSetupSummary(evaluation));
   
-  // 2. Why It Qualifies
+  // 2. Strategy Criteria (for user strategies)
+  if (evaluation.metadata?.isUserStrategy && evaluation.metadata?.dsl) {
+    const strategyCriteria = generateStrategyCriteriaSection(evaluation);
+    if (strategyCriteria) {
+      sections.push(strategyCriteria);
+    }
+  }
+  
+  // 3. Why It Qualifies
   sections.push(generateQualificationSection(evaluation));
   
-  // 3. Pattern Context
+  // 4. Pattern Context
   const patternContext = generatePatternContext(evaluation);
   if (patternContext) {
     sections.push(patternContext);
   }
   
-  // 4. Trade Plan
+  // 5. Trade Plan
   sections.push(generateTradePlan(evaluation));
   
-  // 5. Context & Risks
+  // 6. Context & Risks
   sections.push(generateContextAndRisks(evaluation));
   
-  // 6. Historical Context
+  // 7. Historical Context
   if (evaluation.historicalRecent || evaluation.historical) {
     sections.push(generateHistoricalContext(evaluation));
   }
   
-  // 7. Contextual Cautions
+  // 8. Contextual Cautions
   const contextualCautions = generateContextualCautions(evaluation);
   if (contextualCautions) {
     sections.push(contextualCautions);
   }
   
-  // 8. Invalidation Rules
+  // 9. Invalidation Rules
   sections.push(generateInvalidationRules(evaluation));
   
   return sections.join('\n\n');
@@ -101,7 +109,12 @@ No actionable setup meets criteria at this time.`;
 }
 
 function generateSetupSummary(evaluation: StrategyEvaluation): string {
-  const strategyName = getStrategyDisplayName(evaluation.strategy);
+  // For user strategies, use the actual strategy name from metadata
+  const isUserStrategy = evaluation.metadata?.isUserStrategy;
+  const strategyName = isUserStrategy 
+    ? (evaluation.metadata?.strategyName || 'Custom Strategy')
+    : getStrategyDisplayName(evaluation.strategy);
+  
   const direction = evaluation.plan?.direction.toUpperCase() || 'N/A';
   const status = evaluation.status === 'ready' ? '✓ Ready to Trade' : '⚠ Candidate (awaiting confirmation)';
   
@@ -109,6 +122,8 @@ function generateSetupSummary(evaluation: StrategyEvaluation): string {
   let evaluationSummary = '';
   if (evaluation.metadata?.strategyDetails && evaluation.metadata.strategyDetails.length > 0) {
     evaluationSummary = `\n\n**Strategy Selection:** Best of ${evaluation.metadata.totalEvaluated || 6} evaluated (${evaluation.metadata.eligibleFound || 0} eligible, ${evaluation.metadata.passedRR || 0} passed R:R minimum)`;
+  } else if (isUserStrategy) {
+    evaluationSummary = `\n\n**Strategy Type:** Custom User-Defined Strategy`;
   }
   
   // Add strongest caution if applicable
@@ -136,6 +151,73 @@ ${evaluation.symbol} on ${evaluation.timeframe} timeframe as of ${evaluation.asO
 **Quality Score:** ${(evaluation.quality * 100).toFixed(0)}%
 **Viability Score:** ${(evaluation.viability * 100).toFixed(0)}% (includes volume & regime multipliers)
 **First Target R:R:** ${evaluation.rrFirst.toFixed(2)}${evaluationSummary}${cautionLine}${insufficientSampleWarning}${volumeWarning}`;
+}
+
+function generateStrategyCriteriaSection(evaluation: StrategyEvaluation): string {
+  const dsl = evaluation.metadata?.dsl;
+  if (!dsl) return '';
+  
+  const criteria: string[] = [];
+  
+  // EMA Rules
+  if (dsl.eligibility?.emaRules && dsl.eligibility.emaRules.length > 0) {
+    const emaRules = dsl.eligibility.emaRules
+      .map((r: any) => `EMA${r.ema1} ${r.operator} EMA${r.ema2}`)
+      .join(', ');
+    criteria.push(`**Trend Alignment:** ${emaRules}`);
+  }
+  
+  // RSI Range
+  if (dsl.eligibility?.rsiRange) {
+    const { min, max } = dsl.eligibility.rsiRange;
+    criteria.push(`**RSI Range:** ${min}–${max}`);
+  }
+  
+  // Volume Rule
+  if (dsl.eligibility?.volumeRule) {
+    const { threshold, operator, type } = dsl.eligibility.volumeRule;
+    const volDesc = type === 'relative' ? `Volume Z-Score ${operator} ${threshold}` : `Volume ${operator} ${threshold}`;
+    criteria.push(`**Volume:** ${volDesc}`);
+  }
+  
+  // Price Distance
+  if (dsl.eligibility?.priceDistance) {
+    const { fromLevel, maxDistance, unit } = dsl.eligibility.priceDistance;
+    criteria.push(`**Price Proximity:** Within ${maxDistance}${unit === 'atr' ? '×ATR' : '%'} of ${fromLevel}`);
+  }
+  
+  // Candle Pattern
+  if (dsl.eligibility?.candlePattern) {
+    const patternName = dsl.eligibility.candlePattern.name.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    criteria.push(`**Candle Pattern:** ${patternName}`);
+  }
+  
+  // Multi-bar Condition
+  if (dsl.eligibility?.multiBarCondition) {
+    const { count, direction, minLevel, maxLevel } = dsl.eligibility.multiBarCondition;
+    let desc = `${count} consecutive ${direction === 'down' ? 'red' : 'bullish'} candles`;
+    if (minLevel) desc += ` above ${minLevel}`;
+    if (maxLevel) desc += ` below ${maxLevel}`;
+    criteria.push(`**Multi-Bar Condition:** ${desc}`);
+  }
+  
+  // Confirmation
+  if (dsl.confirmation) {
+    criteria.push(`**Confirmation:** ${dsl.confirmation.barsRequired || 1} bar${dsl.confirmation.barsRequired > 1 ? 's' : ''} required`);
+  }
+  
+  // Risk Management
+  if (dsl.riskManagement) {
+    criteria.push(`**Risk/Reward:** Minimum ${dsl.riskManagement.minRR || 1.5}:1`);
+  }
+  
+  if (criteria.length === 0) return '';
+  
+  return `**Strategy Criteria**
+
+This custom strategy looks for:
+
+${criteria.join('\n')}`;
 }
 
 function generateQualificationSection(evaluation: StrategyEvaluation): string {

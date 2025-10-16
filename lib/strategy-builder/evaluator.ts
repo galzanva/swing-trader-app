@@ -115,11 +115,12 @@ export function evaluateUserStrategy(
         userStrategyId: strategyId,
         dsl,
         confirmation,
-        allEvaluatedStrategies: ['user_defined'],
+        allEvaluatedStrategies: [dsl.name],
         selectedReason: 'User-defined strategy',
         totalEvaluated: 1,
         eligibleFound: 1,
         passedRR: 1,
+        isUserStrategy: true, // Flag for mentor to recognize user strategy
       },
     };
   } catch (error) {

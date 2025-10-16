@@ -262,7 +262,9 @@ export default function StrategyAnalyzeClient() {
               <div className="bg-white/10 rounded-lg p-4 border border-white/10">
                 <div className="text-sm text-blue-200">Strategy</div>
                 <div className="text-lg font-semibold text-white">
-                  {formatStrategyName(result.evaluation.strategy)}
+                  {result.evaluation.metadata?.isUserStrategy 
+                    ? (result.evaluation.metadata?.strategyName || 'Custom Strategy')
+                    : formatStrategyName(result.evaluation.strategy)}
                 </div>
               </div>
               <div className="bg-white/10 rounded-lg p-4 border border-white/10">

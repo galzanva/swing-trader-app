@@ -132,10 +132,14 @@ export async function evaluateAllStrategiesWithUser(
       }
       
       if (evaluation) {
-        // Add historical context for user strategy
+        // Add historical context for user strategy via backtesting
         try {
-          // Note: For user strategies, we'll use a simplified historical context
-          // until we implement the full backtesting for user strategies
+          const { backtestUserStrategy } = await import('./user-strategy-backtester');
+          evaluation.historicalRecent = backtestUserStrategy(strategy.dsl, input, 252);
+          console.log(`[User Strategies] Backtested ${strategy.name}: ${evaluation.historicalRecent.samples} signals found`);
+        } catch (err) {
+          console.error('Failed to backtest user strategy:', err);
+          // Fallback to empty historical context
           evaluation.historicalRecent = {
             samples: 0,
             hasMinSamples: false,
@@ -153,10 +157,8 @@ export async function evaluateAllStrategiesWithUser(
             isWeakHistory: false,
             dataLastRefreshedAt: new Date(),
             dataAgeHours: 0,
-            lastSignalNote: 'User strategy - historical data coming soon',
+            lastSignalNote: 'Backtesting error',
           };
-        } catch (err) {
-          console.error('Failed to get historical context for user strategy:', err);
         }
         
         userEvaluations.push(evaluation);
@@ -229,8 +231,14 @@ export async function evaluateUserStrategyById(
     const evaluation = evaluateUserStrategy(strategy.dsl, input, strategy.id);
     
     if (evaluation) {
-      // Add historical context
+      // Add historical context via backtesting
       try {
+        const { backtestUserStrategy } = await import('./user-strategy-backtester');
+        evaluation.historicalRecent = backtestUserStrategy(strategy.dsl, input, 252);
+        console.log(`[User Strategy] Backtested ${strategy.name}: ${evaluation.historicalRecent.samples} signals found`);
+      } catch (err) {
+        console.error('Failed to backtest user strategy:', err);
+        // Fallback to empty historical context
         evaluation.historicalRecent = {
           samples: 0,
           hasMinSamples: false,
@@ -248,10 +256,8 @@ export async function evaluateUserStrategyById(
           isWeakHistory: false,
           dataLastRefreshedAt: new Date(),
           dataAgeHours: 0,
-          lastSignalNote: 'User strategy - historical data coming soon',
+          lastSignalNote: 'Backtesting error',
         };
-      } catch (err) {
-        console.error('Failed to get historical context:', err);
       }
       
       // Track usage
