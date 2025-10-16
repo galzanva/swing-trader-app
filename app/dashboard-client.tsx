@@ -5,13 +5,14 @@ import { Session } from "next-auth";
 import { useState } from "react";
 import AnalyzeClient from "./analyze-client";
 import StrategyAnalyzeClient from "./strategy-analyze-client";
+import StrategyBuilderClient from "./strategy-builder-client";
 
 interface DashboardClientProps {
   session: Session;
 }
 
 export default function DashboardClient({ session }: DashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<"scanner" | "analysis" | "strategy">("analysis");
+  const [activeTab, setActiveTab] = useState<"scanner" | "analysis" | "strategy" | "builder">("analysis");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -104,6 +105,16 @@ export default function DashboardClient({ session }: DashboardClientProps) {
             >
               🎯 Strategy Analysis v1.1
             </button>
+            <button
+              onClick={() => setActiveTab("builder")}
+              className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                activeTab === "builder"
+                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30"
+                  : "text-blue-200 hover:text-white"
+              }`}
+            >
+              🛠️ Strategy Builder
+            </button>
           </div>
         </div>
 
@@ -185,6 +196,8 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
         {/* Strategy Analysis Mode */}
         {activeTab === "strategy" && <StrategyAnalyzeClient />}
+
+        {activeTab === "builder" && <StrategyBuilderClient userId={session.user?.id || ''} />}
 
         {/* Principles Section */}
         <div className="mt-8 bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">

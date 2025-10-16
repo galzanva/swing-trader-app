@@ -10,6 +10,7 @@ import { PolygonClient } from '@/lib/data-vendors/polygon';
 import { buildStrategyInput, detectSPYRegimeFromData } from '@/lib/strategies/input-builder';
 import { evaluateAllStrategies, getStrategySummary } from '@/lib/strategies/orchestrator';
 import { generateFullMentorOutput, generateMarkdownReport } from '@/lib/strategies/mentor';
+import { evaluateAllStrategiesWithUser } from '@/lib/strategy-builder/orchestrator-integration';
 
 export async function POST(request: Request) {
   try {
@@ -88,8 +89,9 @@ export async function POST(request: Request) {
     const strategyInput = buildStrategyInput(marketData, spyRegime, null);
     console.log(`[Strategy Analyze] Built strategy input`);
 
-    // 4. Evaluate all strategies
-    const evaluation = await evaluateAllStrategies(strategyInput);
+    // 4. Evaluate all strategies (user strategies first, then core strategies)
+    const userId = session.user?.id;
+    const evaluation = await evaluateAllStrategiesWithUser(strategyInput, userId);
     
     if (!evaluation) {
       return NextResponse.json({

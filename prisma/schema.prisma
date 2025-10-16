@@ -27,6 +27,7 @@ model User {
   sessions      Session[]
   scanPresets   ScanPreset[]
   scanRuns      ScanRun[]
+  strategies    UserStrategy[]
   
   @@index([email])
 }
@@ -193,4 +194,91 @@ model StrategyStats {
   @@index([symbol])
   @@index([strategy])
   @@index([hasMinSamples])
+}
+
+// User-defined custom strategies
+model UserStrategy {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  
+  // Strategy DSL JSON (validated with Zod)
+  dsl         Json
+  
+  // Quick-access fields (denormalized for queries)
+  direction   String   @db.VarChar(10)  // long, short
+  timeframe   String   @db.VarChar(10)  // 1min, 5min, 15min, 1hour, 1day
+  
+  // Status and usage
+  isActive    Boolean  @default(true)
+  priority    Int      @default(0)      // Higher = evaluated first
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsedAt  DateTime?
+  useCount    Int      @default(0)
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  backtests   UserStrategyBacktest[]
+  
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([priority])
+  @@unique([userId, name])
+}
+
+// Backtest results for user-defined strategies
+model UserStrategyBacktest {
+  id             String   @id @default(cuid())
+  strategyId     String
+  symbol         String
+  timeframe      String   @default("1D")
+  signalDate     DateTime
+  
+  // Entry details
+  entry          Float
+  stop           Float
+  direction      String   // long, short
+  
+  // Targets
+  target1        Float
+  target2        Float?
+  target3        Float?
+  
+  // Quality metrics
+  quality        Float
+  viability      Float
+  rrFirst        Float
+  
+  // Multi-horizon outcomes
+  outcome5d      String?
+  outcome10d     String?
+  outcome20d     String?
+  
+  // First-touch outcome
+  firstTouch     String?  // T1, T2, T3, stop
+  daysHeld       Int?
+  
+  // Multi-horizon P&L
+  pnl5d          Float?
+  pnl10d         Float?
+  pnl20d         Float?
+  
+  // Market context
+  spyRegime      String
+  volZ           Float
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  strategy       UserStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  
+  @@index([strategyId])
+  @@index([symbol, timeframe])
+  @@index([signalDate])
+  @@index([strategyId, symbol, signalDate])
 }
