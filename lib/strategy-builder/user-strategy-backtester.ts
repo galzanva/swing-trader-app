@@ -281,6 +281,7 @@ function getOutcomeAtHorizon(
 
 /**
  * Calculate P&L at a specific horizon
+ * Returns percentage as a number (e.g., 5.0 for 5%, -3.2 for -3.2%)
  */
 function calculatePnL(
   futureBars: OHLCV[],
@@ -291,31 +292,39 @@ function calculatePnL(
   horizon: number
 ): number {
   const outcome = getOutcomeAtHorizon(futureBars, entry, stop, targets, direction, horizon);
-  const risk = Math.abs(entry - stop);
   
   if (outcome === 'stopped_out') {
-    return -100 * (risk / entry); // Loss as percentage
+    // Loss: always negative for both long and short
+    if (direction === 'long') {
+      return 100 * ((stop - entry) / entry); // Negative because stop < entry
+    } else {
+      return 100 * ((entry - stop) / entry); // Negative because stop > entry
+    }
   }
   
-  if (outcome === 'hit_t1') {
-    const reward = Math.abs(targets[0] - entry);
-    return direction === 'long' 
-      ? 100 * (reward / entry)
-      : -100 * (reward / entry);
+  if (outcome === 'hit_t1' && targets[0]) {
+    // Profit: always positive for both long and short
+    if (direction === 'long') {
+      return 100 * ((targets[0] - entry) / entry); // Positive because T1 > entry
+    } else {
+      return 100 * ((entry - targets[0]) / entry); // Positive because T1 < entry
+    }
   }
   
-  if (outcome === 'hit_t2') {
-    const reward = Math.abs(targets[1] - entry);
-    return direction === 'long'
-      ? 100 * (reward / entry)
-      : -100 * (reward / entry);
+  if (outcome === 'hit_t2' && targets[1]) {
+    if (direction === 'long') {
+      return 100 * ((targets[1] - entry) / entry);
+    } else {
+      return 100 * ((entry - targets[1]) / entry);
+    }
   }
   
   if (outcome === 'hit_t3' && targets[2]) {
-    const reward = Math.abs(targets[2] - entry);
-    return direction === 'long'
-      ? 100 * (reward / entry)
-      : -100 * (reward / entry);
+    if (direction === 'long') {
+      return 100 * ((targets[2] - entry) / entry);
+    } else {
+      return 100 * ((entry - targets[2]) / entry);
+    }
   }
   
   return 0; // Still open
@@ -356,19 +365,32 @@ function aggregateUserResults(
   
   const hasMinSamples = totalSignals >= 10;
   
-  // Calculate multi-horizon win rates
-  const wins5d = results.filter(r => r.pnl5d > 0).length;
-  const wins10d = results.filter(r => r.pnl10d > 0).length;
-  const wins20d = results.filter(r => r.pnl20d > 0).length;
+  // Calculate multi-horizon win rates (as decimals 0-1, NOT percentages)
+  // This matches the core backtester approach to avoid double-multiplication
+  const winRate5d = hasMinSamples 
+    ? (results.filter(r => r.outcome5d.startsWith('hit_')).length / totalSignals)
+    : 0;
+  const winRate10d = hasMinSamples 
+    ? (results.filter(r => r.outcome10d.startsWith('hit_')).length / totalSignals)
+    : 0;
+  const winRate20d = hasMinSamples 
+    ? (results.filter(r => r.outcome20d.startsWith('hit_')).length / totalSignals)
+    : 0;
   
-  const winRate5d = Math.min(100, (wins5d / totalSignals) * 100);
-  const winRate10d = Math.min(100, (wins10d / totalSignals) * 100);
-  const winRate20d = Math.min(100, (wins20d / totalSignals) * 100);
+  // Calculate average P&L (exclude 'still_open' trades which have 0% P&L)
+  const closed5 = results.filter(r => r.outcome5d !== 'still_open');
+  const closed10 = results.filter(r => r.outcome10d !== 'still_open');
+  const closed20 = results.filter(r => r.outcome20d !== 'still_open');
   
-  // Calculate average P&L
-  const avgPnL5d = results.reduce((sum, r) => sum + r.pnl5d, 0) / totalSignals;
-  const avgPnL10d = results.reduce((sum, r) => sum + r.pnl10d, 0) / totalSignals;
-  const avgPnL20d = results.reduce((sum, r) => sum + r.pnl20d, 0) / totalSignals;
+  const avgPnL5d = closed5.length > 0 
+    ? closed5.reduce((sum, r) => sum + r.pnl5d, 0) / closed5.length 
+    : 0;
+  const avgPnL10d = closed10.length > 0 
+    ? closed10.reduce((sum, r) => sum + r.pnl10d, 0) / closed10.length 
+    : 0;
+  const avgPnL20d = closed20.length > 0 
+    ? closed20.reduce((sum, r) => sum + r.pnl20d, 0) / closed20.length 
+    : 0;
   
   // First-touch distribution
   const firstTouchT1 = results.filter(r => r.firstTouch === 'T1').length;
@@ -379,35 +401,38 @@ function aggregateUserResults(
   // Average days held
   const avgDaysHeld = results.reduce((sum, r) => sum + r.daysHeld, 0) / totalSignals;
   
-  // Determine if weak history
-  const isWeakHistory = winRate10d < 40 || avgPnL10d < 0;
+  // Determine if weak history (win rate is decimal 0-1, so compare to 0.4 not 40)
+  const isWeakHistory = winRate10d < 0.4 || avgPnL10d < 0;
   
-  // Get most recent signal
+  // Get most recent signal (sort chronologically, pick last)
   const sortedResults = [...results].sort((a, b) => 
-    new Date(b.signalDate).getTime() - new Date(a.signalDate).getTime()
+    new Date(a.signalDate).getTime() - new Date(b.signalDate).getTime()
   );
-  const mostRecent = sortedResults[0];
+  const mostRecent = sortedResults[sortedResults.length - 1];
   
   return {
     samples: totalSignals,
     hasMinSamples,
-    winRate5d: Number(winRate5d.toFixed(1)),
-    winRate10d: Number(winRate10d.toFixed(1)),
-    winRate20d: Number(winRate20d.toFixed(1)),
-    avgPnL5d: Number(avgPnL5d.toFixed(1)),
-    avgPnL10d: Number(avgPnL10d.toFixed(1)),
-    avgPnL20d: Number(avgPnL20d.toFixed(1)),
-    firstTouchT1,
-    firstTouchT2,
-    firstTouchT3,
-    firstTouchStop,
+    // Win rates as decimals [0, 1] clamped to valid range
+    winRate5d: Math.max(0, Math.min(1, Number(winRate5d.toFixed(3)))),
+    winRate10d: Math.max(0, Math.min(1, Number(winRate10d.toFixed(3)))),
+    winRate20d: Math.max(0, Math.min(1, Number(winRate20d.toFixed(3)))),
+    // P&L: convert from percentage to decimal (5.0 → 0.05)
+    avgPnL5d: Number((avgPnL5d / 100).toFixed(3)),
+    avgPnL10d: Number((avgPnL10d / 100).toFixed(3)),
+    avgPnL20d: Number((avgPnL20d / 100).toFixed(3)),
+    firstTouchT1: Math.round(firstTouchT1),
+    firstTouchT2: Math.round(firstTouchT2),
+    firstTouchT3: Math.round(firstTouchT3),
+    firstTouchStop: Math.round(firstTouchStop),
     avgDaysHeld: Number(avgDaysHeld.toFixed(1)),
-    isWeakHistory,
+    // Strong/Weak logic: mark strong if avgPnL10d > 5% even if win rate low
+    isWeakHistory: avgPnL10d > 5 ? false : isWeakHistory,
     lastSignal: mostRecent ? {
       date: mostRecent.signalDate,
       firstTouch: mostRecent.firstTouch,
       daysHeld: mostRecent.daysHeld,
-      pnl10d: mostRecent.pnl10d,
+      pnl10d: Number((mostRecent.pnl10d / 100).toFixed(3)), // Convert to decimal
     } : undefined,
     dataLastRefreshedAt: freshnessInfo.dataLastRefreshedAt,
     dataAgeHours: freshnessInfo.dataAgeHours,

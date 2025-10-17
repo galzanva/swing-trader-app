@@ -108,6 +108,7 @@ export default function ScannerClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           strategyId: selectedStrategyId,
+          stream: true, // Enable streaming
           config: {
             minPrice: 5,
             maxPrice: 1000,
@@ -129,22 +130,79 @@ export default function ScannerClient() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Scan failed');
+        throw new Error('Scan failed');
       }
 
-      const data = await response.json();
+      // Read the stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      let buffer = '';
       
-      setResults(data.results || []);
-      setScanProgress(`Scan complete! Found ${data.results?.length || 0} matches.`);
-      setScanPercent(100);
-      
-      // Set cache stats if available
-      if (data.metadata) {
-        setCacheStats({
-          hits: data.metadata.cacheHits || 0,
-          calls: data.metadata.apiCalls || 0,
-        });
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process all complete messages in the buffer
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete message in buffer
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonStr = line.substring(6); // Remove 'data: ' prefix
+              const message = JSON.parse(jsonStr);
+              
+              if (message.type === 'progress') {
+                const progress = message.data;
+                
+                // Update progress
+                setScanPercent(progress.percent);
+                
+                // Build detailed progress message
+                let progressMsg = progress.message;
+                if (progress.phase === 'detailed' && progress.total > 0) {
+                  progressMsg = `Analyzing stocks: ${progress.processed}/${progress.total} (${progress.qualified} qualified)`;
+                }
+                setScanProgress(progressMsg);
+                
+                // Update cache stats
+                if (progress.cacheHits !== undefined && progress.apiCalls !== undefined) {
+                  setCacheStats({
+                    hits: progress.cacheHits,
+                    calls: progress.apiCalls,
+                  });
+                }
+              } else if (message.type === 'complete') {
+                const data = message.data;
+                setResults(data.results || []);
+                setScanProgress(`Scan complete! Found ${data.results?.length || 0} matches.`);
+                setScanPercent(100);
+                
+                if (data.metadata) {
+                  setCacheStats({
+                    hits: data.metadata.cacheHits || 0,
+                    calls: data.metadata.apiCalls || 0,
+                  });
+                }
+              } else if (message.type === 'error') {
+                throw new Error(message.data.details || message.data.error);
+              }
+            } catch (parseErr) {
+              console.error('Error parsing SSE message:', parseErr);
+            }
+          }
+        }
       }
     } catch (err: any) {
       console.error('Scan error:', err);
@@ -332,20 +390,32 @@ export default function ScannerClient() {
         {/* Progress Bar */}
         {isScanning && (
           <div className="mt-4">
-            <div className="w-full bg-slate-700/50 rounded-full h-2 mb-2">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-blue-200 text-sm font-medium">{scanProgress}</span>
+              <span className="text-blue-300 text-sm font-bold">{scanPercent}%</span>
+            </div>
+            <div className="w-full bg-slate-700/50 rounded-full h-3 mb-2 overflow-hidden">
               <div 
-                className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all duration-300 flex items-center justify-end pr-2"
                 style={{ width: `${scanPercent}%` }}
-              />
+              >
+                {scanPercent > 10 && (
+                  <span className="text-white text-xs font-bold drop-shadow-lg">
+                    {scanPercent}%
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-blue-200">{scanProgress}</span>
-              {cacheStats && (
+            {cacheStats && (
+              <div className="flex justify-between items-center text-xs">
                 <span className="text-blue-300">
-                  Cache: {cacheStats.hits} hits • API: {cacheStats.calls} calls
+                  💾 Cache: {cacheStats.hits} hits
                 </span>
-              )}
-            </div>
+                <span className="text-blue-300">
+                  🌐 API Calls: {cacheStats.calls}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

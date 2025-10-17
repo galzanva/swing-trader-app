@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { MarketScanner, type ScannerConfig } from '@/lib/scanner/market-scanner';
+import { MarketScanner, type ScannerConfig, type ScanProgress } from '@/lib/scanner/market-scanner';
 import { getUserStrategies } from '@/lib/strategy-builder/repository';
 import type { StrategyDsl } from '@/lib/strategy-builder/dsl-schema';
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { strategyId, config, maxResults = 20 } = body;
+    const { strategyId, config, maxResults = 20, stream = false } = body;
 
     if (!strategyId) {
       return NextResponse.json(
@@ -61,10 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[API] Starting market scan for strategy: ${strategy.name}`);
-    console.log(`[API] User: ${session.user.email}, Max results: ${maxResults}`);
-
-    // Create scanner
-    const scanner = new MarketScanner(apiKey);
+    console.log(`[API] User: ${session.user.email}, Max results: ${maxResults}, Stream: ${stream}`);
 
     // Configure scanner
     const scanConfig: ScannerConfig = {
@@ -81,7 +78,82 @@ export async function POST(request: NextRequest) {
       earlyExitEnabled: true,
     };
 
-    // Run scan
+    // If streaming is requested, use Server-Sent Events
+    if (stream) {
+      const encoder = new TextEncoder();
+      const customReadable = new ReadableStream({
+        async start(controller) {
+          try {
+            // Create scanner
+            const scanner = new MarketScanner(apiKey);
+            
+            // Set up progress callback
+            scanner.onProgress((progress: ScanProgress) => {
+              const data = `data: ${JSON.stringify({ type: 'progress', data: progress })}\n\n`;
+              controller.enqueue(encoder.encode(data));
+            });
+
+            // Run scan
+            const results = await scanner.scanMarket(
+              strategy.dsl as StrategyDsl,
+              scanConfig,
+              maxResults
+            );
+
+            console.log(`[API] Scan complete. Found ${results.length} results.`);
+
+            // Send final results
+            const finalData = {
+              type: 'complete',
+              data: {
+                success: true,
+                strategy: {
+                  id: strategy.id,
+                  name: strategy.name,
+                  direction: strategy.direction,
+                  timeframe: strategy.timeframe,
+                },
+                config: scanConfig,
+                results,
+                metadata: {
+                  totalScanned: results.length,
+                  qualified: results.filter(r => r.matchDetails.eligible).length,
+                  avgMatchScore: results.length > 0
+                    ? Math.round(results.reduce((sum, r) => sum + r.matchScore, 0) / results.length)
+                    : 0,
+                  scannedAt: new Date().toISOString(),
+                },
+              }
+            };
+            
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`));
+            controller.close();
+          } catch (error: any) {
+            console.error('[API] Market scan error:', error);
+            const errorData = {
+              type: 'error',
+              data: {
+                error: 'Market scan failed',
+                details: error.message,
+              }
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(customReadable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Non-streaming mode (backward compatibility)
+    const scanner = new MarketScanner(apiKey);
     const results = await scanner.scanMarket(
       strategy.dsl as StrategyDsl,
       scanConfig,
