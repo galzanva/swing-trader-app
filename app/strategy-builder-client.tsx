@@ -8,6 +8,8 @@
 
 import { useState } from 'react';
 import type { StrategyDsl } from '@/lib/strategy-builder/dsl-schema';
+import { getEligibilityDescriptions } from '@/lib/strategy-builder/dsl-schema';
+import StrategyConditionEditor from './components/strategy-condition-editor';
 
 interface StrategyBuilderClientProps {
   userId: string;
@@ -16,6 +18,7 @@ interface StrategyBuilderClientProps {
 interface ParsedStrategy {
   dsl: StrategyDsl;
   followUp?: string;
+  warnings?: string[];
 }
 
 export default function StrategyBuilderClient({ userId }: StrategyBuilderClientProps) {
@@ -48,9 +51,10 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
         setParsed({
           dsl: data.dsl,
           followUp: data.followUp,
+          warnings: data.warnings,
         });
       } else {
-        setError(data.errors?.join(', ') || 'Failed to parse strategy');
+        setError(data.errors?.join('\n') || 'Failed to parse strategy');
       }
     } catch (err) {
       setError('Network error. Please try again.');
@@ -236,37 +240,47 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
               </div>
             </div>
 
-            {/* Eligibility Criteria */}
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold text-white mb-3">Eligibility Criteria</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {parsed.dsl.eligibility.emaRules && parsed.dsl.eligibility.emaRules.length > 0 && (
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="text-sm font-medium text-blue-200 mb-2">EMA Rules</div>
-                    {parsed.dsl.eligibility.emaRules.map((rule, i) => (
-                      <div key={i} className="text-white">
-                        EMA{rule.ema1} {rule.operator} EMA{rule.ema2}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {parsed.dsl.eligibility.rsiRange && (
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="text-sm font-medium text-blue-200 mb-2">RSI Range</div>
-                    <div className="text-white">
-                      {parsed.dsl.eligibility.rsiRange.min} - {parsed.dsl.eligibility.rsiRange.max}
-                    </div>
-                  </div>
-                )}
-                {parsed.dsl.eligibility.volumeRule && (
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="text-sm font-medium text-blue-200 mb-2">Volume</div>
-                    <div className="text-white">
-                      {parsed.dsl.eligibility.volumeRule.type} {parsed.dsl.eligibility.volumeRule.operator} {parsed.dsl.eligibility.volumeRule.threshold}
-                    </div>
-                  </div>
-                )}
+            {/* Warnings */}
+            {parsed.warnings && parsed.warnings.length > 0 && (
+              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <h4 className="text-yellow-300 font-semibold mb-2">⚠️ Warnings</h4>
+                <ul className="list-disc list-inside text-yellow-200 text-sm space-y-1">
+                  {parsed.warnings.map((warning, i) => (
+                    <li key={i}>{warning}</li>
+                  ))}
+                </ul>
               </div>
+            )}
+
+            {/* Eligibility Summary */}
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-white mb-3">Eligibility Criteria Summary</h4>
+              {getEligibilityDescriptions(parsed.dsl).length > 0 ? (
+                <div className="space-y-2">
+                  {getEligibilityDescriptions(parsed.dsl).map((desc, i) => (
+                    <div key={i} className="flex items-start gap-2 bg-white/5 rounded-lg p-3 border border-white/10">
+                      <span className="text-green-400 mt-0.5">✓</span>
+                      <span className="text-white text-sm">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-200 text-sm">
+                  No eligibility criteria defined. Strategy will match all stocks.
+                </div>
+              )}
+            </div>
+
+            {/* Advanced Condition Editor */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-lg font-semibold text-white">Edit Conditions</h4>
+                <span className="text-xs text-blue-300">Click sections to expand/collapse</span>
+              </div>
+              <StrategyConditionEditor 
+                dsl={parsed.dsl} 
+                onChange={updateDsl} 
+              />
             </div>
 
             {/* Entry & Exit */}

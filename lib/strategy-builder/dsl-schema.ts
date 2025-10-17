@@ -141,17 +141,49 @@ export const StrategyDslSchema = z.object({
   direction: DirectionSchema,
   timeframe: TimeframeSchema.default('1day'),
   
-  // Eligibility Criteria
+  // Eligibility Criteria - Enhanced to support multiple complex conditions
   eligibility: z.object({
+    // Multiple EMA rules can be combined (e.g., EMA20 > EMA50 AND EMA50 > EMA200)
     emaRules: z.array(EmaRuleSchema).optional(),
+    
+    // Single RSI range constraint
     rsiRange: RsiRangeSchema.optional(),
+    
+    // Single ATR range constraint
     atrRange: AtrRangeSchema.optional(),
+    
+    // Multiple volume rules for complex volume analysis
+    volumeRules: z.array(VolumeRuleSchema).optional(),
+    
+    // Legacy single volume rule (for backward compatibility)
     volumeRule: VolumeRuleSchema.optional(),
+    
+    // Multiple price distance rules (e.g., within 1.5 ATR of EMA50 AND within 2% of support)
+    priceDistances: z.array(PriceDistanceSchema).optional(),
+    
+    // Legacy single price distance (for backward compatibility)
     priceDistance: PriceDistanceSchema.optional(),
+    
+    // Multiple candle patterns can be required (e.g., bullish engulfing AND volume spike)
+    candlePatterns: z.array(CandlePatternSchema).optional(),
+    
+    // Legacy single candle pattern (for backward compatibility)
     candlePattern: CandlePatternSchema.optional(),
+    
+    // Multiple chart patterns
+    chartPatterns: z.array(ChartPatternSchema).optional(),
+    
+    // Legacy single chart pattern (for backward compatibility)
     chartPattern: ChartPatternSchema.optional(),
+    
+    // Multiple multi-bar conditions (e.g., 2 bars above EMA50 AND 3 bars of increasing volume)
+    multiBarConditions: z.array(MultiBarConditionSchema).optional(),
+    
+    // Legacy single multi-bar condition (for backward compatibility)
     multiBarCondition: MultiBarConditionSchema.optional(),
-    custom: z.array(z.string()).optional(), // Custom boolean expressions
+    
+    // Custom boolean expressions for advanced users
+    custom: z.array(z.string()).optional(),
   }),
   
   // Entry & Exit
@@ -222,20 +254,180 @@ export function createDefaultStrategyDsl(partial: Partial<StrategyDsl>): Strateg
   });
 }
 
-// Validation helper
+// Validation helper with detailed error reporting
 export function validateStrategyDsl(data: unknown): { 
   success: boolean; 
   data?: StrategyDsl; 
   errors?: string[];
+  warnings?: string[];
 } {
   const result = StrategyDslSchema.safeParse(data);
   
   if (result.success) {
-    return { success: true, data: result.data };
+    const warnings: string[] = [];
+    const dsl = result.data;
+    
+    // Check for core requirements
+    if (!dsl.direction) {
+      warnings.push('Direction (long/short) is required');
+    }
+    if (!dsl.trigger) {
+      warnings.push('Entry trigger condition is required');
+    }
+    if (!dsl.stop) {
+      warnings.push('Stop loss definition is required');
+    }
+    if (!dsl.targets || dsl.targets.length === 0) {
+      warnings.push('At least one profit target is required');
+    }
+    
+    // Check for conflicting rules
+    const eligibility = dsl.eligibility;
+    if (eligibility) {
+      // Check RSI range validity
+      if (eligibility.rsiRange && eligibility.rsiRange.min >= eligibility.rsiRange.max) {
+        warnings.push('RSI min must be less than max');
+      }
+      
+      // Check ATR range validity
+      if (eligibility.atrRange && eligibility.atrRange.minPct >= eligibility.atrRange.maxPct) {
+        warnings.push('ATR min must be less than max');
+      }
+      
+      // Warn if no eligibility criteria defined
+      const hasAnyCriteria = 
+        (eligibility.emaRules && eligibility.emaRules.length > 0) ||
+        eligibility.rsiRange ||
+        eligibility.atrRange ||
+        eligibility.volumeRule ||
+        (eligibility.volumeRules && eligibility.volumeRules.length > 0) ||
+        eligibility.priceDistance ||
+        (eligibility.priceDistances && eligibility.priceDistances.length > 0) ||
+        eligibility.candlePattern ||
+        (eligibility.candlePatterns && eligibility.candlePatterns.length > 0) ||
+        eligibility.chartPattern ||
+        (eligibility.chartPatterns && eligibility.chartPatterns.length > 0) ||
+        eligibility.multiBarCondition ||
+        (eligibility.multiBarConditions && eligibility.multiBarConditions.length > 0);
+        
+      if (!hasAnyCriteria) {
+        warnings.push('No eligibility criteria defined - strategy will match all stocks');
+      }
+    }
+    
+    return { 
+      success: true, 
+      data: result.data,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
   } else {
-    const errors = result.error.errors.map(err => 
-      `${err.path.join('.')}: ${err.message}`
-    );
+    const errors = result.error.errors.map(err => {
+      const path = err.path.join('.') || 'root';
+      return `${path}: ${err.message}`;
+    });
     return { success: false, errors };
   }
+}
+
+// Normalize legacy single conditions to arrays for consistent processing
+export function normalizeStrategyDsl(dsl: StrategyDsl): StrategyDsl {
+  const normalized = { ...dsl };
+  const eligibility = { ...normalized.eligibility };
+  
+  // Normalize volume rules
+  if (eligibility.volumeRule && !eligibility.volumeRules) {
+    eligibility.volumeRules = [eligibility.volumeRule];
+  }
+  
+  // Normalize price distances
+  if (eligibility.priceDistance && !eligibility.priceDistances) {
+    eligibility.priceDistances = [eligibility.priceDistance];
+  }
+  
+  // Normalize candle patterns
+  if (eligibility.candlePattern && !eligibility.candlePatterns) {
+    eligibility.candlePatterns = [eligibility.candlePattern];
+  }
+  
+  // Normalize chart patterns
+  if (eligibility.chartPattern && !eligibility.chartPatterns) {
+    eligibility.chartPatterns = [eligibility.chartPattern];
+  }
+  
+  // Normalize multi-bar conditions
+  if (eligibility.multiBarCondition && !eligibility.multiBarConditions) {
+    eligibility.multiBarConditions = [eligibility.multiBarCondition];
+  }
+  
+  normalized.eligibility = eligibility;
+  return normalized;
+}
+
+// Get all eligibility conditions as readable strings
+export function getEligibilityDescriptions(dsl: StrategyDsl): string[] {
+  const descriptions: string[] = [];
+  const eligibility = dsl.eligibility;
+  
+  if (!eligibility) return descriptions;
+  
+  // EMA rules
+  if (eligibility.emaRules) {
+    eligibility.emaRules.forEach(rule => {
+      descriptions.push(`EMA${rule.ema1} ${rule.operator} EMA${rule.ema2}${rule.description ? ` (${rule.description})` : ''}`);
+    });
+  }
+  
+  // RSI range
+  if (eligibility.rsiRange) {
+    descriptions.push(`RSI between ${eligibility.rsiRange.min} and ${eligibility.rsiRange.max}`);
+  }
+  
+  // ATR range
+  if (eligibility.atrRange) {
+    descriptions.push(`ATR between ${eligibility.atrRange.minPct}% and ${eligibility.atrRange.maxPct}%`);
+  }
+  
+  // Volume rules (both legacy and array)
+  const volumeRules = eligibility.volumeRules || (eligibility.volumeRule ? [eligibility.volumeRule] : []);
+  volumeRules.forEach(rule => {
+    descriptions.push(`Volume (${rule.type}) ${rule.operator} ${rule.threshold}${rule.description ? ` - ${rule.description}` : ''}`);
+  });
+  
+  // Price distances (both legacy and array)
+  const priceDistances = eligibility.priceDistances || (eligibility.priceDistance ? [eligibility.priceDistance] : []);
+  priceDistances.forEach(pd => {
+    descriptions.push(`Price within ${pd.maxDistance}${pd.unit === 'atr' ? ' ATR' : '%'} of ${pd.fromLevel}${pd.description ? ` - ${pd.description}` : ''}`);
+  });
+  
+  // Candle patterns (both legacy and array)
+  const candlePatterns = eligibility.candlePatterns || (eligibility.candlePattern ? [eligibility.candlePattern] : []);
+  candlePatterns.forEach(pattern => {
+    descriptions.push(`Candle pattern: ${pattern.name.replace(/_/g, ' ')}${pattern.description ? ` - ${pattern.description}` : ''}`);
+  });
+  
+  // Chart patterns (both legacy and array)
+  const chartPatterns = eligibility.chartPatterns || (eligibility.chartPattern ? [eligibility.chartPattern] : []);
+  chartPatterns.forEach(pattern => {
+    descriptions.push(`Chart pattern: ${pattern.direction} ${pattern.type}${pattern.description ? ` - ${pattern.description}` : ''}`);
+  });
+  
+  // Multi-bar conditions (both legacy and array)
+  const multiBarConditions = eligibility.multiBarConditions || (eligibility.multiBarCondition ? [eligibility.multiBarCondition] : []);
+  multiBarConditions.forEach(condition => {
+    let desc = `${condition.count} bar${condition.count > 1 ? 's' : ''}`;
+    if (condition.direction !== 'any') desc += ` ${condition.direction === 'up' ? 'bullish' : 'bearish'}`;
+    if (condition.minLevel) desc += ` above ${condition.minLevel}`;
+    if (condition.maxLevel) desc += ` below ${condition.maxLevel}`;
+    if (condition.description) desc += ` - ${condition.description}`;
+    descriptions.push(desc);
+  });
+  
+  // Custom conditions
+  if (eligibility.custom && eligibility.custom.length > 0) {
+    eligibility.custom.forEach(cond => {
+      descriptions.push(`Custom: ${cond}`);
+    });
+  }
+  
+  return descriptions;
 }

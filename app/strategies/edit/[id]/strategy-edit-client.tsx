@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { StrategyDsl } from '@/lib/strategy-builder/dsl-schema';
+import { getEligibilityDescriptions } from '@/lib/strategy-builder/dsl-schema';
+import StrategyConditionEditor from '@/app/components/strategy-condition-editor';
 
 interface StrategyEditClientProps {
   strategyId: string;
@@ -319,74 +321,36 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
           </div>
         )}
 
-        {/* Multi-Bar Condition (if exists) */}
-        {dsl.eligibility?.multiBarCondition && (
-          <div className="mb-6">
-            <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              Multi-Bar Pullback Condition
-              <span className="text-xs font-normal text-blue-300">(e.g., "2+ red candles above EMA50")</span>
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-blue-200 text-sm mb-1">Bar Count</label>
-                <input
-                  type="number"
-                  value={dsl.eligibility.multiBarCondition.count}
-                  onChange={(e) => updateEligibility({
-                    multiBarCondition: { ...dsl.eligibility!.multiBarCondition!, count: Number(e.target.value) }
-                  })}
-                  className="w-full bg-white/10 text-white rounded-lg px-3 py-2 text-sm border border-white/20 focus:border-purple-500 focus:outline-none"
-                  min="1"
-                  max="10"
-                />
-              </div>
-              <div>
-                <label className="block text-blue-200 text-sm mb-1">Direction</label>
-                <select
-                  value={dsl.eligibility.multiBarCondition.direction || 'any'}
-                  onChange={(e) => updateEligibility({
-                    multiBarCondition: { ...dsl.eligibility!.multiBarCondition!, direction: e.target.value as 'up' | 'down' | 'any' }
-                  })}
-                  className="w-full bg-white/10 text-white rounded-lg px-3 py-2 text-sm border border-white/20 focus:border-purple-500 focus:outline-none"
-                >
-                  <option value="any">Any</option>
-                  <option value="up">Up (Bullish)</option>
-                  <option value="down">Down (Bearish)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-blue-200 text-sm mb-1">Min Level (Above)</label>
-                <input
-                  type="text"
-                  value={dsl.eligibility.multiBarCondition.minLevel || ''}
-                  onChange={(e) => updateEligibility({
-                    multiBarCondition: { ...dsl.eligibility!.multiBarCondition!, minLevel: e.target.value }
-                  })}
-                  className="w-full bg-white/10 text-white rounded-lg px-3 py-2 text-sm border border-white/20 focus:border-purple-500 focus:outline-none font-mono"
-                  placeholder="e.g., ema50"
-                />
-              </div>
-              <div>
-                <label className="block text-blue-200 text-sm mb-1">Max Level (Below)</label>
-                <input
-                  type="text"
-                  value={dsl.eligibility.multiBarCondition.maxLevel || ''}
-                  onChange={(e) => updateEligibility({
-                    multiBarCondition: { ...dsl.eligibility!.multiBarCondition!, maxLevel: e.target.value }
-                  })}
-                  className="w-full bg-white/10 text-white rounded-lg px-3 py-2 text-sm border border-white/20 focus:border-purple-500 focus:outline-none font-mono"
-                  placeholder="e.g., ema20"
-                />
-              </div>
+        {/* Eligibility Criteria Summary */}
+        <div className="mb-6">
+          <h4 className="text-lg font-semibold text-white mb-3">Current Eligibility Criteria</h4>
+          {getEligibilityDescriptions(dsl).length > 0 ? (
+            <div className="space-y-2">
+              {getEligibilityDescriptions(dsl).map((desc, i) => (
+                <div key={i} className="flex items-start gap-2 bg-white/5 rounded-lg p-3 border border-white/10">
+                  <span className="text-green-400 mt-0.5">✓</span>
+                  <span className="text-white text-sm">{desc}</span>
+                </div>
+              ))}
             </div>
-            <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-              <p className="text-sm text-blue-200">
-                <strong>Example:</strong> Count=2, Direction=Down, MinLevel=ema50 → 
-                <span className="ml-1 text-white">"2 consecutive red candles staying above EMA50"</span>
-              </p>
+          ) : (
+            <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-200 text-sm">
+              No eligibility criteria defined. Add conditions below.
             </div>
+          )}
+        </div>
+
+        {/* Comprehensive Condition Editor */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-lg font-semibold text-white">Edit All Conditions</h4>
+            <span className="text-xs text-blue-300">Click sections to expand/edit</span>
           </div>
-        )}
+          <StrategyConditionEditor 
+            dsl={dsl} 
+            onChange={updateDsl} 
+          />
+        </div>
       </div>
 
       {/* Action Buttons */}

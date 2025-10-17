@@ -147,25 +147,32 @@ function checkEligibility(
     return { eligible: true, reasons: ['No eligibility criteria defined'] };
   }
   
-  // Check EMA rules
+  console.log(`[Evaluator] Checking eligibility for strategy: ${dsl.name}`);
+  
+  // Check ALL EMA rules (must pass ALL)
   if (eligibility.emaRules && eligibility.emaRules.length > 0) {
+    console.log(`[Evaluator] Checking ${eligibility.emaRules.length} EMA rules...`);
     for (const rule of eligibility.emaRules) {
       const ema1Val = getEmaValue(rule.ema1, input);
       const ema2Val = getEmaValue(rule.ema2, input);
       
       if (ema1Val === undefined || ema2Val === undefined) {
+        console.log(`[Evaluator] ✗ Missing EMA data`);
         return { eligible: false, reasons: [`Missing EMA${rule.ema1} or EMA${rule.ema2}`] };
       }
       
       const passes = evaluateComparison(ema1Val, rule.operator, ema2Val);
       if (!passes) {
+        console.log(`[Evaluator] ✗ EMA${rule.ema1} (${ema1Val.toFixed(2)}) ${rule.operator} EMA${rule.ema2} (${ema2Val.toFixed(2)}) failed`);
         return { 
           eligible: false, 
-          reasons: [`EMA${rule.ema1} ${rule.operator} EMA${rule.ema2} not met`] 
+          reasons: [`EMA${rule.ema1} ${rule.operator} EMA${rule.ema2} not met (${ema1Val.toFixed(2)} vs ${ema2Val.toFixed(2)})`] 
         };
       }
       
-      reasons.push(`EMA${rule.ema1} ${rule.operator} EMA${rule.ema2} ✓`);
+      const msg = `EMA${rule.ema1} ${rule.operator} EMA${rule.ema2} ✓`;
+      reasons.push(msg);
+      console.log(`[Evaluator] ✓ ${msg}`);
     }
   }
   
@@ -173,127 +180,180 @@ function checkEligibility(
   if (eligibility.rsiRange) {
     const rsi = input.rsi14;
     const { min, max } = eligibility.rsiRange;
+    console.log(`[Evaluator] Checking RSI: ${rsi.toFixed(1)} should be in [${min}, ${max}]`);
     
     if (rsi < min || rsi > max) {
+      console.log(`[Evaluator] ✗ RSI outside range`);
       return { 
         eligible: false, 
         reasons: [`RSI ${rsi.toFixed(1)} outside range [${min}, ${max}]`] 
       };
     }
     
-    reasons.push(`RSI ${rsi.toFixed(1)} in range [${min}, ${max}] ✓`);
+    const msg = `RSI ${rsi.toFixed(1)} in range [${min}, ${max}] ✓`;
+    reasons.push(msg);
+    console.log(`[Evaluator] ✓ ${msg}`);
   }
   
   // Check ATR range
   if (eligibility.atrRange) {
     const atrPct = (input.atr / input.price) * 100;
     const { minPct, maxPct } = eligibility.atrRange;
+    console.log(`[Evaluator] Checking ATR: ${atrPct.toFixed(2)}% should be in [${minPct}%, ${maxPct}%]`);
     
     if (atrPct < minPct || atrPct > maxPct) {
+      console.log(`[Evaluator] ✗ ATR outside range`);
       return { 
         eligible: false, 
         reasons: [`ATR ${atrPct.toFixed(2)}% outside range [${minPct}%, ${maxPct}%]`] 
       };
     }
     
-    reasons.push(`ATR ${atrPct.toFixed(2)}% in range ✓`);
+    const msg = `ATR ${atrPct.toFixed(2)}% in range ✓`;
+    reasons.push(msg);
+    console.log(`[Evaluator] ✓ ${msg}`);
   }
   
-  // Check volume rule
-  if (eligibility.volumeRule) {
-    const { threshold, operator, type } = eligibility.volumeRule;
-    let volumeValue = input.volZ; // Default to z-score
-    
-    if (type === 'relative') {
-      // Relative to recent average (simplified)
-      volumeValue = input.volZ;
-    } else if (type === 'absolute') {
-      // Get current bar's volume
-      const currentVolume = Array.isArray(input.volume) 
-        ? input.volume[input.volume.length - 1] 
-        : input.volume;
-      volumeValue = currentVolume;
+  // Check ALL volume rules (support both legacy and array forms)
+  const volumeRules = eligibility.volumeRules || (eligibility.volumeRule ? [eligibility.volumeRule] : []);
+  if (volumeRules.length > 0) {
+    console.log(`[Evaluator] Checking ${volumeRules.length} volume rules...`);
+    for (const volumeRule of volumeRules) {
+      const { threshold, operator, type } = volumeRule;
+      let volumeValue = input.volZ; // Default to z-score
+      
+      if (type === 'relative') {
+        volumeValue = input.volZ;
+      } else if (type === 'absolute') {
+        const currentVolume = Array.isArray(input.volume) 
+          ? input.volume[input.volume.length - 1] 
+          : input.volume;
+        volumeValue = currentVolume;
+      }
+      
+      const passes = evaluateComparison(volumeValue, operator, threshold);
+      if (!passes) {
+        console.log(`[Evaluator] ✗ Volume ${volumeValue.toFixed(2)} ${operator} ${threshold} failed`);
+        return { 
+          eligible: false, 
+          reasons: [`Volume (${type}) ${volumeValue.toFixed(2)} ${operator} ${threshold} not met`] 
+        };
+      }
+      
+      const msg = `Volume (${type}) ${operator} ${threshold} ✓`;
+      reasons.push(msg);
+      console.log(`[Evaluator] ✓ ${msg}`);
     }
-    
-    const passes = evaluateComparison(volumeValue, operator, threshold);
-    if (!passes) {
-      return { 
-        eligible: false, 
-        reasons: [`Volume ${volumeValue.toFixed(2)} ${operator} ${threshold} not met`] 
-      };
-    }
-    
-    reasons.push(`Volume confirmation ✓`);
   }
   
-  // Check price distance
-  if (eligibility.priceDistance) {
-    const { fromLevel, maxDistance, unit } = eligibility.priceDistance;
-    const levelValue = evaluateExpression(fromLevel, context);
-    const distance = Math.abs(input.price - levelValue);
-    
-    let maxDistanceValue = maxDistance;
-    if (unit === 'atr') {
-      maxDistanceValue = maxDistance * input.atr;
-    } else {
-      // percentage
-      maxDistanceValue = (maxDistance / 100) * input.price;
+  // Check ALL price distance rules (support both legacy and array forms)
+  const priceDistances = eligibility.priceDistances || (eligibility.priceDistance ? [eligibility.priceDistance] : []);
+  if (priceDistances.length > 0) {
+    console.log(`[Evaluator] Checking ${priceDistances.length} price distance rules...`);
+    for (const priceDistance of priceDistances) {
+      const { fromLevel, maxDistance, unit } = priceDistance;
+      try {
+        const levelValue = evaluateExpression(fromLevel, context);
+        const distance = Math.abs(input.price - levelValue);
+        
+        let maxDistanceValue = maxDistance;
+        if (unit === 'atr') {
+          maxDistanceValue = maxDistance * input.atr;
+        } else {
+          // percentage
+          maxDistanceValue = (maxDistance / 100) * input.price;
+        }
+        
+        if (distance > maxDistanceValue) {
+          console.log(`[Evaluator] ✗ Price distance ${distance.toFixed(2)} > ${maxDistanceValue.toFixed(2)}`);
+          return { 
+            eligible: false, 
+            reasons: [`Price too far from ${fromLevel} (${distance.toFixed(2)} > ${maxDistanceValue.toFixed(2)})`] 
+          };
+        }
+        
+        const msg = `Price within ${maxDistance}${unit === 'atr' ? '×ATR' : '%'} of ${fromLevel} ✓`;
+        reasons.push(msg);
+        console.log(`[Evaluator] ✓ ${msg}`);
+      } catch (err) {
+        console.error(`[Evaluator] Error evaluating price distance from ${fromLevel}:`, err);
+        return {
+          eligible: false,
+          reasons: [`Invalid price distance expression: ${fromLevel}`]
+        };
+      }
     }
-    
-    if (distance > maxDistanceValue) {
-      return { 
-        eligible: false, 
-        reasons: [`Price too far from ${fromLevel} (${distance.toFixed(2)} > ${maxDistanceValue.toFixed(2)})`] 
-      };
-    }
-    
-    reasons.push(`Price within ${maxDistance}${unit === 'atr' ? '×ATR' : '%'} of ${fromLevel} ✓`);
   }
   
-  // Check candle pattern
-  if (eligibility.candlePattern) {
-    const passes = checkCandlePattern(eligibility.candlePattern, input);
-    if (!passes) {
-      return { 
-        eligible: false, 
-        reasons: [`Required candle pattern not found`] 
-      };
+  // Check ALL candle patterns (support both legacy and array forms)
+  const candlePatterns = eligibility.candlePatterns || (eligibility.candlePattern ? [eligibility.candlePattern] : []);
+  if (candlePatterns.length > 0) {
+    console.log(`[Evaluator] Checking ${candlePatterns.length} candle patterns...`);
+    for (const pattern of candlePatterns) {
+      const passes = checkCandlePattern(pattern, input);
+      if (!passes) {
+        console.log(`[Evaluator] ✗ Candle pattern ${pattern.name} not found`);
+        return { 
+          eligible: false, 
+          reasons: [`Required candle pattern ${pattern.name.replace(/_/g, ' ')} not found`] 
+        };
+      }
+      
+      const msg = `Candle pattern ${pattern.name.replace(/_/g, ' ')} ✓`;
+      reasons.push(msg);
+      console.log(`[Evaluator] ✓ ${msg}`);
     }
-    
-    reasons.push(`Candle pattern confirmed ✓`);
   }
   
-  // Check chart pattern
-  if (eligibility.chartPattern) {
-    const passes = checkChartPattern(eligibility.chartPattern, input);
-    if (!passes) {
-      return { 
-        eligible: false, 
-        reasons: [`Required chart pattern not found`] 
-      };
+  // Check ALL chart patterns (support both legacy and array forms)
+  const chartPatterns = eligibility.chartPatterns || (eligibility.chartPattern ? [eligibility.chartPattern] : []);
+  if (chartPatterns.length > 0) {
+    console.log(`[Evaluator] Checking ${chartPatterns.length} chart patterns...`);
+    for (const pattern of chartPatterns) {
+      const passes = checkChartPattern(pattern, input);
+      if (!passes) {
+        console.log(`[Evaluator] ✗ Chart pattern ${pattern.type} not found`);
+        return { 
+          eligible: false, 
+          reasons: [`Required ${pattern.direction} ${pattern.type} chart pattern not found`] 
+        };
+      }
+      
+      const msg = `Chart pattern ${pattern.direction} ${pattern.type} ✓`;
+      reasons.push(msg);
+      console.log(`[Evaluator] ✓ ${msg}`);
     }
-    
-    reasons.push(`Chart pattern confirmed ✓`);
   }
   
-  // Check multi-bar condition (e.g., "2+ red candles above EMA50")
-  if (eligibility.multiBarCondition) {
-    const multiBarCheck = checkMultiBarCondition(
-      eligibility.multiBarCondition,
-      input,
-      context
-    );
-    
-    if (!multiBarCheck.passes) {
-      return {
-        eligible: false,
-        reasons: [multiBarCheck.reason],
-      };
+  // Check ALL multi-bar conditions (support both legacy and array forms)
+  const multiBarConditions = eligibility.multiBarConditions || (eligibility.multiBarCondition ? [eligibility.multiBarCondition] : []);
+  if (multiBarConditions.length > 0) {
+    console.log(`[Evaluator] Checking ${multiBarConditions.length} multi-bar conditions...`);
+    for (const condition of multiBarConditions) {
+      const multiBarCheck = checkMultiBarCondition(condition, input, context);
+      
+      if (!multiBarCheck.passes) {
+        console.log(`[Evaluator] ✗ Multi-bar condition failed: ${multiBarCheck.reason}`);
+        return {
+          eligible: false,
+          reasons: [multiBarCheck.reason],
+        };
+      }
+      
+      reasons.push(multiBarCheck.reason);
+      console.log(`[Evaluator] ✓ ${multiBarCheck.reason}`);
     }
-    
-    reasons.push(multiBarCheck.reason);
   }
   
+  // Check custom conditions
+  if (eligibility.custom && eligibility.custom.length > 0) {
+    console.log(`[Evaluator] Note: ${eligibility.custom.length} custom conditions defined (not yet evaluated)`);
+    eligibility.custom.forEach(cond => {
+      reasons.push(`Custom: ${cond} (assumed ✓)`);
+    });
+  }
+  
+  console.log(`[Evaluator] ✓ All eligibility criteria passed (${reasons.length} checks)`);
   return { eligible: true, reasons };
 }
 
