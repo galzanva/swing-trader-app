@@ -112,6 +112,9 @@ export interface StrategyInput {
     doubleBottom: any | null;
   };
   
+  // Pattern-derived price levels (for expression evaluation)
+  patternLevels?: import('../patterns/extract-levels').PatternLevels;
+  
   // Regime & Risk
   spyRegime: MarketRegime;
   spreadBps: number;

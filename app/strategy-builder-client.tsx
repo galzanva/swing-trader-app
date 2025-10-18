@@ -10,6 +10,8 @@ import { useState } from 'react';
 import type { StrategyDsl } from '@/lib/strategy-builder/dsl-schema';
 import { getEligibilityDescriptions } from '@/lib/strategy-builder/dsl-schema';
 import StrategyConditionEditor from './components/strategy-condition-editor';
+import StrategyHelpModal from './components/strategy-help-modal';
+import HelpIcon from './components/help-icon';
 
 interface StrategyBuilderClientProps {
   userId: string;
@@ -27,6 +29,8 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
   const [parsed, setParsed] = useState<ParsedStrategy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpSection, setHelpSection] = useState<'trigger' | 'stop' | 'target' | 'price-distance' | 'expression' | 'patterns' | 'all'>('all');
 
   // Parse strategy from plain English
   const handleParse = async () => {
@@ -286,7 +290,13 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
             {/* Entry & Exit */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
-                <h4 className="text-lg font-semibold text-white mb-3">Entry</h4>
+                <div className="flex items-center gap-2 mb-3">
+                  <h4 className="text-lg font-semibold text-white">Entry</h4>
+                  <HelpIcon 
+                    onClick={() => { setHelpSection('trigger'); setHelpOpen(true); }} 
+                    tooltip="What can I use for trigger levels?"
+                  />
+                </div>
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <div className="text-sm font-medium text-blue-200 mb-1">Trigger</div>
                   <div className="text-white">{parsed.dsl.trigger.description}</div>
@@ -294,7 +304,13 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
                 </div>
               </div>
               <div>
-                <h4 className="text-lg font-semibold text-white mb-3">Stop Loss</h4>
+                <div className="flex items-center gap-2 mb-3">
+                  <h4 className="text-lg font-semibold text-white">Stop Loss</h4>
+                  <HelpIcon 
+                    onClick={() => { setHelpSection('stop'); setHelpOpen(true); }} 
+                    tooltip="What can I use for stop loss?"
+                  />
+                </div>
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <div className="text-sm font-medium text-blue-200 mb-1">{parsed.dsl.stop.type}</div>
                   <div className="text-white">{parsed.dsl.stop.value}</div>
@@ -304,7 +320,13 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
 
             {/* Targets */}
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-white mb-3">Targets</h4>
+              <div className="flex items-center gap-2 mb-3">
+                <h4 className="text-lg font-semibold text-white">Targets</h4>
+                <HelpIcon 
+                  onClick={() => { setHelpSection('target'); setHelpOpen(true); }} 
+                  tooltip="What can I use for profit targets?"
+                />
+              </div>
               <div className="space-y-2">
                 {parsed.dsl.targets.map((target, i) => (
                   <div key={i} className="bg-white/5 rounded-lg p-4 border border-white/10 flex justify-between items-center">
@@ -372,6 +394,13 @@ export default function StrategyBuilderClient({ userId }: StrategyBuilderClientP
           )}
         </div>
       )}
+
+      {/* Help Modal */}
+      <StrategyHelpModal 
+        isOpen={helpOpen} 
+        onClose={() => setHelpOpen(false)} 
+        section={helpSection}
+      />
     </div>
   );
 }

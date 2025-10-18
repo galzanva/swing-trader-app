@@ -1,5 +1,6 @@
 /**
  * Enhanced Scanner Analyzer with Caching & Additional Filters
+ * Now with Pattern Detection and Level Extraction
  */
 
 import { PolygonClient } from '../data-vendors/polygon';
@@ -10,6 +11,7 @@ import type { StrategyDsl } from '../strategy-builder/dsl-schema';
 import type { EnhancedScannerConfig, TrendDirection } from './scanner-config';
 import { scannerCache } from './scanner-cache';
 import type { ScanResult } from './market-scanner';
+import { extractPatternLevels, getAvailablePatternVariables } from '../patterns/extract-levels';
 
 export class ScannerAnalyzer {
   private polygonClient: PolygonClient;
@@ -91,6 +93,17 @@ export class ScannerAnalyzer {
 
       const currentPrice = bars[bars.length - 1]?.close || 0;
       const atrPct = (indicators.atr / currentPrice) * 100;
+      
+      // Extract pattern-derived price levels
+      console.log(`[Scanner] ${ticker}: Detecting patterns and extracting levels...`);
+      const patternLevels = extractPatternLevels(bars, indicators.atr);
+      const availablePatternVars = getAvailablePatternVariables(patternLevels);
+      
+      if (availablePatternVars.length > 0) {
+        console.log(`[Scanner] ${ticker}: Found pattern levels:`, availablePatternVars.join(', '));
+      } else {
+        console.log(`[Scanner] ${ticker}: No pattern levels detected`);
+      }
 
       // Apply ATR% filter
       if (config.minAtrPct !== undefined && atrPct < config.minAtrPct) {
@@ -117,7 +130,7 @@ export class ScannerAnalyzer {
         // For now, skip this check (would need Polygon premium subscription)
       }
 
-      // Build strategy input
+      // Build strategy input with pattern levels
       const strategyInput: StrategyInput = {
         symbol: ticker,
         timeframe: strategy.timeframe,
@@ -146,6 +159,8 @@ export class ScannerAnalyzer {
           doubleTop: null,
           doubleBottom: null,
         },
+        // Add pattern levels for expression evaluation
+        patternLevels,
       };
 
       // Evaluate strategy

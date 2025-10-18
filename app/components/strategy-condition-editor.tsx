@@ -14,6 +14,8 @@
 
 import { useState } from 'react';
 import type { StrategyDsl, EmaRule, VolumeRule, PriceDistance, CandlePattern, ChartPattern, MultiBarCondition } from '@/lib/strategy-builder/dsl-schema';
+import HelpIcon from './help-icon';
+import StrategyHelpModal from './strategy-help-modal';
 
 interface ConditionEditorProps {
   dsl: StrategyDsl;
@@ -22,6 +24,8 @@ interface ConditionEditorProps {
 
 export default function StrategyConditionEditor({ dsl, onChange }: ConditionEditorProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['ema']));
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpSection, setHelpSection] = useState<'trigger' | 'stop' | 'target' | 'price-distance' | 'expression' | 'patterns' | 'all'>('all');
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -298,6 +302,7 @@ export default function StrategyConditionEditor({ dsl, onChange }: ConditionEdit
         expanded={expandedSections.has('priceDistance')}
         onToggle={() => toggleSection('priceDistance')}
         onAdd={addPriceDistance}
+        helpAction={() => { setHelpSection('price-distance'); setHelpOpen(true); }}
       >
         {priceDistances.map((pd, idx) => (
           <div key={idx} className="grid grid-cols-4 gap-2 items-center">
@@ -435,6 +440,13 @@ export default function StrategyConditionEditor({ dsl, onChange }: ConditionEdit
           </div>
         ))}
       </Section>
+
+      {/* Help Modal */}
+      <StrategyHelpModal 
+        isOpen={helpOpen} 
+        onClose={() => setHelpOpen(false)} 
+        section={helpSection}
+      />
     </div>
   );
 }
@@ -447,10 +459,11 @@ interface SectionProps {
   onToggle: () => void;
   onAdd: () => void;
   onRemove?: () => void;
+  helpAction?: () => void;
   children: React.ReactNode;
 }
 
-function Section({ title, count, expanded, onToggle, onAdd, onRemove, children }: SectionProps) {
+function Section({ title, count, expanded, onToggle, onAdd, onRemove, helpAction, children }: SectionProps) {
   return (
     <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
       <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/5" onClick={onToggle}>
@@ -467,6 +480,11 @@ function Section({ title, count, expanded, onToggle, onAdd, onRemove, children }
           {count > 0 && (
             <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full text-xs">
               {count}
+            </span>
+          )}
+          {helpAction && (
+            <span onClick={(e) => { e.stopPropagation(); helpAction(); }}>
+              <HelpIcon onClick={() => {}} tooltip="Click for help & examples" />
             </span>
           )}
         </div>

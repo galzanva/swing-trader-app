@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { StrategyDsl } from '@/lib/strategy-builder/dsl-schema';
 import { getEligibilityDescriptions } from '@/lib/strategy-builder/dsl-schema';
 import StrategyConditionEditor from '@/app/components/strategy-condition-editor';
+import StrategyHelpModal from '@/app/components/strategy-help-modal';
+import HelpIcon from '@/app/components/help-icon';
 
 interface StrategyEditClientProps {
   strategyId: string;
@@ -19,6 +21,8 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpSection, setHelpSection] = useState<'trigger' | 'stop' | 'target' | 'price-distance' | 'expression' | 'patterns' | 'all'>('all');
 
   useEffect(() => {
     fetchStrategy();
@@ -214,7 +218,13 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
         {/* Entry & Stop */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
-            <h4 className="text-lg font-semibold text-white mb-3">Entry</h4>
+            <div className="flex items-center gap-2 mb-3">
+              <h4 className="text-lg font-semibold text-white">Entry</h4>
+              <HelpIcon 
+                onClick={() => { setHelpSection('trigger'); setHelpOpen(true); }} 
+                tooltip="What can I enter here? Click for examples"
+              />
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-blue-200 text-sm mb-1">Trigger Level</label>
@@ -244,7 +254,13 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
             </div>
           </div>
           <div>
-            <h4 className="text-lg font-semibold text-white mb-3">Stop Loss</h4>
+            <div className="flex items-center gap-2 mb-3">
+              <h4 className="text-lg font-semibold text-white">Stop Loss</h4>
+              <HelpIcon 
+                onClick={() => { setHelpSection('stop'); setHelpOpen(true); }} 
+                tooltip="What can I enter here? Click for examples"
+              />
+            </div>
             <div>
               <label className="block text-blue-200 text-sm mb-1">Stop Level</label>
               <input
@@ -263,7 +279,13 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
 
         {/* Targets */}
         <div className="mb-6">
-          <h4 className="text-lg font-semibold text-white mb-3">Targets</h4>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-lg font-semibold text-white">Targets</h4>
+            <HelpIcon 
+              onClick={() => { setHelpSection('target'); setHelpOpen(true); }} 
+              tooltip="What can I enter here? Click for examples"
+            />
+          </div>
           <div className="space-y-2">
             {dsl.targets.map((target, i) => (
               <div key={i} className="flex gap-2">
@@ -369,6 +391,13 @@ export default function StrategyEditClient({ strategyId, userId }: StrategyEditC
           Cancel
         </button>
       </div>
+
+      {/* Help Modal */}
+      <StrategyHelpModal 
+        isOpen={helpOpen} 
+        onClose={() => setHelpOpen(false)} 
+        section={helpSection}
+      />
     </div>
   );
 }

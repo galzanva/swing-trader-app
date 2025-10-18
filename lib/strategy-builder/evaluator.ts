@@ -17,7 +17,7 @@ export function evaluateUserStrategy(
   input: StrategyInput,
   strategyId?: string
 ): StrategyEvaluation | null {
-  // Build evaluation context
+  // Build evaluation context with pattern levels
   const context: EvaluationContext = {
     price: input.price,
     high: input.bars.map(b => b.high),
@@ -31,6 +31,7 @@ export function evaluateUserStrategy(
     rsi14: input.rsi14,
     atr: input.atr,
     volZ: input.volZ,
+    patternLevels: input.patternLevels, // Include pattern-derived price levels
   };
   
   // Check eligibility
@@ -276,6 +277,16 @@ function checkEligibility(
         reasons.push(msg);
         console.log(`[Evaluator] ✓ ${msg}`);
       } catch (err) {
+        // Gracefully handle pattern variables that aren't available
+        const errorMsg = (err as Error).message;
+        if (errorMsg.includes('Pattern variables not available')) {
+          console.log(`[Evaluator] ✗ Pattern not detected: ${fromLevel}`);
+          return {
+            eligible: false,
+            reasons: [`Required pattern not detected: ${fromLevel}`]
+          };
+        }
+        
         console.error(`[Evaluator] Error evaluating price distance from ${fromLevel}:`, err);
         return {
           eligible: false,

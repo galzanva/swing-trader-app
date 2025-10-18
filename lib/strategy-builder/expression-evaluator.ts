@@ -2,7 +2,11 @@
  * Expression Evaluator for Dynamic Levels
  * 
  * Evaluates expressions like "ema20-0.5*ATR" or "entry+1.5*ATR"
+ * Now supports pattern-derived variables like "double_bottom_support"
  */
+
+import type { PatternLevels } from '../patterns/extract-levels';
+import { isPatternVariable } from '../patterns/extract-levels';
 
 export interface EvaluationContext {
   // Price data
@@ -24,6 +28,9 @@ export interface EvaluationContext {
   // Entry/Stop (for target calculations)
   entry?: number;
   stop?: number;
+  
+  // Pattern-derived price levels
+  patternLevels?: PatternLevels;
   
   // Custom EMAs
   [key: `ema${number}`]: number | undefined;
@@ -72,6 +79,15 @@ export function evaluateExpression(
     }
   }
   
+  // Replace pattern-derived levels
+  if (context.patternLevels) {
+    for (const [key, value] of Object.entries(context.patternLevels)) {
+      if (value !== undefined && typeof value === 'number' && isFinite(value)) {
+        replacements[key.toLowerCase()] = value;
+      }
+    }
+  }
+  
   // Replace variables in expression
   for (const [varName, value] of Object.entries(replacements)) {
     if (value !== undefined) {
@@ -83,8 +99,22 @@ export function evaluateExpression(
   }
   
   // Check for unresolved variables
-  if (/\b[a-z_][a-z0-9_]*\b/i.test(expression)) {
-    throw new Error(`Unresolved variables in expression: ${expression}`);
+  const unresolvedVars = expression.match(/\b[a-z_][a-z0-9_]*\b/gi);
+  if (unresolvedVars && unresolvedVars.length > 0) {
+    // Filter out pattern variables that might be missing (patterns not detected)
+    const trulyUnresolved = unresolvedVars.filter(v => {
+      const isPattern = isPatternVariable(v);
+      return !isPattern; // Only report non-pattern variables as errors
+    });
+    
+    if (trulyUnresolved.length > 0) {
+      throw new Error(`Unresolved variables in expression: ${trulyUnresolved.join(', ')}`);
+    }
+    
+    // If only pattern variables are unresolved, log warning but throw error
+    // (pattern not detected, so level not available)
+    console.warn(`[Expression] Pattern-derived variables not available: ${unresolvedVars.join(', ')}`);
+    throw new Error(`Pattern variables not available (pattern not detected): ${unresolvedVars.join(', ')}`);
   }
   
   // Safely evaluate the mathematical expression
@@ -153,7 +183,9 @@ export function validateExpression(expr: string): {
     ];
     
     const invalidVars = variables.filter(v => 
-      !validVars.includes(v) && !/^ema\d+$/.test(v)
+      !validVars.includes(v) && 
+      !/^ema\d+$/.test(v) && 
+      !isPatternVariable(v) // Allow pattern-derived variables
     );
     
     if (invalidVars.length > 0) {
