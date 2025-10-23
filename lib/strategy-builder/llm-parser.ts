@@ -23,6 +23,29 @@ const SYSTEM_PROMPT = `You are an expert trading strategy parser. Convert plain-
     "candlePatterns": [{"name": "bullish_engulfing" | "bearish_engulfing" | "hammer" | "shooting_star" | "doji" | "consecutive_closes" | "any_bullish" | "any_bearish", "params": {}, "description": "optional"}],
     "chartPatterns": [{"type": "triangle" | "flag" | "double_top" | "double_bottom" | "head_shoulders" | "wedge", "direction": "bullish" | "bearish" | "any", "status": "institutional" | "candidate" | "any", "description": "optional"}],
     "multiBarConditions": [{"count": number, "direction": "up" | "down" | "any", "minLevel": "expression", "maxLevel": "expression", "checkLows": boolean, "checkHighs": boolean, "description": "optional"}],
+    "squeezeDynamics": {
+      "minDaysToCover": number (optional),
+      "maxDaysToCover": number (optional),
+      "minShortFloat": number (optional, 0-100%),
+      "maxShortFloat": number (optional, 0-100%),
+      "shortVolumeTrend": "increasing" | "decreasing" | "stable" | "any",
+      "minShortVolumeZ": number (optional),
+      "ttmSqueezeState": "ON" | "FIRE" | "OFF" | "any",
+      "minSqueezeDuration": number (default 5),
+      "maxSqueezeDuration": number (optional),
+      "ttmFireConfirmation": {
+        "required": boolean,
+        "momentumDirection": "bullish" | "bearish" | "any",
+        "minHistogram": number (optional),
+        "maxHistogram": number (optional),
+        "additionalFilters": ["string expressions"] (optional)
+      },
+      "requireBothSqueezes": boolean,
+      "minCombinedScore": number (0-100, optional),
+      "shortSqueezeWeight": number (0-1, default 0.6, how much short squeeze contributes to combined score),
+      "ttmSqueezeWeight": number (0-1, default 0.4, how much TTM squeeze contributes to combined score),
+      "description": "optional"
+    },
     "custom": ["custom boolean expression strings"]
   },
   "trigger": {
@@ -96,13 +119,22 @@ const SYSTEM_PROMPT = `You are an expert trading strategy parser. Convert plain-
     - "go short" / "sell" / "bearish" / "downtrend" = "short"
     - Pullback in uptrend = "long", Rally in downtrend = "short"
 
+11. **Squeeze Dynamics** (Short Float Squeeze & TTM Squeeze):
+    - "high short interest" / "days to cover above 5" → squeezeDynamics: {"minDaysToCover": 5}
+    - "short float above 15%" → squeezeDynamics: {"minShortFloat": 15}
+    - "TTM squeeze active" / "in squeeze" → squeezeDynamics: {"ttmSqueezeState": "ON", "minSqueezeDuration": 5}
+    - "squeeze fired" / "TTM squeeze breakout" → squeezeDynamics: {"ttmSqueezeState": "FIRE", "ttmFireConfirmation": {"required": true, "momentumDirection": "bullish"}}
+    - "short squeeze setup" → squeezeDynamics: {"minDaysToCover": 5, "minShortFloat": 10}
+    - "both squeezes aligned" → squeezeDynamics: {"requireBothSqueezes": true, "ttmSqueezeState": "ON", "minDaysToCover": 5}
+    - Direction for fire confirmation: "bullish breakout" = momentumDirection: "bullish", "bearish breakout" = "bearish"
+
 **Expression Syntax:**
 - Variables: "entry", "stop", "price", "high", "low", "close", "ema9", "ema20", "ema50", "ema200"
 - Math operators: +, -, *, /, ()
 - ATR: Always use "ATR" (case-sensitive)
 - Examples: "entry+1.5*ATR", "ema50-0.5*ATR", "low-2*ATR", "entry+3*ATR"
 
-**Example Complex Strategy:**
+**Example 1 - EMA Pullback Strategy:**
 Input: "Go long on daily timeframe when EMA20 > EMA50 > EMA200, RSI is between 40 and 70, volume is higher than average by z-score 1, price pulls back within 1.5 ATR of EMA50 support, confirmed by bullish engulfing candle, with stop loss 1.5 ATR below entry, targets at 1.5 and 3 ATR, and minimum 2 bars closing above EMA50 for confirmation."
 
 Output:
@@ -140,6 +172,45 @@ Output:
     "maxPositionSize": 2,
     "earningsDaysBuffer": 3
   }
+}
+
+**Example 2 - Short Squeeze Strategy:**
+Input: "Go long when days to cover is above 6, short float above 15%, and TTM squeeze fires with bullish momentum above 20 EMA, stop at 1.5 ATR, targets at 2 and 4 ATR."
+
+Output:
+{
+  "name": "Short Squeeze Breakout",
+  "direction": "long",
+  "timeframe": "1day",
+  "eligibility": {
+    "emaRules": [{"ema1": 9, "operator": ">", "ema2": 20, "description": "Above 20 EMA"}],
+    "squeezeDynamics": {
+      "minDaysToCover": 6,
+      "minShortFloat": 15,
+      "ttmSqueezeState": "FIRE",
+      "minSqueezeDuration": 5,
+      "ttmFireConfirmation": {
+        "required": true,
+        "momentumDirection": "bullish",
+        "minHistogram": 0
+      },
+      "description": "High short interest with TTM squeeze breakout"
+    }
+  },
+  "trigger": {
+    "type": "breakout",
+    "level": "ema20",
+    "description": "Squeeze fires with price above 20 EMA"
+  },
+  "stop": {
+    "type": "atr",
+    "value": "entry-1.5*ATR",
+    "description": "1.5 ATR below entry"
+  },
+  "targets": [
+    {"level": "entry+2*ATR", "label": "T1"},
+    {"level": "entry+4*ATR", "label": "T2"}
+  ]
 }
 
 **IMPORTANT:**

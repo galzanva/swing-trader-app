@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import type { StrategyDsl, EmaRule, VolumeRule, PriceDistance, CandlePattern, ChartPattern, MultiBarCondition } from '@/lib/strategy-builder/dsl-schema';
+import type { StrategyDsl, EmaRule, VolumeRule, PriceDistance, CandlePattern, ChartPattern, MultiBarCondition, SqueezeDynamics } from '@/lib/strategy-builder/dsl-schema';
 import HelpIcon from './help-icon';
 import StrategyHelpModal from './strategy-help-modal';
 
@@ -441,6 +441,217 @@ export default function StrategyConditionEditor({ dsl, onChange }: ConditionEdit
         ))}
       </Section>
 
+      {/* Squeeze Dynamics Section (Short Float + TTM Squeeze) */}
+      <Section
+        title="🔥 Squeeze Dynamics"
+        count={dsl.eligibility?.squeezeDynamics ? 1 : 0}
+        expanded={expandedSections.has('squeeze')}
+        onToggle={() => toggleSection('squeeze')}
+        onAdd={() => updateEligibility({
+          squeezeDynamics: {
+            minDaysToCover: 5,
+            minShortFloat: 15,
+            ttmSqueezeState: 'any',
+            minSqueezeDuration: 5,
+            shortVolumeTrend: 'any',
+            requireBothSqueezes: false,
+          }
+        })}
+        helpText="Short Float Squeeze & TTM Squeeze filters"
+      >
+        {dsl.eligibility?.squeezeDynamics && (
+          <div className="space-y-4">
+            {/* Short Float Squeeze Criteria */}
+            <div className="border-l-2 border-blue-500 pl-4">
+              <h5 className="text-sm font-semibold text-blue-200 mb-3">Short Float Squeeze</h5>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-blue-200 text-xs mb-1">
+                    Min Days to Cover
+                    <span className="ml-1 text-blue-400 cursor-help" title="Higher DTC = more squeeze potential">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={dsl.eligibility.squeezeDynamics.minDaysToCover || 0}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, minDaysToCover: Number(e.target.value) || undefined }
+                    })}
+                    className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    placeholder="0 = any"
+                  />
+                </div>
+                <div>
+                  <label className="block text-blue-200 text-xs mb-1">
+                    Min Short Float %
+                    <span className="ml-1 text-blue-400 cursor-help" title="% of float shorted">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={dsl.eligibility.squeezeDynamics.minShortFloat || 0}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, minShortFloat: Number(e.target.value) || undefined }
+                    })}
+                    className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="0 = any"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* TTM Squeeze Criteria */}
+            <div className="border-l-2 border-purple-500 pl-4">
+              <h5 className="text-sm font-semibold text-purple-200 mb-3">TTM Squeeze</h5>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-blue-200 text-xs mb-1">
+                    Squeeze State
+                    <span className="ml-1 text-blue-400 cursor-help" title="Volatility compression state">ⓘ</span>
+                  </label>
+                  <select
+                    value={dsl.eligibility.squeezeDynamics.ttmSqueezeState || 'any'}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, ttmSqueezeState: e.target.value as any }
+                    })}
+                    className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                  >
+                    <option value="any">Any</option>
+                    <option value="FIRE">🔥 FIRE (Breakout!)</option>
+                    <option value="ON">⚡ ON (Building)</option>
+                    <option value="OFF">OFF (No Squeeze)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-blue-200 text-xs mb-1">
+                    Min Squeeze Duration (bars)
+                    <span className="ml-1 text-blue-400 cursor-help" title="Min bars in squeeze">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={dsl.eligibility.squeezeDynamics.minSqueezeDuration || 5}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, minSqueezeDuration: Number(e.target.value) }
+                    })}
+                    className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                    min="0"
+                    max="50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Combined Criteria */}
+            <div className="border-l-2 border-green-500 pl-4">
+              <h5 className="text-sm font-semibold text-green-200 mb-3">Combined Filters & Weighting</h5>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-blue-200 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dsl.eligibility.squeezeDynamics.requireBothSqueezes || false}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, requireBothSqueezes: e.target.checked }
+                    })}
+                    className="rounded border-white/20"
+                  />
+                  Require both short squeeze AND TTM squeeze aligned
+                </label>
+                
+                <div>
+                  <label className="block text-blue-200 text-xs mb-1">
+                    Min Combined Score (0-100)
+                    <span className="ml-1 text-blue-400 cursor-help" title="Minimum weighted average of both squeeze scores">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={dsl.eligibility.squeezeDynamics.minCombinedScore || ''}
+                    onChange={(e) => updateEligibility({
+                      squeezeDynamics: { ...dsl.eligibility.squeezeDynamics, minCombinedScore: Number(e.target.value) || undefined }
+                    })}
+                    className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                    min="0"
+                    max="100"
+                    placeholder="Optional"
+                  />
+                </div>
+
+                {/* Squeeze Score Weighting */}
+                <div className="pt-2 border-t border-green-500/30">
+                  <div className="text-xs text-green-200 mb-2 font-medium">Score Weighting (How much each squeeze matters)</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-blue-200 text-xs mb-1">
+                        Short Squeeze Weight
+                        <span className="ml-1 text-blue-400 cursor-help" title="0.0 = ignore, 1.0 = only short squeeze">ⓘ</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={dsl.eligibility.squeezeDynamics.shortSqueezeWeight ?? 0.6}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateEligibility({
+                            squeezeDynamics: { 
+                              ...dsl.eligibility.squeezeDynamics, 
+                              shortSqueezeWeight: val,
+                              ttmSqueezeWeight: 1 - val // Auto-adjust TTM to keep sum = 1
+                            }
+                          });
+                        }}
+                        className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                      />
+                      <div className="text-xs text-blue-300 mt-1">{((dsl.eligibility.squeezeDynamics.shortSqueezeWeight ?? 0.6) * 100).toFixed(0)}%</div>
+                    </div>
+                    <div>
+                      <label className="block text-blue-200 text-xs mb-1">
+                        TTM Squeeze Weight
+                        <span className="ml-1 text-blue-400 cursor-help" title="0.0 = ignore, 1.0 = only TTM squeeze">ⓘ</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={dsl.eligibility.squeezeDynamics.ttmSqueezeWeight ?? 0.4}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateEligibility({
+                            squeezeDynamics: { 
+                              ...dsl.eligibility.squeezeDynamics, 
+                              ttmSqueezeWeight: val,
+                              shortSqueezeWeight: 1 - val // Auto-adjust Short to keep sum = 1
+                            }
+                          });
+                        }}
+                        className="w-full bg-white/10 text-white rounded px-2 py-1 text-sm border border-white/20"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                      />
+                      <div className="text-xs text-blue-300 mt-1">{((dsl.eligibility.squeezeDynamics.ttmSqueezeWeight ?? 0.4) * 100).toFixed(0)}%</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-2">
+                    💡 Default: 60% Short Squeeze + 40% TTM Squeeze. Adjust based on strategy focus.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Remove Button */}
+            <button
+              onClick={() => updateEligibility({ squeezeDynamics: undefined })}
+              className="text-red-400 hover:text-red-300 text-sm w-full"
+            >
+              Remove Squeeze Filters
+            </button>
+          </div>
+        )}
+      </Section>
+
       {/* Help Modal */}
       <StrategyHelpModal 
         isOpen={helpOpen} 
@@ -460,6 +671,7 @@ interface SectionProps {
   onAdd: () => void;
   onRemove?: () => void;
   helpAction?: () => void;
+  helpText?: string;
   children: React.ReactNode;
 }
 

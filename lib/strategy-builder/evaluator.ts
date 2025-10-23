@@ -5,9 +5,10 @@
  */
 
 import type { StrategyInput, StrategyEvaluation } from '../strategies/types';
-import type { StrategyDsl, EmaRule, CandlePattern as DslCandlePattern } from './dsl-schema';
+import type { StrategyDsl, EmaRule, CandlePattern as DslCandlePattern, SqueezeDynamics } from './dsl-schema';
 import { evaluateExpression, type EvaluationContext } from './expression-evaluator';
 import { calculateRR, isBullishEngulfing, isHammer } from '../strategies/core-calculations';
+import { analyzeCombinedSqueeze, analyzeTTMSqueeze, analyzeShortSqueeze } from '../indicators/squeeze';
 
 /**
  * Evaluate a user-defined strategy
@@ -70,7 +71,7 @@ export function evaluateUserStrategy(
     // Calculate quality score
     const quality = calculateQuality(dsl, input, eligibilityCheck.reasons);
     
-    // Calculate viability (quality + regime + volume multipliers)
+    // Calculate viability (quality + regime + volume + squeeze multipliers)
     let viability = quality;
     const regimeMultiplier = input.spyRegime === 'bullish' ? 1.2 : 
                             input.spyRegime === 'neutral' ? 1.0 : 0.8;
@@ -78,7 +79,30 @@ export function evaluateUserStrategy(
     
     const volumeMultiplier = input.volZ >= 0 ? 1.1 : 0.9;
     viability *= volumeMultiplier;
-    viability = Math.min(0.95, viability);
+    
+    // SQUEEZE MULTIPLIER (amplifies viability based on combined squeeze score)
+    if ((input as any).squeezeAnalysis) {
+      const sq = (input as any).squeezeAnalysis;
+      // Score 80-100 → 1.3x multiplier (extreme squeeze)
+      // Score 60-79  → 1.2x multiplier (high squeeze)
+      // Score 40-59  → 1.1x multiplier (moderate squeeze)
+      // Score 20-39  → 1.05x multiplier (low squeeze)
+      // Score 0-19   → 1.0x multiplier (no squeeze)
+      let squeezeMultiplier = 1.0;
+      if (sq.combinedScore >= 80) {
+        squeezeMultiplier = 1.3;
+      } else if (sq.combinedScore >= 60) {
+        squeezeMultiplier = 1.2;
+      } else if (sq.combinedScore >= 40) {
+        squeezeMultiplier = 1.1;
+      } else if (sq.combinedScore >= 20) {
+        squeezeMultiplier = 1.05;
+      }
+      
+      viability *= squeezeMultiplier;
+    }
+    
+    viability = Math.min(0.99, viability); // Allow up to 99% viability with all factors aligned
     
     // Build confirmation state
     const confirmation = {
@@ -112,6 +136,7 @@ export function evaluateUserStrategy(
         invalidationRules: ['Price closes below stop loss'],
       },
       metadata: {
+        isUserStrategy: true,
         strategyName: dsl.name,
         userStrategyId: strategyId,
         dsl,
@@ -121,7 +146,6 @@ export function evaluateUserStrategy(
         totalEvaluated: 1,
         eligibleFound: 1,
         passedRR: 1,
-        isUserStrategy: true, // Flag for mentor to recognize user strategy
       },
     };
   } catch (error) {
@@ -354,6 +378,23 @@ function checkEligibility(
       reasons.push(multiBarCheck.reason);
       console.log(`[Evaluator] ✓ ${multiBarCheck.reason}`);
     }
+  }
+  
+  // Check Squeeze Dynamics (Short Float Squeeze & TTM Squeeze)
+  if (eligibility.squeezeDynamics) {
+    console.log(`[Evaluator] Checking squeeze dynamics...`);
+    const squeezeCheck = checkSqueezeDynamics(eligibility.squeezeDynamics, input);
+    
+    if (!squeezeCheck.passes) {
+      console.log(`[Evaluator] ✗ Squeeze dynamics failed: ${squeezeCheck.reason}`);
+      return {
+        eligible: false,
+        reasons: [squeezeCheck.reason],
+      };
+    }
+    
+    squeezeCheck.reasons.forEach(r => reasons.push(r));
+    console.log(`[Evaluator] ✓ Squeeze dynamics passed (${squeezeCheck.reasons.length} checks)`);
   }
   
   // Check custom conditions
@@ -633,5 +674,242 @@ function calculateQuality(
     }
   }
   
-  return Math.min(0.95, quality);
+  // UNIFIED SQUEEZE SCORING BONUS (scale with combined score)
+  if ((input as any).squeezeAnalysis) {
+    const sq = (input as any).squeezeAnalysis;
+    const squeezeBonusWeight = 0.20; // Max 20% bonus from squeeze
+    
+    // Score-based bonus (0-20% added to quality)
+    // 100/100 score = +20% quality
+    // 50/100 score = +10% quality
+    // 0/100 score = +0% quality
+    const scoreMultiplier = sq.combinedScore / 100;
+    let squeezeBonus = squeezeBonusWeight * scoreMultiplier;
+    
+    // Additional bonus for alignment (both squeezes working together)
+    if (sq.alignment && sq.combinedScore >= 50) {
+      squeezeBonus += 0.05; // Extra 5% for synergy
+    }
+    
+    // Boost for FIRE confirmation (immediate action setups)
+    if (sq.ttmSqueeze.fireConfirmed && sq.combinedScore >= 60) {
+      squeezeBonus += 0.05; // Extra 5% for confirmed breakout
+    }
+    
+    quality += squeezeBonus;
+  }
+  
+  return Math.min(0.98, quality); // Allow up to 98% quality with perfect squeeze
+}
+
+/**
+ * Check squeeze dynamics eligibility
+ */
+function checkSqueezeDynamics(
+  squeezeDynamics: SqueezeDynamics,
+  input: StrategyInput
+): { passes: boolean; reason: string; reasons: string[] } {
+  const reasons: string[] = [];
+  
+  // Convert OHLCV bars for squeeze analysis
+  const ohlcv = input.bars.map(bar => ({
+    timestamp: bar.timestamp || Date.now(),
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+  }));
+  
+  // Get short interest data from input (if available)
+  const shortInterest = (input as any).shortInterest || {};
+  
+  // Perform squeeze analysis with custom weights (if provided)
+  const combinedAnalysis = analyzeCombinedSqueeze(
+    ohlcv,
+    shortInterest,
+    squeezeDynamics.minSqueezeDuration || 5,
+    squeezeDynamics.shortSqueezeWeight ?? 0.6,
+    squeezeDynamics.ttmSqueezeWeight ?? 0.4
+  );
+  
+  // Attach to input for quality bonus calculation
+  (input as any).squeezeAnalysis = combinedAnalysis;
+  
+  const { shortSqueeze, ttmSqueeze } = combinedAnalysis;
+  
+  // Check Days to Cover
+  if (squeezeDynamics.minDaysToCover !== undefined) {
+    if (!shortSqueeze.daysToCover || shortSqueeze.daysToCover < squeezeDynamics.minDaysToCover) {
+      return {
+        passes: false,
+        reason: `Days to cover ${shortSqueeze.daysToCover?.toFixed(1) || 'N/A'} < ${squeezeDynamics.minDaysToCover}`,
+        reasons: [],
+      };
+    }
+    reasons.push(`DTC ${shortSqueeze.daysToCover.toFixed(1)} ≥ ${squeezeDynamics.minDaysToCover} ✓`);
+  }
+  
+  if (squeezeDynamics.maxDaysToCover !== undefined) {
+    if (shortSqueeze.daysToCover && shortSqueeze.daysToCover > squeezeDynamics.maxDaysToCover) {
+      return {
+        passes: false,
+        reason: `Days to cover ${shortSqueeze.daysToCover.toFixed(1)} > ${squeezeDynamics.maxDaysToCover}`,
+        reasons: [],
+      };
+    }
+  }
+  
+  // Check Short Float %
+  if (squeezeDynamics.minShortFloat !== undefined) {
+    if (!shortSqueeze.shortFloat || shortSqueeze.shortFloat < squeezeDynamics.minShortFloat) {
+      return {
+        passes: false,
+        reason: `Short float ${shortSqueeze.shortFloat?.toFixed(1) || 'N/A'}% < ${squeezeDynamics.minShortFloat}%`,
+        reasons: [],
+      };
+    }
+    reasons.push(`Short float ${shortSqueeze.shortFloat.toFixed(1)}% ≥ ${squeezeDynamics.minShortFloat}% ✓`);
+  }
+  
+  if (squeezeDynamics.maxShortFloat !== undefined) {
+    if (shortSqueeze.shortFloat && shortSqueeze.shortFloat > squeezeDynamics.maxShortFloat) {
+      return {
+        passes: false,
+        reason: `Short float ${shortSqueeze.shortFloat.toFixed(1)}% > ${squeezeDynamics.maxShortFloat}%`,
+        reasons: [],
+      };
+    }
+  }
+  
+  // Check Short Volume Trend
+  if (squeezeDynamics.shortVolumeTrend && squeezeDynamics.shortVolumeTrend !== 'any') {
+    if (shortSqueeze.shortVolumeTrend !== squeezeDynamics.shortVolumeTrend) {
+      return {
+        passes: false,
+        reason: `Short volume trend ${shortSqueeze.shortVolumeTrend} != ${squeezeDynamics.shortVolumeTrend}`,
+        reasons: [],
+      };
+    }
+    reasons.push(`Short volume ${shortSqueeze.shortVolumeTrend} ✓`);
+  }
+  
+  // Check Short Volume Z-score
+  if (squeezeDynamics.minShortVolumeZ !== undefined) {
+    if (!shortSqueeze.shortVolumeZ || shortSqueeze.shortVolumeZ < squeezeDynamics.minShortVolumeZ) {
+      return {
+        passes: false,
+        reason: `Short volume Z ${shortSqueeze.shortVolumeZ?.toFixed(2) || 'N/A'} < ${squeezeDynamics.minShortVolumeZ}`,
+        reasons: [],
+      };
+    }
+    reasons.push(`Short vol Z ${shortSqueeze.shortVolumeZ.toFixed(2)} ≥ ${squeezeDynamics.minShortVolumeZ} ✓`);
+  }
+  
+  // Check TTM Squeeze State
+  if (squeezeDynamics.ttmSqueezeState && squeezeDynamics.ttmSqueezeState !== 'any') {
+    if (ttmSqueeze.current.state !== squeezeDynamics.ttmSqueezeState) {
+      return {
+        passes: false,
+        reason: `TTM squeeze ${ttmSqueeze.current.state} != ${squeezeDynamics.ttmSqueezeState}`,
+        reasons: [],
+      };
+    }
+    reasons.push(`TTM squeeze ${ttmSqueeze.current.state} ✓`);
+  }
+  
+  // Check TTM Squeeze Duration
+  if (squeezeDynamics.minSqueezeDuration !== undefined) {
+    if (ttmSqueeze.squeezeDuration < squeezeDynamics.minSqueezeDuration) {
+      return {
+        passes: false,
+        reason: `TTM squeeze duration ${ttmSqueeze.squeezeDuration} < ${squeezeDynamics.minSqueezeDuration} bars`,
+        reasons: [],
+      };
+    }
+    reasons.push(`TTM squeeze ≥${squeezeDynamics.minSqueezeDuration} bars ✓`);
+  }
+  
+  if (squeezeDynamics.maxSqueezeDuration !== undefined) {
+    if (ttmSqueeze.squeezeDuration > squeezeDynamics.maxSqueezeDuration) {
+      return {
+        passes: false,
+        reason: `TTM squeeze duration ${ttmSqueeze.squeezeDuration} > ${squeezeDynamics.maxSqueezeDuration} bars`,
+        reasons: [],
+      };
+    }
+  }
+  
+  // Check TTM Fire Confirmation
+  if (squeezeDynamics.ttmFireConfirmation?.required) {
+    if (!ttmSqueeze.fireConfirmed) {
+      return {
+        passes: false,
+        reason: `TTM squeeze fire not confirmed`,
+        reasons: [],
+      };
+    }
+    
+    const conf = squeezeDynamics.ttmFireConfirmation;
+    
+    // Check momentum direction
+    if (conf.momentumDirection && conf.momentumDirection !== 'any') {
+      if (ttmSqueeze.potentialBreakout !== conf.momentumDirection) {
+        return {
+          passes: false,
+          reason: `TTM fire direction ${ttmSqueeze.potentialBreakout} != ${conf.momentumDirection}`,
+          reasons: [],
+        };
+      }
+    }
+    
+    // Check histogram range
+    if (conf.minHistogram !== undefined && ttmSqueeze.current.histogram < conf.minHistogram) {
+      return {
+        passes: false,
+        reason: `TTM histogram ${ttmSqueeze.current.histogram.toFixed(2)} < ${conf.minHistogram}`,
+        reasons: [],
+      };
+    }
+    
+    if (conf.maxHistogram !== undefined && ttmSqueeze.current.histogram > conf.maxHistogram) {
+      return {
+        passes: false,
+        reason: `TTM histogram ${ttmSqueeze.current.histogram.toFixed(2)} > ${conf.maxHistogram}`,
+        reasons: [],
+      };
+    }
+    
+    reasons.push(`TTM fire confirmed (${ttmSqueeze.potentialBreakout}) ✓`);
+  }
+  
+  // Check Both Squeezes Alignment
+  if (squeezeDynamics.requireBothSqueezes) {
+    if (!combinedAnalysis.alignment) {
+      return {
+        passes: false,
+        reason: `Both squeezes not aligned`,
+        reasons: [],
+      };
+    }
+    reasons.push(`Both squeezes aligned ✓`);
+  }
+  
+  // Check Combined Score
+  if (squeezeDynamics.minCombinedScore !== undefined) {
+    if (combinedAnalysis.combinedScore < squeezeDynamics.minCombinedScore) {
+      return {
+        passes: false,
+        reason: `Combined squeeze score ${combinedAnalysis.combinedScore} < ${squeezeDynamics.minCombinedScore}`,
+        reasons: [],
+      };
+    }
+    reasons.push(`Combined score ${combinedAnalysis.combinedScore} ≥ ${squeezeDynamics.minCombinedScore} ✓`);
+  }
+  
+  return {
+    passes: true,
+    reason: 'Squeeze dynamics passed',
+    reasons,
+  };
 }

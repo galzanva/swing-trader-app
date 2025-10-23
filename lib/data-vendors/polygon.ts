@@ -48,6 +48,12 @@ export interface MarketData {
   dataAgeDays: number;
   marketCap?: number;
   exchange?: string;
+  shortInterest?: {
+    shortFloat?: number; // % of float shorted
+    daysToCover?: number; // Days to cover
+    shortVolume?: number; // Recent short volume
+    shortVolumeRatio?: number; // Short volume / total volume
+  };
 }
 
 export class PolygonClient {
@@ -228,6 +234,123 @@ export class PolygonClient {
       hasUpcomingEarnings: false,
       daysUntilEarnings: null
     };
+  }
+
+  /**
+   * Get short interest data for a symbol
+   * Uses Polygon's /v1/short-interest endpoint
+   * Docs: https://polygon.io/docs/rest/stocks/fundamentals/short-interest
+   */
+  async getShortInterestData(symbol: string): Promise<{
+    shortFloat?: number;
+    daysToCover?: number;
+    shortVolume?: number;
+    shortVolumeRatio?: number;
+    shortInterest?: number;
+    avgDailyVolume?: number;
+    settlementDate?: string;
+  }> {
+    try {
+      // Fetch short interest data (bi-monthly FINRA reports)
+      const shortInterestUrl = `${this.baseUrl}/stocks/v1/short-interest?ticker=${symbol.toUpperCase()}&limit=1&sort=settlement_date.desc&apiKey=${this.apiKey}`;
+      
+      console.log(`[Polygon] Fetching short interest for ${symbol}...`);
+      const siResponse = await fetch(shortInterestUrl);
+
+      if (!siResponse.ok) {
+        console.warn(`[Polygon] Could not fetch short interest data for ${symbol} (${siResponse.status})`);
+        return {};
+      }
+
+      const siData = await siResponse.json();
+      
+      if (!siData.results || siData.results.length === 0) {
+        console.warn(`[Polygon] No short interest data available for ${symbol}`);
+        return {};
+      }
+
+      const latestSI = siData.results[0];
+      const shortInterest = latestSI.short_interest;
+      const avgDailyVolume = latestSI.avg_daily_volume;
+      const daysToCover = latestSI.days_to_cover;
+      const settlementDate = latestSI.settlement_date;
+      
+      // Fetch ticker details to get shares outstanding for short float calculation
+      const detailsUrl = `${this.baseUrl}/v3/reference/tickers/${symbol.toUpperCase()}?apiKey=${this.apiKey}`;
+      const detailsResponse = await fetch(detailsUrl);
+      
+      let shortFloat: number | undefined;
+      
+      if (detailsResponse.ok) {
+        const detailsData = await detailsResponse.json();
+        const sharesOutstanding = detailsData.results?.weighted_shares_outstanding || 
+                                  detailsData.results?.share_class_shares_outstanding;
+        
+        if (sharesOutstanding && shortInterest) {
+          // Calculate short float % = (short interest / shares outstanding) * 100
+          shortFloat = (shortInterest / sharesOutstanding) * 100;
+        }
+      }
+      
+      // Fetch recent short volume data (daily reporting)
+      // This gives us the short volume ratio for recent trading activity
+      const shortVolumeUrl = `${this.baseUrl}/stocks/v1/short-volume?ticker=${symbol.toUpperCase()}&limit=1&sort=date.desc&apiKey=${this.apiKey}`;
+      
+      const svResponse = await fetch(shortVolumeUrl);
+      let shortVolumeRatio: number | undefined;
+      let shortVolume: number | undefined;
+      
+      if (svResponse.ok) {
+        const svData = await svResponse.json();
+        if (svData.results && svData.results.length > 0) {
+          const latestSV = svData.results[0];
+          shortVolumeRatio = latestSV.short_volume_ratio; // Already in percentage
+          shortVolume = latestSV.short_volume;
+        }
+      }
+      
+      console.log(`[Polygon] Short interest data for ${symbol}:`, {
+        shortInterest,
+        shortFloat: shortFloat?.toFixed(2),
+        daysToCover: daysToCover?.toFixed(2),
+        shortVolumeRatio: shortVolumeRatio?.toFixed(2),
+        settlementDate,
+      });
+      
+      return {
+        shortFloat,
+        daysToCover,
+        shortVolume,
+        shortVolumeRatio: shortVolumeRatio ? shortVolumeRatio / 100 : undefined, // Convert to decimal
+        shortInterest,
+        avgDailyVolume,
+        settlementDate,
+      };
+    } catch (error) {
+      console.error(`[Polygon] Error fetching short interest for ${symbol}:`, error);
+      return {};
+    }
+  }
+
+  /**
+   * Enhanced getAggregates with short interest data
+   */
+  async getAggregatesWithShortInterest(
+    symbol: string,
+    timeframe: "1min" | "5min" | "15min" | "1hour" | "1day" = "1day",
+    limit: number = 500
+  ): Promise<MarketData> {
+    const marketData = await this.getAggregates(symbol, timeframe, limit);
+    
+    // Fetch short interest data in parallel
+    try {
+      const shortInterest = await this.getShortInterestData(symbol);
+      marketData.shortInterest = shortInterest;
+    } catch (error) {
+      console.warn(`[Polygon] Could not fetch short interest for ${symbol}:`, error);
+    }
+    
+    return marketData;
   }
 }
 

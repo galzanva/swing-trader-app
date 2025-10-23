@@ -33,6 +33,7 @@ import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/managem
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
 import { calculateConfirmationEntry } from "@/lib/execution/confirmation-entries";
 import { validateReport, formatQAReport, type AnalysisReportForQA } from "@/lib/validation/qa-checklist";
+import { analyzeCombinedSqueeze } from "@/lib/indicators/squeeze";
 
 export interface AnalysisReport {
   symbol: string;
@@ -271,6 +272,38 @@ export interface AnalysisReport {
     strengths: string[];
   };
   
+  // Squeeze Analysis (Short Float Squeeze & TTM Squeeze)
+  squeezeAnalysis?: {
+    shortSqueeze: {
+      potential: 'high' | 'moderate' | 'low' | 'none';
+      score: number;
+      daysToCover: number | null;
+      shortFloat: number | null;
+      shortVolumeZ: number | null;
+      shortVolumeTrend: 'increasing' | 'decreasing' | 'stable' | 'unknown';
+      triggers: string[];
+      warnings: string[];
+    };
+    ttmSqueeze: {
+      state: 'ON' | 'FIRE' | 'OFF';
+      duration: number;
+      momentumDirection: 'bullish' | 'bearish' | 'neutral';
+      momentumStrength: number;
+      fireConfirmed: boolean;
+      potentialBreakout: 'bullish' | 'bearish' | 'neutral';
+      triggers: string[];
+      warnings: string[];
+    };
+    combined: {
+      score: number;
+      potential: 'extreme' | 'high' | 'moderate' | 'low' | 'none';
+      alignment: boolean;
+      recommendation: string;
+      triggers: string[];
+      warnings: string[];
+    };
+  };
+  
   // Additional info
   marketData: {
     marketCap?: number;
@@ -323,9 +356,9 @@ export async function POST(request: Request) {
 
     console.log(`[Analyze] Starting analysis for ${symbol} on ${timeframe}`);
 
-    // 1. Fetch market data
+    // 1. Fetch market data with short interest
     const polygonClient = new PolygonClient(polygonApiKey);
-    const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
+    const marketData = await polygonClient.getAggregatesWithShortInterest(symbol, timeframe as any);
 
     if (marketData.bars.length < 200) {
   return NextResponse.json(
@@ -532,6 +565,59 @@ export async function POST(request: Request) {
     });
     console.log(`[Analyze] Execution: ${executionPlan.status}, Entry ${executionPlan.entry.type} @ $${executionPlan.entry.triggerPrice}`);
 
+    // 6.7. Perform Squeeze Analysis (Short Float + TTM Squeeze)
+    let squeezeAnalysis;
+    try {
+      console.log(`[Analyze] Analyzing squeeze dynamics...`);
+      const ohlcv = marketData.bars.map(bar => ({
+        timestamp: bar.timestamp || Date.now(),
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume,
+      }));
+      
+      const shortInterest = marketData.shortInterest || {};
+      const combinedSqueeze = analyzeCombinedSqueeze(ohlcv, shortInterest, 5);
+      
+      squeezeAnalysis = {
+        shortSqueeze: {
+          potential: combinedSqueeze.shortSqueeze.potential,
+          score: combinedSqueeze.shortSqueeze.score,
+          daysToCover: combinedSqueeze.shortSqueeze.daysToCover,
+          shortFloat: combinedSqueeze.shortSqueeze.shortFloat,
+          shortVolumeZ: combinedSqueeze.shortSqueeze.shortVolumeZ,
+          shortVolumeTrend: combinedSqueeze.shortSqueeze.shortVolumeTrend,
+          triggers: combinedSqueeze.shortSqueeze.triggers,
+          warnings: combinedSqueeze.shortSqueeze.warnings,
+        },
+        ttmSqueeze: {
+          state: combinedSqueeze.ttmSqueeze.current.state,
+          duration: combinedSqueeze.ttmSqueeze.squeezeDuration,
+          momentumDirection: combinedSqueeze.ttmSqueeze.current.momentumDirection,
+          momentumStrength: combinedSqueeze.ttmSqueeze.current.momentumStrength,
+          fireConfirmed: combinedSqueeze.ttmSqueeze.fireConfirmed,
+          potentialBreakout: combinedSqueeze.ttmSqueeze.potentialBreakout,
+          triggers: combinedSqueeze.ttmSqueeze.triggers,
+          warnings: combinedSqueeze.ttmSqueeze.warnings,
+        },
+        combined: {
+          score: combinedSqueeze.combinedScore,
+          potential: combinedSqueeze.combinedPotential,
+          alignment: combinedSqueeze.alignment,
+          recommendation: combinedSqueeze.recommendation,
+          triggers: combinedSqueeze.triggers,
+          warnings: combinedSqueeze.warnings,
+        },
+      };
+      
+      console.log(`[Analyze] Squeeze analysis complete: ${combinedSqueeze.combinedPotential} potential (score: ${combinedSqueeze.combinedScore})`);
+    } catch (error) {
+      console.error("[Analyze] Error analyzing squeeze dynamics:", error);
+      squeezeAnalysis = undefined;
+    }
+
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
     if (openaiApiKey) {
@@ -544,7 +630,8 @@ export async function POST(request: Request) {
           compositePattern,
           score,
           riskPlan,
-          executionPlan
+          executionPlan,
+          squeezeAnalysis // Pass squeeze analysis to LLM
         );
         console.log(`[Analyze] Generated AI analysis with chart pattern context`);
       } catch (error) {
@@ -762,6 +849,8 @@ export async function POST(request: Request) {
       },
       
       analysis: aiAnalysis,
+      
+      squeezeAnalysis,
       
       marketData: {
         marketCap: marketData.marketCap,

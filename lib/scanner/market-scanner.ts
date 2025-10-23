@@ -48,6 +48,15 @@ export interface ScanResult {
     atrPct: number;
     volZ: number;
   };
+  squeeze?: {
+    combinedScore: number;
+    combinedPotential: 'extreme' | 'high' | 'moderate' | 'low' | 'none';
+    alignment: boolean;
+    shortFloat: number | null;
+    daysToCover: number | null;
+    ttmState: 'ON' | 'FIRE' | 'OFF';
+    ttmDuration: number;
+  };
 }
 
 export interface ScanProgress {
@@ -149,11 +158,12 @@ export class MarketScanner {
       // Phase 3: Detailed analysis (fetch OHLCV + indicators)
       const results: ScanResult[] = [];
       
-      // Adaptive concurrency based on plan
-      const baseConcurrency = 5; // Free tier
+      // Adaptive concurrency - MUCH higher for paid Polygon accounts!
+      const hasSqueezeFilters = finalConfig.minShortFloat || finalConfig.minDaysToCover || (finalConfig.ttmSqueezeState && finalConfig.ttmSqueezeState !== 'any');
+      const baseConcurrency = hasSqueezeFilters ? 20 : 10; // High concurrency for paid plan
       const adaptiveConcurrency = Math.min(baseConcurrency, Math.ceil(filtered.length / 10));
       
-      console.log(`[Scanner] Using concurrency: ${adaptiveConcurrency}`);
+      console.log(`[Scanner] Using concurrency: ${adaptiveConcurrency}${hasSqueezeFilters ? ' (maximized for squeeze filtering)' : ''}`);
       
       for (let i = 0; i < filtered.length; i += adaptiveConcurrency) {
         if (this.abortController.signal.aborted) {
@@ -188,15 +198,19 @@ export class MarketScanner {
           }
         }
         
-        // Rate limiting - wait between batches
+        // Minimal delay for paid accounts - can handle high throughput
         if (i + adaptiveConcurrency < filtered.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const delay = hasSqueezeFilters ? 200 : 500; // Very short delays
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
         
         // Early exit if enabled and we have enough qualified matches
+        // When squeeze filters are active, be more generous with early exit threshold
         const qualifiedMatches = results.filter(r => r.matchDetails.eligible && r.matchScore >= 50);
-        if (finalConfig.earlyExitEnabled && qualifiedMatches.length >= maxResults) {
-          console.log(`[Scanner] Early exit: Found ${qualifiedMatches.length} qualified matches`);
+        const earlyExitThreshold = hasSqueezeFilters ? Math.max(maxResults, 20) : maxResults;
+        
+        if (finalConfig.earlyExitEnabled && qualifiedMatches.length >= earlyExitThreshold) {
+          console.log(`[Scanner] Early exit: Found ${qualifiedMatches.length} qualified matches (threshold: ${earlyExitThreshold})`);
           break;
         }
       }
@@ -379,9 +393,12 @@ export class MarketScanner {
       console.log(`[Scanner] Sorted by dollar volume (most liquid first)`);
       
       // Limit to top N by liquidity to avoid scanning too many low-volume stocks
-      const maxPreFiltered = 200; // Scan top 200 by liquidity
+      // If squeeze filters are active, scan MANY more stocks since squeeze conditions are rare
+      const hasSqueezeFilters = config.minShortFloat || config.minDaysToCover || (config.ttmSqueezeState && config.ttmSqueezeState !== 'any');
+      const maxPreFiltered = hasSqueezeFilters ? 1500 : 200; // Scan 1500 when using squeeze filters!
+      
       if (filtered.length > maxPreFiltered) {
-        console.log(`[Scanner] Limiting to top ${maxPreFiltered} most liquid tickers`);
+        console.log(`[Scanner] Limiting to top ${maxPreFiltered} most liquid tickers${hasSqueezeFilters ? ' (extended for squeeze filtering)' : ''}`);
         return filtered.slice(0, maxPreFiltered);
       }
     }

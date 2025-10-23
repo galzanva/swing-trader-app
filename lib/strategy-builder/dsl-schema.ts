@@ -103,6 +103,41 @@ export const MultiBarConditionSchema = z.object({
   description: z.string().optional(),
 });
 
+// Squeeze Dynamics - Short Float Squeeze & TTM Squeeze
+export const SqueezeDynamicsSchema = z.object({
+  // Short Float Squeeze criteria
+  minDaysToCover: z.number().min(0).max(50).optional(), // Minimum days to cover
+  maxDaysToCover: z.number().min(0).max(50).optional(), // Maximum days to cover
+  minShortFloat: z.number().min(0).max(100).optional(), // Min % of float shorted
+  maxShortFloat: z.number().min(0).max(100).optional(), // Max % of float shorted
+  shortVolumeTrend: z.enum(['increasing', 'decreasing', 'stable', 'any']).default('any'),
+  minShortVolumeZ: z.number().optional(), // Min Z-score for short volume
+  
+  // TTM Squeeze criteria
+  ttmSqueezeState: z.enum(['ON', 'FIRE', 'OFF', 'any']).default('any'), // Required squeeze state
+  minSqueezeDuration: z.number().min(0).max(50).default(5), // Min bars in squeeze
+  maxSqueezeDuration: z.number().min(0).max(100).optional(), // Max bars in squeeze
+  
+  // TTM Squeeze Fire Confirmation
+  ttmFireConfirmation: z.object({
+    required: z.boolean().default(false), // Require fire confirmation
+    momentumDirection: z.enum(['bullish', 'bearish', 'any']).default('any'),
+    minHistogram: z.number().optional(), // e.g., > 0 for bullish
+    maxHistogram: z.number().optional(), // e.g., < 0 for bearish
+    additionalFilters: z.array(z.string()).optional(), // e.g., ["MACD > 0", "RSI > 50"]
+  }).optional(),
+  
+  // Combined squeeze alignment
+  requireBothSqueezes: z.boolean().default(false), // Both short & TTM squeeze must align
+  minCombinedScore: z.number().min(0).max(100).optional(), // Min combined squeeze score
+  
+  // Squeeze score weighting (controls how much each squeeze contributes)
+  shortSqueezeWeight: z.number().min(0).max(1).default(0.6).optional(), // 0-1, how much short squeeze matters (default 60%)
+  ttmSqueezeWeight: z.number().min(0).max(1).default(0.4).optional(), // 0-1, how much TTM squeeze matters (default 40%)
+  
+  description: z.string().optional(),
+});
+
 // Trigger Condition
 export const TriggerSchema = z.object({
   type: z.enum(['breakout', 'pullback', 'reversal', 'continuation', 'custom']),
@@ -182,6 +217,9 @@ export const StrategyDslSchema = z.object({
     // Legacy single multi-bar condition (for backward compatibility)
     multiBarCondition: MultiBarConditionSchema.optional(),
     
+    // Squeeze Dynamics - Short Float Squeeze & TTM Squeeze
+    squeezeDynamics: SqueezeDynamicsSchema.optional(),
+    
     // Custom boolean expressions for advanced users
     custom: z.array(z.string()).optional(),
   }),
@@ -221,6 +259,7 @@ export type PriceDistance = z.infer<typeof PriceDistanceSchema>;
 export type CandlePattern = z.infer<typeof CandlePatternSchema>;
 export type ChartPattern = z.infer<typeof ChartPatternSchema>;
 export type MultiBarCondition = z.infer<typeof MultiBarConditionSchema>;
+export type SqueezeDynamics = z.infer<typeof SqueezeDynamicsSchema>;
 export type Trigger = z.infer<typeof TriggerSchema>;
 export type StopLoss = z.infer<typeof StopLossSchema>;
 export type Target = z.infer<typeof TargetSchema>;
@@ -281,39 +320,57 @@ export function validateStrategyDsl(data: unknown): {
       warnings.push('At least one profit target is required');
     }
     
-    // Check for conflicting rules
-    const eligibility = dsl.eligibility;
-    if (eligibility) {
-      // Check RSI range validity
-      if (eligibility.rsiRange && eligibility.rsiRange.min >= eligibility.rsiRange.max) {
-        warnings.push('RSI min must be less than max');
-      }
-      
-      // Check ATR range validity
-      if (eligibility.atrRange && eligibility.atrRange.minPct >= eligibility.atrRange.maxPct) {
-        warnings.push('ATR min must be less than max');
-      }
-      
-      // Warn if no eligibility criteria defined
-      const hasAnyCriteria = 
-        (eligibility.emaRules && eligibility.emaRules.length > 0) ||
-        eligibility.rsiRange ||
-        eligibility.atrRange ||
-        eligibility.volumeRule ||
-        (eligibility.volumeRules && eligibility.volumeRules.length > 0) ||
-        eligibility.priceDistance ||
-        (eligibility.priceDistances && eligibility.priceDistances.length > 0) ||
-        eligibility.candlePattern ||
-        (eligibility.candlePatterns && eligibility.candlePatterns.length > 0) ||
-        eligibility.chartPattern ||
-        (eligibility.chartPatterns && eligibility.chartPatterns.length > 0) ||
-        eligibility.multiBarCondition ||
-        (eligibility.multiBarConditions && eligibility.multiBarConditions.length > 0);
+      // Check for conflicting rules
+      const eligibility = dsl.eligibility;
+      if (eligibility) {
+        // Check RSI range validity
+        if (eligibility.rsiRange && eligibility.rsiRange.min >= eligibility.rsiRange.max) {
+          warnings.push('RSI min must be less than max');
+        }
         
-      if (!hasAnyCriteria) {
-        warnings.push('No eligibility criteria defined - strategy will match all stocks');
+        // Check ATR range validity
+        if (eligibility.atrRange && eligibility.atrRange.minPct >= eligibility.atrRange.maxPct) {
+          warnings.push('ATR min must be less than max');
+        }
+        
+        // Check squeeze dynamics validity
+        if (eligibility.squeezeDynamics) {
+          const sq = eligibility.squeezeDynamics;
+          if (sq.minDaysToCover !== undefined && sq.maxDaysToCover !== undefined && 
+              sq.minDaysToCover > sq.maxDaysToCover) {
+            warnings.push('Squeeze: minDaysToCover must be less than maxDaysToCover');
+          }
+          if (sq.minShortFloat !== undefined && sq.maxShortFloat !== undefined && 
+              sq.minShortFloat > sq.maxShortFloat) {
+            warnings.push('Squeeze: minShortFloat must be less than maxShortFloat');
+          }
+          if (sq.minSqueezeDuration !== undefined && sq.maxSqueezeDuration !== undefined && 
+              sq.minSqueezeDuration > sq.maxSqueezeDuration) {
+            warnings.push('Squeeze: minSqueezeDuration must be less than maxSqueezeDuration');
+          }
+        }
+        
+        // Warn if no eligibility criteria defined
+        const hasAnyCriteria = 
+          (eligibility.emaRules && eligibility.emaRules.length > 0) ||
+          eligibility.rsiRange ||
+          eligibility.atrRange ||
+          eligibility.volumeRule ||
+          (eligibility.volumeRules && eligibility.volumeRules.length > 0) ||
+          eligibility.priceDistance ||
+          (eligibility.priceDistances && eligibility.priceDistances.length > 0) ||
+          eligibility.candlePattern ||
+          (eligibility.candlePatterns && eligibility.candlePatterns.length > 0) ||
+          eligibility.chartPattern ||
+          (eligibility.chartPatterns && eligibility.chartPatterns.length > 0) ||
+          eligibility.multiBarCondition ||
+          (eligibility.multiBarConditions && eligibility.multiBarConditions.length > 0) ||
+          eligibility.squeezeDynamics;
+          
+        if (!hasAnyCriteria) {
+          warnings.push('No eligibility criteria defined - strategy will match all stocks');
+        }
       }
-    }
     
     return { 
       success: true, 
@@ -421,6 +478,43 @@ export function getEligibilityDescriptions(dsl: StrategyDsl): string[] {
     if (condition.description) desc += ` - ${condition.description}`;
     descriptions.push(desc);
   });
+  
+  // Squeeze Dynamics
+  if (eligibility.squeezeDynamics) {
+    const sq = eligibility.squeezeDynamics;
+    let squeezeDesc = 'Squeeze: ';
+    const parts: string[] = [];
+    
+    if (sq.minDaysToCover !== undefined || sq.maxDaysToCover !== undefined) {
+      const min = sq.minDaysToCover !== undefined ? sq.minDaysToCover : 0;
+      const max = sq.maxDaysToCover !== undefined ? sq.maxDaysToCover : '∞';
+      parts.push(`DTC ${min}-${max}`);
+    }
+    if (sq.minShortFloat !== undefined || sq.maxShortFloat !== undefined) {
+      const min = sq.minShortFloat !== undefined ? sq.minShortFloat : 0;
+      const max = sq.maxShortFloat !== undefined ? sq.maxShortFloat : '∞';
+      parts.push(`ShortFloat ${min}-${max}%`);
+    }
+    if (sq.shortVolumeTrend && sq.shortVolumeTrend !== 'any') {
+      parts.push(`ShortVol ${sq.shortVolumeTrend}`);
+    }
+    if (sq.ttmSqueezeState && sq.ttmSqueezeState !== 'any') {
+      parts.push(`TTM ${sq.ttmSqueezeState}`);
+    }
+    if (sq.minSqueezeDuration !== undefined) {
+      parts.push(`≥${sq.minSqueezeDuration} bars`);
+    }
+    if (sq.ttmFireConfirmation?.required) {
+      parts.push(`FIRE confirmed (${sq.ttmFireConfirmation.momentumDirection})`);
+    }
+    if (sq.requireBothSqueezes) {
+      parts.push('Both squeezes aligned');
+    }
+    
+    if (parts.length > 0) {
+      descriptions.push(squeezeDesc + parts.join(', ') + (sq.description ? ` - ${sq.description}` : ''));
+    }
+  }
   
   // Custom conditions
   if (eligibility.custom && eligibility.custom.length > 0) {

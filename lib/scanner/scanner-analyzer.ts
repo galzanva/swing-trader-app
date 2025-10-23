@@ -12,6 +12,7 @@ import type { EnhancedScannerConfig, TrendDirection } from './scanner-config';
 import { scannerCache } from './scanner-cache';
 import type { ScanResult } from './market-scanner';
 import { extractPatternLevels, getAvailablePatternVariables } from '../patterns/extract-levels';
+import { analyzeCombinedSqueeze } from '../indicators/squeeze';
 
 export class ScannerAnalyzer {
   private polygonClient: PolygonClient;
@@ -49,18 +50,20 @@ export class ScannerAnalyzer {
       const cached = scannerCache.get(ticker, strategy.timeframe);
       let bars: OHLCV[];
       let indicators: any;
+      let shortInterest: any = {};
 
       if (cached) {
         console.log(`[Scanner] ${ticker}: Cache hit`);
         this.cacheHits++;
         bars = cached.bars;
         indicators = cached.indicators;
+        shortInterest = cached.shortInterest || {};
       } else {
         console.log(`[Scanner] ${ticker}: Fetching data`);
         this.apiCalls++;
 
-        // Fetch full OHLCV data
-        const marketData = await this.polygonClient.getAggregates(
+        // Fetch full OHLCV data with short interest
+        const marketData = await this.polygonClient.getAggregatesWithShortInterest(
           ticker,
           strategy.timeframe,
           300 // Get 300 bars
@@ -86,9 +89,10 @@ export class ScannerAnalyzer {
 
         bars = marketData.bars;
         indicators = calculateTechnicalIndicators(bars);
+        shortInterest = marketData.shortInterest || {};
 
-        // Cache for future use
-        scannerCache.set(ticker, strategy.timeframe, bars, indicators);
+        // Cache for future use (including short interest!)
+        scannerCache.set(ticker, strategy.timeframe, bars, indicators, shortInterest);
       }
 
       const currentPrice = bars[bars.length - 1]?.close || 0;
@@ -130,6 +134,52 @@ export class ScannerAnalyzer {
         // For now, skip this check (would need Polygon premium subscription)
       }
 
+      // Apply squeeze filters (Short Float + TTM Squeeze)
+      if (config.minShortFloat || config.minDaysToCover || (config.ttmSqueezeState && config.ttmSqueezeState !== 'any')) {
+        console.log(`[Scanner] ${ticker}: Applying squeeze filters - minShortFloat: ${config.minShortFloat}, minDaysToCover: ${config.minDaysToCover}, ttmSqueezeState: ${config.ttmSqueezeState}`);
+        console.log(`[Scanner] ${ticker}: shortInterest data:`, shortInterest);
+        
+        const ohlcv = bars.map(b => ({
+          timestamp: b.timestamp,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+          volume: b.volume,
+        }));
+        
+        // Calculate squeeze analysis with actual short interest data
+        const squeezeAnalysis = analyzeCombinedSqueeze(ohlcv, shortInterest, 5);
+        console.log(`[Scanner] ${ticker}: Squeeze analysis - Short Float: ${squeezeAnalysis.shortSqueeze.shortFloat}, TTM: ${squeezeAnalysis.ttmSqueeze.current.state}`);
+        
+        // Apply Short Float filter
+        if (config.minShortFloat && squeezeAnalysis.shortSqueeze.shortFloat !== null) {
+          if (squeezeAnalysis.shortSqueeze.shortFloat < config.minShortFloat) {
+            console.log(`[Scanner] ${ticker}: Short float ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}% < ${config.minShortFloat}%`);
+            return null;
+          }
+        }
+        
+        // Apply Days to Cover filter
+        if (config.minDaysToCover && squeezeAnalysis.shortSqueeze.daysToCover !== null) {
+          if (squeezeAnalysis.shortSqueeze.daysToCover < config.minDaysToCover) {
+            console.log(`[Scanner] ${ticker}: Days to cover ${squeezeAnalysis.shortSqueeze.daysToCover.toFixed(1)} < ${config.minDaysToCover}`);
+            return null;
+          }
+        }
+        
+        // Apply TTM Squeeze State filter
+        if (config.ttmSqueezeState && config.ttmSqueezeState !== 'any') {
+          const ttmState = squeezeAnalysis.ttmSqueeze.current.state;
+          if (ttmState !== config.ttmSqueezeState) {
+            console.log(`[Scanner] ${ticker}: TTM squeeze ${ttmState} != ${config.ttmSqueezeState}`);
+            return null;
+          }
+        }
+        
+        console.log(`[Scanner] ${ticker}: Passed squeeze filters (Short: ${squeezeAnalysis.shortSqueeze.shortFloat?.toFixed(1) || 'N/A'}%, DTC: ${squeezeAnalysis.shortSqueeze.daysToCover?.toFixed(1) || 'N/A'}, TTM: ${squeezeAnalysis.ttmSqueeze.current.state})`);
+      }
+
       // Build strategy input with pattern levels
       const strategyInput: StrategyInput = {
         symbol: ticker,
@@ -166,8 +216,19 @@ export class ScannerAnalyzer {
       // Evaluate strategy
       const evaluation = evaluateUserStrategy(strategy, strategyInput);
 
-      // Calculate match score
-      const matchScore = this.calculateMatchScore(evaluation, strategyInput);
+      // Calculate squeeze analysis for all stocks (for ranking)
+      const ohlcv = bars.map(b => ({
+        timestamp: b.timestamp,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume,
+      }));
+      const squeezeAnalysis = analyzeCombinedSqueeze(ohlcv, shortInterest, 5);
+
+      // Calculate match score (now includes squeeze score)
+      const matchScore = this.calculateMatchScore(evaluation, strategyInput, squeezeAnalysis);
 
       // Extract snapshot data
       const price = snapshotData.day?.c || snapshotData.prevDay?.c || currentPrice;
@@ -203,6 +264,16 @@ export class ScannerAnalyzer {
           atrPct,
           volZ: indicators.volumeZScore,
         },
+        // Add squeeze data to scan results
+        squeeze: {
+          combinedScore: squeezeAnalysis.combinedScore,
+          combinedPotential: squeezeAnalysis.combinedPotential,
+          alignment: squeezeAnalysis.alignment,
+          shortFloat: squeezeAnalysis.shortSqueeze.shortFloat,
+          daysToCover: squeezeAnalysis.shortSqueeze.daysToCover,
+          ttmState: squeezeAnalysis.ttmSqueeze.current.state,
+          ttmDuration: squeezeAnalysis.ttmSqueeze.squeezeDuration,
+        },
       };
     } catch (error) {
       console.error(`[Scanner] ${ticker}: Error -`, error);
@@ -229,11 +300,12 @@ export class ScannerAnalyzer {
   }
 
   /**
-   * Calculate match score
+   * Calculate match score with squeeze integration
    */
-  private calculateMatchScore(evaluation: any, input: StrategyInput): number {
+  private calculateMatchScore(evaluation: any, input: StrategyInput, squeezeAnalysis?: any): number {
     if (!evaluation) return 0;
 
+    // Base score from viability (0-100)
     let score = (evaluation.viability || 0) * 100;
 
     // Volume bonus
@@ -242,6 +314,23 @@ export class ScannerAnalyzer {
     // R:R bonus
     const rrFirst = evaluation.rrFirst || 0;
     if (rrFirst > 2.0) score += 5;
+
+    // Squeeze score bonus (up to 15 points)
+    if (squeezeAnalysis) {
+      const squeezeScore = squeezeAnalysis.combinedScore || 0;
+      const squeezeBonus = (squeezeScore / 100) * 15; // Max 15 points
+      score += squeezeBonus;
+
+      // Additional alignment bonus (5 points if both squeezes aligned)
+      if (squeezeAnalysis.alignment) {
+        score += 5;
+      }
+
+      // FIRE bonus (10 points for immediate breakout)
+      if (squeezeAnalysis.ttmSqueeze?.current?.state === 'FIRE') {
+        score += 10;
+      }
+    }
 
     return Math.min(100, Math.round(score));
   }

@@ -37,6 +37,15 @@ interface ScanResult {
     atrPct: number;
     volZ: number;
   };
+  squeeze?: {
+    combinedScore: number;
+    combinedPotential: 'extreme' | 'high' | 'moderate' | 'low' | 'none';
+    alignment: boolean;
+    shortFloat: number | null;
+    daysToCover: number | null;
+    ttmState: 'ON' | 'FIRE' | 'OFF';
+    ttmDuration: number;
+  };
 }
 
 export default function ScannerClient() {
@@ -54,11 +63,16 @@ export default function ScannerClient() {
   const [error, setError] = useState<string>('');
   
   // Filter states
-  const [marketCapPreset, setMarketCapPreset] = useState('mid_plus');
   const [minDollarVolume, setMinDollarVolume] = useState(20);
   const [minAtrPct, setMinAtrPct] = useState(0);
   const [maxAtrPct, setMaxAtrPct] = useState(100);
   const [trendDirection, setTrendDirection] = useState('any');
+  
+  // Squeeze filter states
+  const [minDaysToCover, setMinDaysToCover] = useState(0);
+  const [minShortFloat, setMinShortFloat] = useState(0);
+  const [ttmSqueezeState, setTtmSqueezeState] = useState('any');
+  
   const [showFilters, setShowFilters] = useState(false);
   
   const resultsPerPage = 10;
@@ -113,11 +127,14 @@ export default function ScannerClient() {
             minPrice: 5,
             maxPrice: 1000,
             minVolume: 500000,
-            marketCapPreset,
             minDollarVolume: minDollarVolume * 1_000_000,
             minAtrPct,
             maxAtrPct,
             trendDirection,
+            // Squeeze filters
+            minDaysToCover: minDaysToCover > 0 ? minDaysToCover : undefined,
+            minShortFloat: minShortFloat > 0 ? minShortFloat : undefined,
+            ttmSqueezeState: ttmSqueezeState !== 'any' ? ttmSqueezeState : undefined,
             excludeOTC: true,
             excludeETFs: true,
             excludeWarrants: true,
@@ -306,83 +323,149 @@ export default function ScannerClient() {
 
         {/* Filters Panel */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-blue-500/30 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Market Cap */}
-            <div>
-              <label className="block text-xs font-medium text-blue-300 mb-1">Market Cap</label>
-              <select
-                value={marketCapPreset}
-                onChange={(e) => setMarketCapPreset(e.target.value)}
-                disabled={isScanning}
-                className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="any">Any</option>
-                <option value="nano">Nano (&lt; $50M)</option>
-                <option value="micro">Micro ($50M–$300M)</option>
-                <option value="small">Small ($300M–$2B)</option>
-                <option value="mid">Mid ($2B–$10B)</option>
-                <option value="large">Large ($10B–$200B)</option>
-                <option value="mega">Mega (&gt; $200B)</option>
-                <option value="mid_plus">Mid+ (≥ $2B) ⭐</option>
-                <option value="large_plus">Large+ (≥ $10B)</option>
-              </select>
-            </div>
+          <div className="mt-4 pt-4 border-t border-blue-500/30">
+            {/* Basic Filters */}
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-blue-200 mb-3">Basic Filters</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Dollar Volume */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Min Dollar Volume ($M)</label>
+                  <input
+                    type="number"
+                    value={minDollarVolume}
+                    onChange={(e) => setMinDollarVolume(Number(e.target.value))}
+                    disabled={isScanning}
+                    min="0"
+                    step="5"
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                </div>
 
-            {/* Dollar Volume */}
-            <div>
-              <label className="block text-xs font-medium text-blue-300 mb-1">Min Dollar Volume ($M)</label>
-              <input
-                type="number"
-                value={minDollarVolume}
-                onChange={(e) => setMinDollarVolume(Number(e.target.value))}
-                disabled={isScanning}
-                min="0"
-                step="5"
-                className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
+                {/* Trend Direction */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Trend Direction</label>
+                  <select
+                    value={trendDirection}
+                    onChange={(e) => setTrendDirection(e.target.value)}
+                    disabled={isScanning}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    <option value="any">Any</option>
+                    <option value="uptrend">Uptrend (SMA50 &gt; SMA200)</option>
+                    <option value="downtrend">Downtrend (SMA50 &lt; SMA200)</option>
+                    <option value="neutral">Neutral</option>
+                  </select>
+                </div>
 
-            {/* Trend Direction */}
-            <div>
-              <label className="block text-xs font-medium text-blue-300 mb-1">Trend Direction</label>
-              <select
-                value={trendDirection}
-                onChange={(e) => setTrendDirection(e.target.value)}
-                disabled={isScanning}
-                className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="any">Any</option>
-                <option value="uptrend">Uptrend (SMA50 &gt; SMA200)</option>
-                <option value="downtrend">Downtrend (SMA50 &lt; SMA200)</option>
-                <option value="neutral">Neutral</option>
-              </select>
-            </div>
-
-            {/* ATR% Range */}
-            <div>
-              <label className="block text-xs font-medium text-blue-300 mb-1">ATR% Range</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={minAtrPct}
-                  onChange={(e) => setMinAtrPct(Number(e.target.value))}
-                  disabled={isScanning}
-                  min="0"
-                  step="0.5"
-                  placeholder="Min"
-                  className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                />
-                <input
-                  type="number"
-                  value={maxAtrPct}
-                  onChange={(e) => setMaxAtrPct(Number(e.target.value))}
-                  disabled={isScanning}
-                  min="0"
-                  step="0.5"
-                  placeholder="Max"
-                  className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                />
+                {/* ATR% Range */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">ATR% Range</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={minAtrPct}
+                      onChange={(e) => setMinAtrPct(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="0"
+                      step="0.5"
+                      placeholder="Min"
+                      className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <input
+                      type="number"
+                      value={maxAtrPct}
+                      onChange={(e) => setMaxAtrPct(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="0"
+                      step="0.5"
+                      placeholder="Max"
+                      className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Squeeze Filters */}
+            <div className="pt-4 border-t border-blue-500/20">
+              <h3 className="text-sm font-semibold text-blue-200 mb-3 flex items-center gap-2">
+                🔥 Squeeze Filters
+                <span className="text-xs font-normal text-blue-300">(Short Float + TTM Squeeze)</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Min Days to Cover */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">
+                    Min Days to Cover
+                    <span className="ml-1 text-blue-400 cursor-help" title="Higher DTC = harder for shorts to exit = more squeeze potential">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={minDaysToCover}
+                    onChange={(e) => setMinDaysToCover(Number(e.target.value))}
+                    disabled={isScanning}
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    placeholder="e.g., 5"
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <div className="text-xs text-blue-400 mt-1">0 = any (typical: 5-10+ is high)</div>
+                </div>
+
+                {/* Min Short Float % */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">
+                    Min Short Float %
+                    <span className="ml-1 text-blue-400 cursor-help" title="% of float shares sold short - higher = more squeeze potential">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={minShortFloat}
+                    onChange={(e) => setMinShortFloat(Number(e.target.value))}
+                    disabled={isScanning}
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="e.g., 15"
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <div className="text-xs text-blue-400 mt-1">0 = any (typical: 15-20%+ is high)</div>
+                </div>
+
+                {/* TTM Squeeze State */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">
+                    TTM Squeeze State
+                    <span className="ml-1 text-blue-400 cursor-help" title="Volatility compression indicator - FIRE = breakout happening">ⓘ</span>
+                  </label>
+                  <select
+                    value={ttmSqueezeState}
+                    onChange={(e) => setTtmSqueezeState(e.target.value)}
+                    disabled={isScanning}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    <option value="any">Any</option>
+                    <option value="FIRE">🔥 FIRE (Breakout!)</option>
+                    <option value="ON">⚡ ON (Building Pressure)</option>
+                    <option value="OFF">OFF (No Squeeze)</option>
+                  </select>
+                  <div className="text-xs text-blue-400 mt-1">FIRE = just broke out of squeeze</div>
+                </div>
+              </div>
+              
+              {/* Squeeze Filter Info */}
+              {(minDaysToCover > 0 || minShortFloat > 0 || ttmSqueezeState !== 'any') && (
+                <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="text-xs text-blue-200">
+                    <span className="font-semibold">Active Squeeze Filters:</span>
+                    {minDaysToCover > 0 && <span className="ml-2">DTC ≥ {minDaysToCover}</span>}
+                    {minShortFloat > 0 && <span className="ml-2">Short Float ≥ {minShortFloat}%</span>}
+                    {ttmSqueezeState !== 'any' && <span className="ml-2">TTM: {ttmSqueezeState}</span>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -599,6 +682,52 @@ function ResultCard({ result }: { result: ScanResult }) {
           <div className="bg-slate-700/50 rounded p-2">
             <div className="text-blue-300">ATR%</div>
             <div className="text-white font-semibold">{result.indicators.atrPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      )}
+
+      {/* Squeeze Analysis (if available) */}
+      {result.squeeze && result.squeeze.combinedScore > 0 && (
+        <div className="mb-4 p-3 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-purple-200">
+                🔥 Squeeze: {result.squeeze.combinedScore}/100
+              </span>
+              {result.squeeze.alignment && (
+                <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/30">
+                  ⚡ Aligned
+                </span>
+              )}
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              result.squeeze.combinedPotential === 'extreme' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
+              result.squeeze.combinedPotential === 'high' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
+              result.squeeze.combinedPotential === 'moderate' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+              'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+            }`}>
+              {result.squeeze.combinedPotential.toUpperCase()}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-blue-300">Short Float: </span>
+              <span className="text-white font-semibold">
+                {result.squeeze.shortFloat !== null ? `${result.squeeze.shortFloat.toFixed(1)}%` : 'N/A'}
+              </span>
+            </div>
+            <div>
+              <span className="text-blue-300">TTM: </span>
+              <span className={`font-semibold ${
+                result.squeeze.ttmState === 'FIRE' ? 'text-red-400' :
+                result.squeeze.ttmState === 'ON' ? 'text-yellow-400' :
+                'text-gray-400'
+              }`}>
+                {result.squeeze.ttmState === 'FIRE' ? '🔥 FIRE' :
+                 result.squeeze.ttmState === 'ON' ? `⚡ ON (${result.squeeze.ttmDuration}bars)` :
+                 '⚪ OFF'}
+              </span>
+            </div>
           </div>
         </div>
       )}

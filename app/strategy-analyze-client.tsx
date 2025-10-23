@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import SqueezeAnalysisCard from "./components/squeeze-analysis-card";
+import TradeCaseCard from "./components/trade-case-card";
 
 // Types for the new strategy system
 interface StrategyEvaluation {
@@ -65,6 +67,41 @@ interface StrategyResponse {
   mentor: {
     systemMessage: string;
     explanation: string;
+    forTrade?: string[];
+    againstTrade?: string[];
+    aiGenerated?: boolean;
+  };
+  squeezeAnalysis?: {
+    shortSqueeze: {
+      potential: 'high' | 'moderate' | 'low' | 'none';
+      score: number;
+      daysToCover: number | null;
+      shortFloat: number | null;
+      shortVolumeZ: number | null;
+      shortVolumeTrend: 'increasing' | 'decreasing' | 'stable' | 'unknown';
+      triggers: string[];
+      warnings: string[];
+    };
+    ttmSqueeze: {
+      current: {
+        state: 'ON' | 'FIRE' | 'OFF';
+        momentumDirection: 'bullish' | 'bearish' | 'neutral';
+        momentumStrength: number;
+        histogram: number;
+      };
+      squeezeDuration: number;
+      fireConfirmed: boolean;
+      potentialBreakout: 'bullish' | 'bearish' | 'neutral';
+      triggers: string[];
+      warnings: string[];
+    };
+    // Flat structure (not nested under "combined")
+    combinedScore: number;
+    combinedPotential: 'extreme' | 'high' | 'moderate' | 'low' | 'none';
+    alignment: boolean;
+    recommendation: string;
+    triggers: string[];
+    warnings: string[];
   };
   summary: {
     risk: number;
@@ -288,13 +325,15 @@ export default function StrategyAnalyzeClient() {
             </div>
           </div>
 
-          {/* Trade Plan */}
-          {result.evaluation.plan && (
-            <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
-              <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
+          {/* Trade Plan & Trade Case - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Trade Plan */}
+            {result.evaluation.plan && (
+              <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
+                <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
                   <div className="space-y-2">
                     {(() => {
                       const plan = result.evaluation.plan!;
@@ -324,18 +363,18 @@ export default function StrategyAnalyzeClient() {
                         </>
                       );
                     })()}
-                      <div className="flex justify-between">
-                        <span className="text-blue-200">Risk per Share:</span>
-                        <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-200">Position Size:</span>
-                        <span className="font-medium text-white">{result.summary.positionSize.toFixed(1)}%</span>
-                      </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-200">Risk per Share:</span>
+                      <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-200">Position Size:</span>
+                      <span className="font-medium text-white">{result.summary.positionSize.toFixed(1)}%</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
                   <div className="space-y-2">
                     {(() => {
                       const plan = result.evaluation.plan!;
@@ -355,10 +394,24 @@ export default function StrategyAnalyzeClient() {
                         );
                       });
                     })()}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Trade Case (FOR/AGAINST) */}
+            {result.mentor && (result.mentor.forTrade || result.mentor.againstTrade) && (
+              <TradeCaseCard 
+                forTrade={result.mentor.forTrade}
+                againstTrade={result.mentor.againstTrade}
+              />
+            )}
+          </div>
+
+          {/* Squeeze Analysis */}
+          {result.squeezeAnalysis && (
+            <SqueezeAnalysisCard squeezeAnalysis={result.squeezeAnalysis} />
           )}
 
           {/* Technical Indicators */}
@@ -575,9 +628,16 @@ export default function StrategyAnalyzeClient() {
             </div>
           )}
 
-          {/* Mentor Explanation */}
+          {/* AI Mentor Analysis */}
           <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl border border-white/10 p-6">
-            <h3 className="text-xl font-semibold text-white mb-6">AI Mentor Analysis</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">🤖 AI Mentor Analysis</h3>
+              {result.mentor.aiGenerated && (
+                <span className="px-3 py-1 bg-purple-500/20 border border-purple-500/30 rounded-full text-xs font-medium text-purple-300">
+                  GPT-4o-mini Powered
+                </span>
+              )}
+            </div>
             <div className="space-y-6">
               {result.mentor.explanation.split('\n\n').map((section, index) => {
                 // Skip empty sections

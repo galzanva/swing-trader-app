@@ -67,6 +67,11 @@ export interface EnhancedScannerConfig {
   // Trend
   trendDirection?: TrendDirection;
   
+  // Squeeze filters (Short Float Squeeze + TTM Squeeze)
+  minDaysToCover?: number; // Min days to cover (e.g., 5)
+  minShortFloat?: number; // Min short float % (e.g., 15)
+  ttmSqueezeState?: 'ON' | 'FIRE' | 'OFF' | 'any'; // TTM squeeze state filter
+  
   // Exchange/Type
   exchange?: ExchangeFilter;
   excludeOTC?: boolean;

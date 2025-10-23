@@ -62,6 +62,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API] Starting market scan for strategy: ${strategy.name}`);
     console.log(`[API] User: ${session.user.email}, Max results: ${maxResults}, Stream: ${stream}`);
+    
+    // Clear cache to ensure fresh squeeze data
+    const { scannerCache } = await import('@/lib/scanner/scanner-cache');
+    scannerCache.clear();
+    console.log(`[API] Cache cleared for fresh squeeze analysis`);
 
     // Configure scanner
     const scanConfig: ScannerConfig = {
@@ -70,6 +75,13 @@ export async function POST(request: NextRequest) {
       minVolume: config?.minVolume || 500000,
       marketCapPreset: config?.marketCapPreset || 'mid_plus',
       minDollarVolume: config?.minDollarVolume || 20_000_000,
+      minAtrPct: config?.minAtrPct,
+      maxAtrPct: config?.maxAtrPct,
+      trendDirection: config?.trendDirection,
+      // Squeeze filters (CRITICAL!)
+      minDaysToCover: config?.minDaysToCover,
+      minShortFloat: config?.minShortFloat,
+      ttmSqueezeState: config?.ttmSqueezeState,
       excludeOTC: config?.excludeOTC !== false,
       excludeETFs: config?.excludeETFs !== false,
       excludeWarrants: config?.excludeWarrants !== false,
@@ -77,6 +89,12 @@ export async function POST(request: NextRequest) {
       sortByDollarVolume: true,
       earlyExitEnabled: true,
     };
+    
+    console.log(`[API] Scanner config:`, {
+      minShortFloat: scanConfig.minShortFloat,
+      minDaysToCover: scanConfig.minDaysToCover,
+      ttmSqueezeState: scanConfig.ttmSqueezeState,
+    });
 
     // If streaming is requested, use Server-Sent Events
     if (stream) {

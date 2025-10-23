@@ -13,6 +13,7 @@ interface CacheEntry {
   lastBarTimestamp: number;
   bars: OHLCV[];
   indicators: TechnicalIndicators;
+  shortInterest?: any; // Short interest data (DTC, short float, etc.)
   cachedAt: number; // Epoch timestamp
 }
 
@@ -35,7 +36,7 @@ class ScannerCache {
     ticker: string,
     timeframe: string,
     lastBarTimestamp?: number
-  ): { bars: OHLCV[]; indicators: TechnicalIndicators } | null {
+  ): { bars: OHLCV[]; indicators: TechnicalIndicators; shortInterest?: any } | null {
     const key = this.getCacheKey(ticker, timeframe);
     const entry = this.cache.get(key);
 
@@ -58,6 +59,7 @@ class ScannerCache {
     return {
       bars: entry.bars,
       indicators: entry.indicators,
+      shortInterest: entry.shortInterest,
     };
   }
 
@@ -68,7 +70,8 @@ class ScannerCache {
     ticker: string,
     timeframe: string,
     bars: OHLCV[],
-    indicators: TechnicalIndicators
+    indicators: TechnicalIndicators,
+    shortInterest?: any
   ): void {
     // Evict oldest entries if cache is full
     if (this.cache.size >= this.maxEntries) {
@@ -87,6 +90,7 @@ class ScannerCache {
       lastBarTimestamp,
       bars,
       indicators,
+      shortInterest,
       cachedAt: Date.now(),
     });
   }

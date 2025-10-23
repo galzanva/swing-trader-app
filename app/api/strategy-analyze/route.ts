@@ -11,6 +11,8 @@ import { buildStrategyInput, detectSPYRegimeFromData } from '@/lib/strategies/in
 import { evaluateAllStrategies, getStrategySummary } from '@/lib/strategies/orchestrator';
 import { generateFullMentorOutput, generateMarkdownReport } from '@/lib/strategies/mentor';
 import { evaluateAllStrategiesWithUser } from '@/lib/strategy-builder/orchestrator-integration';
+import { analyzeCombinedSqueeze } from '@/lib/indicators/squeeze';
+import { LLMAnalyzer } from '@/lib/llm/analyzer';
 
 export async function POST(request: Request) {
   try {
@@ -52,9 +54,9 @@ export async function POST(request: Request) {
 
     console.log(`[Strategy Analyze] Starting analysis for ${symbol} on ${timeframe}`);
 
-    // 1. Fetch market data
+    // 1. Fetch market data WITH short interest
     const polygonClient = new PolygonClient(polygonApiKey);
-    const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
+    const marketData = await polygonClient.getAggregatesWithShortInterest(symbol, timeframe as any);
 
     if (marketData.bars.length < 200) {
       return NextResponse.json(
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`[Strategy Analyze] Fetched ${marketData.bars.length} bars`);
+    console.log(`[Strategy Analyze] Fetched ${marketData.bars.length} bars with short interest data`);
 
     // 2. Fetch SPY data for regime detection (optional)
     let spyRegime: 'bullish' | 'neutral' | 'bearish' = 'neutral';
@@ -89,7 +91,32 @@ export async function POST(request: Request) {
     const strategyInput = buildStrategyInput(marketData, spyRegime, null);
     console.log(`[Strategy Analyze] Built strategy input`);
 
-    // 4. Evaluate all strategies (user strategies first, then core strategies)
+    // 4. Calculate Squeeze Analysis (Short Float + TTM Squeeze)
+    let squeezeAnalysis;
+    try {
+      const ohlcv = marketData.bars.map(b => ({
+        timestamp: b.timestamp,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume,
+      }));
+      
+      const shortInterest = marketData.shortInterest || {};
+      const combinedSqueeze = analyzeCombinedSqueeze(ohlcv, shortInterest, 5);
+      
+      // Pass the FULL combined squeeze object (not transformed)
+      // The LLM expects the flat structure with combinedScore, combinedPotential, etc.
+      squeezeAnalysis = combinedSqueeze;
+      
+      console.log(`[Strategy Analyze] Squeeze analysis: ${combinedSqueeze.combinedPotential} potential (score: ${combinedSqueeze.combinedScore})`);
+    } catch (error) {
+      console.error('[Strategy Analyze] Error analyzing squeeze dynamics:', error);
+      squeezeAnalysis = undefined;
+    }
+
+    // 5. Evaluate all strategies (user strategies first, then core strategies)
     const userId = session.user?.id;
     const evaluation = await evaluateAllStrategiesWithUser(strategyInput, userId);
     
@@ -102,28 +129,62 @@ export async function POST(request: Request) {
 
     console.log(`[Strategy Analyze] Evaluated strategies: ${evaluation.strategy} - ${evaluation.status}`);
 
-    // 5. Generate mentor output
-    const mentorOutput = generateFullMentorOutput(evaluation);
-    console.log(`[Strategy Analyze] Generated mentor explanation`);
+    // 6. Generate AI-powered mentor analysis (if OpenAI key available)
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    let aiAnalysis;
+    let mentorOutput;
+    
+    if (openaiApiKey && (evaluation.status === 'ready' || evaluation.status === 'candidate')) {
+      try {
+        const llmAnalyzer = new LLMAnalyzer(openaiApiKey);
+        aiAnalysis = await llmAnalyzer.generateStrategyAnalysis(
+          symbol,
+          evaluation,
+          strategyInput,
+          squeezeAnalysis
+        );
+        console.log(`[Strategy Analyze] Generated AI mentor analysis with squeeze insights`);
+      } catch (error) {
+        console.error('[Strategy Analyze] Error generating AI analysis:', error);
+        // Fallback to template-based mentor
+        mentorOutput = generateFullMentorOutput(evaluation);
+      }
+    } else {
+      // Fallback to template-based mentor
+      mentorOutput = generateFullMentorOutput(evaluation);
+      console.log(`[Strategy Analyze] Generated template-based mentor explanation`);
+    }
 
-    // 6. Calculate summary statistics
+    // 7. Calculate summary statistics
     const summary = getStrategySummary(evaluation);
     console.log(`[Strategy Analyze] Risk: $${summary.risk}, Reward: $${summary.reward}, RR: ${summary.rrRatio}`);
 
-    // 7. Historical data is now provided by BACKTESTING (no database needed)
+    // 8. Historical data is now provided by BACKTESTING (no database needed)
     // The backtesting engine already scanned the 200 bars and found historical occurrences
     // recordHistory parameter is now ignored - backtesting runs automatically
 
-    // 8. Build response
+    // 9. Build response
     const response = {
       // Core evaluation
       evaluation,
       
-      // Mentor explanation
-      mentor: {
-        systemMessage: mentorOutput.systemMessage,
-        explanation: mentorOutput.explanation,
+      // AI Analysis (if available) or fallback to template
+      mentor: aiAnalysis ? {
+        systemMessage: 'AI-powered analysis using GPT-4o-mini',
+        explanation: aiAnalysis.mentorNotes,
+        forTrade: aiAnalysis.forTrade,
+        againstTrade: aiAnalysis.againstTrade,
+        aiGenerated: true,
+      } : {
+        systemMessage: mentorOutput!.systemMessage,
+        explanation: mentorOutput!.explanation,
+        forTrade: [], // No for/against in template mode
+        againstTrade: [], // No for/against in template mode
+        aiGenerated: false,
       },
+      
+      // Squeeze Analysis
+      squeezeAnalysis,
       
       // Summary stats
       summary,
