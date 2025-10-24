@@ -26,29 +26,55 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { strategyId, config, maxResults = 20, stream = false } = body;
 
-    if (!strategyId) {
-      return NextResponse.json(
-        { error: 'Strategy ID is required' },
-        { status: 400 }
-      );
-    }
+    // Check if we're in overview mode
+    const isOverviewMode = config?.overviewMode === true;
 
-    // Get user's strategy
-    const strategies = await getUserStrategies(session.user.id, false);
-    const strategy = strategies.find(s => s.id === strategyId);
+    let strategy: StrategyDsl;
+    let strategyId_actual: string | undefined;
 
-    if (!strategy) {
-      return NextResponse.json(
-        { error: 'Strategy not found' },
-        { status: 404 }
-      );
-    }
+    if (!isOverviewMode) {
+      // Strategy mode - require strategyId
+      if (!strategyId) {
+        return NextResponse.json(
+          { error: 'Strategy ID is required (or use overview mode)' },
+          { status: 400 }
+        );
+      }
 
-    if (!strategy.isActive) {
-      return NextResponse.json(
-        { error: 'Strategy is not active' },
-        { status: 400 }
-      );
+      // Get user's strategy
+      const strategies = await getUserStrategies(session.user.id, false);
+      const userStrategy = strategies.find(s => s.id === strategyId);
+
+      if (!userStrategy) {
+        return NextResponse.json(
+          { error: 'Strategy not found' },
+          { status: 404 }
+        );
+      }
+
+      if (!userStrategy.isActive) {
+        return NextResponse.json(
+          { error: 'Strategy is not active' },
+          { status: 400 }
+        );
+      }
+
+      strategy = userStrategy.dsl;
+      strategyId_actual = userStrategy.id;
+    } else {
+      // Overview mode - create a dummy strategy for scanning
+      strategy = {
+        name: 'Market Overview',
+        description: 'Filter-only scan without strategy criteria',
+        direction: 'long' as const,
+        timeframe: '1day' as const,
+        eligibility: {}, // Empty eligibility = no strategy criteria
+        trigger: { type: 'custom' as const, level: 'price', description: 'N/A' },
+        stop: { type: 'fixed' as const, value: '0', description: 'N/A' },
+        targets: [],
+        riskManagement: { minRR: 0, maxPositionSize: 0, earningsDaysBuffer: 0 },
+      };
+      strategyId_actual = undefined;
     }
 
     // Validate Polygon API key
@@ -60,8 +86,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[API] Starting market scan for strategy: ${strategy.name}`);
-    console.log(`[API] User: ${session.user.email}, Max results: ${maxResults}, Stream: ${stream}`);
+    console.log(`[API] Starting market scan${isOverviewMode ? ' (OVERVIEW MODE)' : ''} for strategy: ${strategy.name}`);
+    console.log(`[API] User: ${session.user.email}, Max results: ${maxResults}, Stream: ${stream}, Overview: ${isOverviewMode}`);
     
     // Clear cache to ensure fresh squeeze data
     const { scannerCache } = await import('@/lib/scanner/scanner-cache');
@@ -70,6 +96,7 @@ export async function POST(request: NextRequest) {
 
     // Configure scanner
     const scanConfig: ScannerConfig = {
+      overviewMode: isOverviewMode, // NEW: Enable overview mode (skip strategy matching)
       minPrice: config?.minPrice || 5,
       maxPrice: config?.maxPrice || 1000,
       minVolume: config?.minVolume || 500000,
@@ -83,7 +110,7 @@ export async function POST(request: NextRequest) {
       minShortFloat: config?.minShortFloat,
       ttmSqueezeState: config?.ttmSqueezeState,
       excludeOTC: config?.excludeOTC !== false,
-      excludeETFs: config?.excludeETFs !== false,
+      excludeETFs: config?.excludeETFs !== false, // Default: true (exclude ETFs)
       excludeWarrants: config?.excludeWarrants !== false,
       excludeADRs: config?.excludeADRs !== false,
       sortByDollarVolume: true,
@@ -113,7 +140,7 @@ export async function POST(request: NextRequest) {
 
             // Run scan
             const results = await scanner.scanMarket(
-              strategy.dsl as StrategyDsl,
+              strategy, // Already a StrategyDsl
               scanConfig,
               maxResults
             );
@@ -126,7 +153,7 @@ export async function POST(request: NextRequest) {
               data: {
                 success: true,
                 strategy: {
-                  id: strategy.id,
+                  id: strategyId_actual || 'overview',
                   name: strategy.name,
                   direction: strategy.direction,
                   timeframe: strategy.timeframe,
@@ -173,7 +200,7 @@ export async function POST(request: NextRequest) {
     // Non-streaming mode (backward compatibility)
     const scanner = new MarketScanner(apiKey);
     const results = await scanner.scanMarket(
-      strategy.dsl as StrategyDsl,
+      strategy, // Already a StrategyDsl
       scanConfig,
       maxResults
     );
@@ -183,7 +210,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       strategy: {
-        id: strategy.id,
+        id: strategyId_actual || 'overview',
         name: strategy.name,
         direction: strategy.direction,
         timeframe: strategy.timeframe,

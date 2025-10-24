@@ -47,6 +47,9 @@ export const MARKET_CAP_PRESETS: Record<MarketCapPreset, MarketCapRange | null> 
 };
 
 export interface EnhancedScannerConfig {
+  // Scan mode
+  overviewMode?: boolean; // If true, skip strategy evaluation and just show filtered stocks
+  
   // Price filters
   minPrice?: number;
   maxPrice?: number;
@@ -75,7 +78,7 @@ export interface EnhancedScannerConfig {
   // Exchange/Type
   exchange?: ExchangeFilter;
   excludeOTC?: boolean;
-  excludeETFs?: boolean;
+  excludeETFs?: boolean; // Default: true (exclude ETFs by default)
   excludeWarrants?: boolean;
   excludeADRs?: boolean;
   

@@ -56,12 +56,85 @@ export interface MarketData {
   };
 }
 
+export interface GroupedDailyBar {
+  T: string;  // Ticker symbol
+  c: number;  // Close
+  h: number;  // High
+  l: number;  // Low
+  o: number;  // Open
+  v: number;  // Volume
+  vw: number; // VWAP
+  t: number;  // Timestamp
+  n?: number; // Number of transactions
+  otc?: boolean; // Is OTC
+}
+
+export interface GroupedDailyResponse {
+  status: string;
+  resultsCount: number;
+  results: GroupedDailyBar[];
+  adjusted: boolean;
+  queryCount: number;
+}
+
 export class PolygonClient {
   private apiKey: string;
   private baseUrl = "https://api.polygon.io";
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+  }
+
+  /**
+   * Fetch all stocks for a given date (grouped daily endpoint)
+   * This returns ALL U.S. stocks in a single API call - perfect for pre-filtering!
+   */
+  async getGroupedDaily(date?: string): Promise<GroupedDailyResponse> {
+    try {
+      // Use yesterday or provided date
+      const targetDate = date || this.getYesterdayDate();
+      
+      const url = `${this.baseUrl}/v2/aggs/grouped/locale/us/market/stocks/${targetDate}`;
+      const params = new URLSearchParams({
+        adjusted: 'true',
+        include_otc: 'false', // Exclude OTC by default
+        apiKey: this.apiKey,
+      });
+
+      console.log(`[Polygon] Fetching grouped daily for ${targetDate}...`);
+      const response = await fetch(`${url}?${params}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Polygon API error (${response.status}): ${errorText}`);
+      }
+
+      const data: GroupedDailyResponse = await response.json();
+      console.log(`[Polygon] Grouped daily returned ${data.resultsCount || 0} stocks`);
+      
+      return data;
+    } catch (error: any) {
+      console.error('[Polygon] Grouped daily fetch failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get yesterday's date in YYYY-MM-DD format
+   */
+  private getYesterdayDate(): string {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    
+    // If it's a weekend, go back to Friday
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0) { // Sunday
+      date.setDate(date.getDate() - 2);
+    } else if (dayOfWeek === 6) { // Saturday
+      date.setDate(date.getDate() - 1);
+    }
+    
+    return date.toISOString().split('T')[0];
   }
 
   /**

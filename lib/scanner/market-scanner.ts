@@ -158,12 +158,23 @@ export class MarketScanner {
       // Phase 3: Detailed analysis (fetch OHLCV + indicators)
       const results: ScanResult[] = [];
       
-      // Adaptive concurrency - MUCH higher for paid Polygon accounts!
+      // HIGH concurrency for paid Polygon Starter plan (unlimited API calls!)
       const hasSqueezeFilters = finalConfig.minShortFloat || finalConfig.minDaysToCover || (finalConfig.ttmSqueezeState && finalConfig.ttmSqueezeState !== 'any');
-      const baseConcurrency = hasSqueezeFilters ? 20 : 10; // High concurrency for paid plan
+      const isOverviewMode = finalConfig.overviewMode === true;
+      
+      // Maximize concurrency for paid plan
+      let baseConcurrency: number;
+      if (isOverviewMode) {
+        baseConcurrency = 30; // Overview: very fast, no strategy evaluation
+      } else if (hasSqueezeFilters) {
+        baseConcurrency = 25; // Squeeze filtering: high concurrency
+      } else {
+        baseConcurrency = 20; // Strategy evaluation: moderate-high concurrency
+      }
+      
       const adaptiveConcurrency = Math.min(baseConcurrency, Math.ceil(filtered.length / 10));
       
-      console.log(`[Scanner] Using concurrency: ${adaptiveConcurrency}${hasSqueezeFilters ? ' (maximized for squeeze filtering)' : ''}`);
+      console.log(`[Scanner] Using concurrency: ${adaptiveConcurrency} (paid plan - unlimited API calls!)${hasSqueezeFilters ? ' [squeeze filtering]' : isOverviewMode ? ' [overview mode]' : ''}`);
       
       for (let i = 0; i < filtered.length; i += adaptiveConcurrency) {
         if (this.abortController.signal.aborted) {
@@ -176,13 +187,18 @@ export class MarketScanner {
         const percent = 10 + Math.round((i / filtered.length) * 80);
         const qualified = results.filter(r => r.matchDetails.eligible).length;
         
+        // Different message for overview vs strategy mode
+        const progressMessage = isOverviewMode 
+          ? `Scanning market... (${stats.cacheHits} cached, ${stats.apiCalls} API calls)`
+          : `Analyzing tickers... (${stats.cacheHits} cached, ${stats.apiCalls} API calls)`;
+        
         this.reportProgress({
           phase: 'detailed',
           total: filtered.length,
           processed: i,
           found: results.length,
           qualified,
-          message: `Analyzing tickers... (${stats.cacheHits} cached, ${stats.apiCalls} API calls)`,
+          message: progressMessage,
           percent,
           cacheHits: stats.cacheHits,
           apiCalls: stats.apiCalls,
@@ -205,13 +221,15 @@ export class MarketScanner {
         }
         
         // Early exit if enabled and we have enough qualified matches
-        // When squeeze filters are active, be more generous with early exit threshold
-        const qualifiedMatches = results.filter(r => r.matchDetails.eligible && r.matchScore >= 50);
-        const earlyExitThreshold = hasSqueezeFilters ? Math.max(maxResults, 20) : maxResults;
-        
-        if (finalConfig.earlyExitEnabled && qualifiedMatches.length >= earlyExitThreshold) {
-          console.log(`[Scanner] Early exit: Found ${qualifiedMatches.length} qualified matches (threshold: ${earlyExitThreshold})`);
-          break;
+        // NEVER early exit in overview mode - user wants to see all filtered stocks
+        if (!isOverviewMode) {
+          const qualifiedMatches = results.filter(r => r.matchDetails.eligible && r.matchScore >= 50);
+          const earlyExitThreshold = hasSqueezeFilters ? Math.max(maxResults, 20) : maxResults;
+          
+          if (finalConfig.earlyExitEnabled && qualifiedMatches.length >= earlyExitThreshold) {
+            console.log(`[Scanner] Early exit: Found ${qualifiedMatches.length} qualified matches (threshold: ${earlyExitThreshold})`);
+            break;
+          }
         }
       }
 
@@ -242,11 +260,14 @@ export class MarketScanner {
       // Return ONLY qualified matches, or if none, return top unqualified with reasons
       let finalResults: ScanResult[];
       
+      // In overview mode, return MORE results (users want broad market view)
+      const maxResultsToReturn = isOverviewMode ? 100 : maxResults; // 100 for overview, 20 for strategy
+      
       if (qualifiedResults.length > 0) {
         // Rank qualified results and return top ones
         const ranked = this.rankResults(qualifiedResults);
-        finalResults = ranked.slice(0, maxResults);
-        console.log(`[Scanner] Returning ${finalResults.length} qualified matches`);
+        finalResults = ranked.slice(0, maxResultsToReturn);
+        console.log(`[Scanner] Returning ${finalResults.length} qualified matches${isOverviewMode ? ' (overview mode - showing top 100)' : ''}`);
       } else {
         // No qualified matches - return top unqualified results to show why they failed
         console.log(`[Scanner] No qualified matches found. Returning top ${Math.min(20, unqualifiedResults.length)} with failure reasons.`);
@@ -293,42 +314,72 @@ export class MarketScanner {
   }
 
   /**
-   * Get market snapshot using Polygon API
+   * Get market snapshot using Polygon's Grouped Daily API
+   * This fetches ALL U.S. stocks in a single API call (6000-8000 stocks)
+   * Much more efficient for paid plans with unlimited API calls!
    */
   private async getMarketSnapshot(config: ScannerConfig): Promise<any[]> {
     try {
-      const apiKey = process.env.POLYGON_API_KEY;
-      if (!apiKey) throw new Error('POLYGON_API_KEY not set');
-
-      // Use Polygon's snapshot endpoint
-      const includeOTC = config.excludeOTC === false;
-      const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?include_otc=${includeOTC}&apiKey=${apiKey}`;
+      console.log(`[Scanner] Fetching grouped daily for TODAY and YESTERDAY (2 API calls)...`);
       
-      console.log(`[Scanner] Fetching snapshot from Polygon...`);
-      const response = await fetch(url);
+      // Fetch TODAY and YESTERDAY to calculate proper day-over-day change
+      const [todayData, yesterdayData] = await Promise.all([
+        this.polygonClient.getGroupedDaily(), // Today (or latest trading day)
+        this.polygonClient.getGroupedDaily(this.getDateNDaysAgo(2)), // Previous trading day
+      ]);
       
-      if (!response.ok) {
-        throw new Error(`Polygon API error: ${response.status}`);
+      if (!todayData.results || todayData.results.length === 0) {
+        console.warn('[Scanner] No results from grouped daily');
+        return this.getFallbackTickers();
       }
 
-      const data = await response.json();
+      console.log(`[Scanner] Today: ${todayData.results.length} stocks, Yesterday: ${yesterdayData.results?.length || 0} stocks`);
       
-      if (!data.tickers || data.tickers.length === 0) {
-        console.warn('[Scanner] No tickers returned from snapshot');
-        return [];
+      // Create a map of yesterday's data for quick lookup
+      const yesterdayMap = new Map<string, any>();
+      if (yesterdayData.results) {
+        yesterdayData.results.forEach((bar: any) => {
+          yesterdayMap.set(bar.T, bar);
+        });
       }
+      
+      // Convert to snapshot format with proper day-over-day change
+      const snapshots = todayData.results.map(bar => {
+        const yesterdayBar = yesterdayMap.get(bar.T);
+        const prevClose = yesterdayBar ? yesterdayBar.c : bar.o; // Fallback to today's open if no prev data
+        const change = bar.c - prevClose;
+        const changePerc = (change / prevClose) * 100;
+        
+        return {
+          ticker: bar.T,
+          day: {
+            c: bar.c,  // Today's close
+            h: bar.h,  // Today's high
+            l: bar.l,  // Today's low
+            o: bar.o,  // Today's open
+            v: bar.v,  // Today's volume
+            vw: bar.vw, // Volume-weighted average price
+          },
+          prevDay: {
+            c: prevClose, // Yesterday's close (or today's open as fallback)
+            v: yesterdayBar?.v || bar.v,
+          },
+          todaysChangePerc: changePerc, // Proper day-over-day % change
+          updated: bar.t,
+        };
+      });
 
-      console.log(`[Scanner] Snapshot API returned ${data.tickers.length} tickers`);
-      return data.tickers;
+      return snapshots;
     } catch (error) {
-      console.error('[Scanner] Error fetching snapshot:', error);
-      // Fallback to common tickers if snapshot fails
+      console.error('[Scanner] Error fetching grouped daily:', error);
+      // Fallback to common tickers if API fails
       return this.getFallbackTickers();
     }
   }
 
   /**
    * Pre-filter tickers by basic criteria (no OHLCV data needed)
+   * This is where we eliminate 95%+ of stocks based on simple filters!
    */
   private preFilter(
     tickers: any[],
@@ -339,6 +390,9 @@ export class MarketScanner {
     
     // Get market cap range (optional - snapshot API doesn't always have this data)
     const marketCapRange = getMarketCapRange(config);
+
+    // ETFs are excluded by default (unless explicitly disabled)
+    const excludeETFs = config.excludeETFs !== false; // Default: true
 
     const filtered = tickers.filter(ticker => {
       const symbol = ticker.ticker;
@@ -373,8 +427,8 @@ export class MarketScanner {
         return false;
       }
       
-      // 6. ETF exclusion (check metadata if available)
-      if (config.excludeETFs && ticker.type?.toLowerCase().includes('etf')) {
+      // 6. ETF exclusion (DEFAULT ON - exclude by symbol patterns)
+      if (excludeETFs && this.isLikelyETF(symbol)) {
         return false;
       }
 
@@ -383,27 +437,97 @@ export class MarketScanner {
 
     console.log(`[Scanner] Pre-filter: ${filtered.length}/${tickers.length} passed`);
     
-    // Sort by dollar volume (most liquid first) if enabled
-    if (config.sortByDollarVolume && filtered.length > 0) {
-      filtered.sort((a, b) => {
-        const dollarVolA = (a.day?.c || a.prevDay?.c || 0) * (a.day?.v || a.prevDay?.v || 0);
-        const dollarVolB = (b.day?.c || b.prevDay?.c || 0) * (b.day?.v || b.prevDay?.v || 0);
-        return dollarVolB - dollarVolA;
-      });
-      console.log(`[Scanner] Sorted by dollar volume (most liquid first)`);
-      
-      // Limit to top N by liquidity to avoid scanning too many low-volume stocks
-      // If squeeze filters are active, scan MANY more stocks since squeeze conditions are rare
-      const hasSqueezeFilters = config.minShortFloat || config.minDaysToCover || (config.ttmSqueezeState && config.ttmSqueezeState !== 'any');
-      const maxPreFiltered = hasSqueezeFilters ? 1500 : 200; // Scan 1500 when using squeeze filters!
-      
-      if (filtered.length > maxPreFiltered) {
-        console.log(`[Scanner] Limiting to top ${maxPreFiltered} most liquid tickers${hasSqueezeFilters ? ' (extended for squeeze filtering)' : ''}`);
-        return filtered.slice(0, maxPreFiltered);
-      }
+    // ALWAYS sort by dollar volume (most liquid first)
+    filtered.sort((a, b) => {
+      const dollarVolA = (a.day?.c || a.prevDay?.c || 0) * (a.day?.v || a.prevDay?.v || 0);
+      const dollarVolB = (b.day?.c || b.prevDay?.c || 0) * (b.day?.v || b.prevDay?.v || 0);
+      return dollarVolB - dollarVolA;
+    });
+    console.log(`[Scanner] Sorted by dollar volume (highest liquidity first)`);
+    
+    // IMPORTANT: We already filtered ALL stocks above
+    // Now we need to decide how many to actually SCAN (fetch detailed data for)
+    // This is a performance optimization - we can't fetch OHLCV for 6000 stocks
+    const hasSqueezeFilters = config.minShortFloat || config.minDaysToCover || (config.ttmSqueezeState && config.ttmSqueezeState !== 'any');
+    const isOverviewMode = config.overviewMode === true;
+    
+    let maxToScan: number;
+    if (isOverviewMode) {
+      // Overview mode: Scan top 1000 most liquid (user wants broad market view)
+      maxToScan = 1000;
+    } else if (hasSqueezeFilters) {
+      // Squeeze filters: scan 2000 (squeeze conditions are rare!)
+      maxToScan = 2000;
+    } else {
+      // Strategy evaluation: scan top 300 most liquid
+      maxToScan = 300;
     }
-
+    
+    if (filtered.length > maxToScan) {
+      console.log(`[Scanner] Will scan top ${maxToScan} most liquid tickers${hasSqueezeFilters ? ' (extended for squeeze filtering)' : isOverviewMode ? ' (overview mode - broad scan)' : ''}`);
+      console.log(`[Scanner] Note: ${filtered.length} stocks passed pre-filter, but we'll only fetch detailed data for top ${maxToScan} by liquidity`);
+      return filtered.slice(0, maxToScan);
+    }
+    
+    console.log(`[Scanner] Will scan all ${filtered.length} filtered tickers`);
     return filtered;
+  }
+
+  /**
+   * Get date N trading days ago in YYYY-MM-DD format
+   */
+  private getDateNDaysAgo(days: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    
+    // Skip weekends
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0) { // Sunday -> go back to Friday
+      date.setDate(date.getDate() - 2);
+    } else if (dayOfWeek === 6) { // Saturday -> go back to Friday
+      date.setDate(date.getDate() - 1);
+    }
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Check if ticker is likely an ETF based on common patterns
+   */
+  private isLikelyETF(symbol: string): boolean {
+    const upper = symbol.toUpperCase();
+    
+    // Explicit list of common ETFs (most reliable)
+    const explicitETFs = [
+      'SPY', 'QQQ', 'IWM', 'DIA', 'VOO', 'VTI', 'VEA', 'VWO', 'AGG', 'BND',
+      'IVV', 'IJH', 'IJR', 'IWF', 'IWD', 'IWB', 'VTV', 'VUG', 'EFA', 'EEM',
+      'XLF', 'XLE', 'XLK', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY', 'XLB', 'XLRE',
+      'GLD', 'SLV', 'USO', 'UNG', 'TLT', 'SHY', 'SHV', 'LQD', 'HYG', 'JNK',
+      'ARKK', 'ARKQ', 'ARKW', 'ARKG', 'ARKF', 'FXI', 'EWJ', 'EWZ', 'EWG',
+      'SQQQ', 'TQQQ', 'UPRO', 'SPXU', 'TNA', 'TZA', 'FAZ', 'FAS', 'UDOW', 'SDOW',
+    ];
+    
+    if (explicitETFs.includes(upper)) {
+      return true;
+    }
+    
+    // Pattern-based detection for less common ETFs
+    const etfPatterns = [
+      /^[A-Z]{2,4}[XY]$/,  // SPYX, etc.
+      /^[A-Z]{2,3}[LU]$/,  // Leveraged (FAZ, TNA, TQQQ, etc.)
+      /^V[A-Z]{2,3}$/,     // Vanguard (VTI, VOO, etc.)
+      /^I[A-Z]{2,3}$/,     // iShares (IVV, IJH, etc.)
+      /^XL[A-Z]$/,         // Sector SPDRs
+      /^EW[A-Z]$/,         // Country ETFs
+      /^ARK[A-Z]$/,        // ARK Innovation
+      /^PSQ|QLD|DOG$/,     // More leveraged/inverse
+    ];
+    
+    return etfPatterns.some(pattern => pattern.test(upper));
   }
 
   /**
@@ -418,7 +542,14 @@ export class MarketScanner {
       // Secondary: Higher match score
       if (a.matchScore !== b.matchScore) return b.matchScore - a.matchScore;
 
-      // Tertiary: Higher volume
+      // Tertiary: Higher dollar volume (price * volume) for better liquidity
+      const dollarVolA = a.price * a.volume;
+      const dollarVolB = b.price * b.volume;
+      if (Math.abs(dollarVolA - dollarVolB) > 1000) { // Meaningful difference
+        return dollarVolB - dollarVolA;
+      }
+
+      // Quaternary: Higher share volume
       return b.volume - a.volume;
     });
   }

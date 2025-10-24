@@ -53,7 +53,7 @@ export default function ScannerClient() {
   const router = useRouter();
   
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string>('');
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string>('overview'); // Default to overview
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<string>('');
   const [scanPercent, setScanPercent] = useState(0);
@@ -76,6 +76,9 @@ export default function ScannerClient() {
   const [showFilters, setShowFilters] = useState(false);
   
   const resultsPerPage = 10;
+  
+  // Check if we're in overview mode
+  const isOverviewMode = selectedStrategyId === 'overview';
 
   // Load strategies on mount
   useEffect(() => {
@@ -92,10 +95,7 @@ export default function ScannerClient() {
       const data = await response.json();
       setStrategies(data.strategies || []);
       
-      // Auto-select first strategy
-      if (data.strategies && data.strategies.length > 0) {
-        setSelectedStrategyId(data.strategies[0].id);
-      }
+      // Don't auto-select - leave on 'overview' by default
     } catch (err: any) {
       console.error('Error loading strategies:', err);
       setError('Failed to load strategies');
@@ -104,7 +104,7 @@ export default function ScannerClient() {
 
   const startScan = async () => {
     if (!selectedStrategyId) {
-      setError('Please select a strategy');
+      setError('Please select a scan mode or strategy');
       return;
     }
 
@@ -112,7 +112,7 @@ export default function ScannerClient() {
     setError('');
     setResults([]);
     setCurrentPage(1);
-    setScanProgress('Initializing scan...');
+    setScanProgress(isOverviewMode ? 'Scanning market (overview mode)...' : 'Initializing scan...');
     setScanPercent(0);
     setCacheStats(null);
 
@@ -121,9 +121,10 @@ export default function ScannerClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          strategyId: selectedStrategyId,
+          strategyId: isOverviewMode ? undefined : selectedStrategyId, // Don't pass strategyId in overview mode
           stream: true, // Enable streaming
           config: {
+            overviewMode: isOverviewMode, // NEW: Enable overview mode (skip strategy matching)
             minPrice: 5,
             maxPrice: 1000,
             minVolume: 500000,
@@ -136,7 +137,7 @@ export default function ScannerClient() {
             minShortFloat: minShortFloat > 0 ? minShortFloat : undefined,
             ttmSqueezeState: ttmSqueezeState !== 'any' ? ttmSqueezeState : undefined,
             excludeOTC: true,
-            excludeETFs: true,
+            excludeETFs: true, // Default: true (exclude ETFs)
             excludeWarrants: true,
             excludeADRs: true,
             sortByDollarVolume: true,
@@ -271,7 +272,7 @@ export default function ScannerClient() {
           {/* Strategy Selector */}
           <div className="lg:col-span-2">
             <label className="block text-sm font-medium text-blue-200 mb-2">
-              Select Strategy
+              Scan Mode
             </label>
             <select
               value={selectedStrategyId}
@@ -279,13 +280,24 @@ export default function ScannerClient() {
               disabled={isScanning}
               className="w-full px-4 py-3 bg-slate-700/50 border border-blue-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              <option value="">Choose a strategy...</option>
-              {strategies.map(strategy => (
-                <option key={strategy.id} value={strategy.id}>
-                  {strategy.name} ({strategy.direction.toUpperCase()}, {strategy.timeframe})
-                </option>
-              ))}
+              <option value="overview">📊 Market Overview (Filter Only - No Strategy)</option>
+              <optgroup label="─────────────────────"></optgroup>
+              <optgroup label="Your Strategies">
+                {strategies.length === 0 && (
+                  <option value="" disabled>No strategies found</option>
+                )}
+                {strategies.map(strategy => (
+                  <option key={strategy.id} value={strategy.id}>
+                    🎯 {strategy.name} ({strategy.direction.toUpperCase()}, {strategy.timeframe})
+                  </option>
+                ))}
+              </optgroup>
             </select>
+            {isOverviewMode && (
+              <p className="mt-2 text-xs text-blue-300">
+                ℹ️ Overview mode: Stocks will be filtered but NOT evaluated against strategy criteria. Fastest scan mode.
+              </p>
+            )}
           </div>
 
           {/* Scan Button */}

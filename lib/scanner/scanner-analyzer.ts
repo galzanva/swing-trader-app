@@ -43,6 +43,7 @@ export class ScannerAnalyzer {
     strategy: StrategyDsl,
     config: EnhancedScannerConfig
   ): Promise<ScanResult | null> {
+    const isOverviewMode = config.overviewMode === true;
     const ticker = snapshotData.ticker;
 
     try {
@@ -213,8 +214,17 @@ export class ScannerAnalyzer {
         patternLevels,
       };
 
-      // Evaluate strategy
-      const evaluation = evaluateUserStrategy(strategy, strategyInput);
+      // Evaluate strategy (skip in overview mode)
+      let evaluation = null;
+      if (!isOverviewMode) {
+        evaluation = evaluateUserStrategy(strategy, strategyInput);
+        
+        // If strategy check fails, skip this stock (not in overview mode)
+        if (evaluation === null) {
+          console.log(`[Scanner] ${ticker}: Does not meet strategy criteria`);
+          return null;
+        }
+      }
 
       // Calculate squeeze analysis for all stocks (for ranking)
       const ohlcv = bars.map(b => ({
@@ -247,10 +257,10 @@ export class ScannerAnalyzer {
         marketCap: snapshotData.marketCap,
         matchScore,
         matchDetails: {
-          eligible: evaluation !== null,
+          eligible: isOverviewMode ? true : (evaluation !== null), // Always eligible in overview mode
           viability: evaluation?.viability,
           quality: evaluation?.quality,
-          failureReason: evaluation === null
+          failureReason: evaluation === null && !isOverviewMode
             ? this.getFailureReason(strategyInput, strategy)
             : undefined,
           passedCriteria: evaluation?.reasons || [],
