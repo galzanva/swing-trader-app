@@ -77,6 +77,46 @@ export interface GroupedDailyResponse {
   queryCount: number;
 }
 
+export interface PolygonFundamentals {
+  ticker: string;
+  date: string;
+  price: number;
+  market_cap?: number;
+  earnings_per_share?: number;
+  price_to_earnings?: number;
+  price_to_book?: number;
+  price_to_sales?: number;
+  dividend_yield?: number;
+  return_on_equity?: number;
+  return_on_assets?: number;
+  debt_to_equity?: number;
+  current_ratio?: number;
+  quick_ratio?: number;
+  free_cash_flow?: number;
+  ev_to_ebitda?: number;
+}
+
+export interface PolygonNewsArticle {
+  id: string;
+  title: string;
+  author: string;
+  published_utc: string;
+  article_url: string;
+  description?: string;
+  tickers: string[];
+  image_url?: string;
+  publisher?: {
+    name: string;
+    homepage_url?: string;
+    logo_url?: string;
+  };
+  insights?: Array<{
+    ticker: string;
+    sentiment: 'positive' | 'negative' | 'neutral';
+    sentiment_reasoning?: string;
+  }>;
+}
+
 export class PolygonClient {
   private apiKey: string;
   private baseUrl = "https://api.polygon.io";
@@ -424,6 +464,120 @@ export class PolygonClient {
     }
     
     return marketData;
+  }
+
+  /**
+   * Fetch comprehensive financial ratios and fundamentals
+   * https://polygon.io/docs/rest/stocks/fundamentals/ratios
+   */
+  async getFundamentals(symbol: string): Promise<PolygonFundamentals | null> {
+    try {
+      const url = `${this.baseUrl}/stocks/financials/v1/ratios`;
+      const params = new URLSearchParams({
+        ticker: symbol,
+        limit: '1',
+        sort: 'date.desc', // Most recent first
+        apiKey: this.apiKey,
+      });
+
+      console.log(`[Polygon] Fetching fundamentals for ${symbol}...`);
+      const response = await fetch(`${url}?${params}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`[Polygon] No fundamentals data for ${symbol}`);
+          return null;
+        }
+        const errorText = await response.text();
+        throw new Error(`Polygon API error (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.results || data.results.length === 0) {
+        console.warn(`[Polygon] No fundamentals results for ${symbol}`);
+        return null;
+      }
+
+      const result = data.results[0];
+      console.log(`[Polygon] Fundamentals for ${symbol}: P/E ${result.price_to_earnings}, P/B ${result.price_to_book}`);
+      
+      return {
+        ticker: result.ticker,
+        date: result.date,
+        price: result.price,
+        market_cap: result.market_cap,
+        earnings_per_share: result.earnings_per_share,
+        price_to_earnings: result.price_to_earnings,
+        price_to_book: result.price_to_book,
+        price_to_sales: result.price_to_sales,
+        dividend_yield: result.dividend_yield,
+        return_on_equity: result.return_on_equity,
+        return_on_assets: result.return_on_assets,
+        debt_to_equity: result.debt_to_equity,
+        current_ratio: result.current,
+        quick_ratio: result.quick,
+        free_cash_flow: result.free_cash_flow,
+        ev_to_ebitda: result.ev_to_ebitda,
+      };
+    } catch (error) {
+      console.error(`[Polygon] Error fetching fundamentals for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch recent news articles with sentiment analysis
+   * https://polygon.io/docs/rest/stocks/news
+   */
+  async getNews(symbol: string, limit: number = 5): Promise<PolygonNewsArticle[]> {
+    try {
+      const url = `${this.baseUrl}/v2/reference/news`;
+      const params = new URLSearchParams({
+        ticker: symbol,
+        limit: String(limit),
+        sort: 'published_utc',
+        order: 'desc', // Most recent first
+        apiKey: this.apiKey,
+      });
+
+      console.log(`[Polygon] Fetching news for ${symbol} (limit: ${limit})...`);
+      const response = await fetch(`${url}?${params}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`[Polygon] No news data for ${symbol}`);
+          return [];
+        }
+        const errorText = await response.text();
+        throw new Error(`Polygon API error (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.results || data.results.length === 0) {
+        console.warn(`[Polygon] No news results for ${symbol}`);
+        return [];
+      }
+
+      console.log(`[Polygon] Found ${data.results.length} news articles for ${symbol}`);
+      
+      return data.results.map((article: any) => ({
+        id: article.id,
+        title: article.title,
+        author: article.author,
+        published_utc: article.published_utc,
+        article_url: article.article_url,
+        description: article.description,
+        tickers: article.tickers || [],
+        image_url: article.image_url,
+        publisher: article.publisher,
+        insights: article.insights,
+      }));
+    } catch (error) {
+      console.error(`[Polygon] Error fetching news for ${symbol}:`, error);
+      return [];
+    }
   }
 }
 

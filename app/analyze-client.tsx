@@ -1223,43 +1223,345 @@ export default function AnalyzeClient() {
             </div>
           </div>
 
-          {/* AI Analysis */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-            <h3 className="text-xl font-bold text-white mb-4">🤖 AI Analysis</h3>
+          {/* Squeeze Analysis */}
+          {report.squeezeAnalysis && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">📊 Squeeze Analysis</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Combined Score */}
+                <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                  <div className="text-purple-200 text-sm mb-1">Combined Score</div>
+                  <div className="text-3xl font-bold text-white mb-1">
+                    {report.squeezeAnalysis.combined.score}<span className="text-lg text-purple-300">/100</span>
+                  </div>
+                  <div className={`text-sm font-semibold uppercase ${
+                    report.squeezeAnalysis.combined.potential === 'extreme' ? 'text-red-400' :
+                    report.squeezeAnalysis.combined.potential === 'high' ? 'text-orange-400' :
+                    report.squeezeAnalysis.combined.potential === 'moderate' ? 'text-yellow-400' :
+                    report.squeezeAnalysis.combined.potential === 'low' ? 'text-blue-400' :
+                    'text-gray-400'
+                  }`}>
+                    {report.squeezeAnalysis.combined.potential}
+                  </div>
+                  {report.squeezeAnalysis.combined.alignment && (
+                    <div className="mt-2 text-xs text-purple-300">⚡ Both squeezes aligned</div>
+                  )}
+                </div>
+
+                {/* Short Float Squeeze */}
+                <div className="p-4 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30">
+                  <div className="text-red-200 text-sm mb-2">Short Float Squeeze</div>
+                  <div className={`text-sm font-semibold uppercase mb-2 ${
+                    report.squeezeAnalysis.shortSqueeze.potential === 'high' ? 'text-red-400' :
+                    report.squeezeAnalysis.shortSqueeze.potential === 'moderate' ? 'text-orange-400' :
+                    report.squeezeAnalysis.shortSqueeze.potential === 'low' ? 'text-yellow-400' :
+                    'text-gray-400'
+                  }`}>
+                    {report.squeezeAnalysis.shortSqueeze.potential}
+                  </div>
+                  {report.squeezeAnalysis.shortSqueeze.shortFloat !== null && (
+                    <div className="text-xs text-red-200">Short Float: {report.squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%</div>
+                  )}
+                  {report.squeezeAnalysis.shortSqueeze.daysToCover !== null && (
+                    <div className="text-xs text-red-200">Days to Cover: {report.squeezeAnalysis.shortSqueeze.daysToCover.toFixed(1)}</div>
+                  )}
+                </div>
+
+                {/* TTM Squeeze */}
+                <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
+                  <div className="text-blue-200 text-sm mb-2">TTM Squeeze</div>
+                  <div className={`text-lg font-bold mb-1 ${
+                    report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'text-red-400' :
+                    report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? 'text-yellow-400' :
+                    'text-gray-400'
+                  }`}>
+                    {report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? '🔥 FIRE' : 
+                     report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? '⚡ ON' : 
+                     '⭕ OFF'}
+                  </div>
+                  <div className="text-xs text-blue-200">Duration: {report.squeezeAnalysis.ttmSqueeze.duration} bars</div>
+                  <div className="text-xs text-blue-200 capitalize">Momentum: {report.squeezeAnalysis.ttmSqueeze.momentumDirection}</div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                <p className="text-blue-100 text-sm">{report.squeezeAnalysis.combined.recommendation}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Comprehensive Fundamentals (Finnhub) */}
+          {report.fundamentals && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">💼 Comprehensive Fundamental Analysis</h3>
+              
+              {/* Top-level Scores */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30">
+                  <div className="text-green-200 text-sm mb-1">Quality Score</div>
+                  <div className="text-3xl font-bold text-white mb-1">
+                    {report.fundamentals.qualityScore}<span className="text-lg text-green-300">/100</span>
+                  </div>
+                  <div className={`text-sm font-semibold uppercase ${
+                    report.fundamentals.quality.grade === 'excellent' ? 'text-green-400' :
+                    report.fundamentals.quality.grade === 'good' ? 'text-blue-400' :
+                    report.fundamentals.quality.grade === 'fair' ? 'text-yellow-400' :
+                    report.fundamentals.quality.grade === 'poor' ? 'text-red-400' :
+                    'text-gray-400'
+                  }`}>
+                    {report.fundamentals.quality.grade}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
+                  <div className="text-blue-200 text-sm mb-1">Viability Score</div>
+                  <div className="text-3xl font-bold text-white mb-1">
+                    {report.fundamentals.viabilityScore}<span className="text-lg text-blue-300">/100</span>
+                  </div>
+                  <div className={`text-sm font-semibold uppercase ${
+                    report.fundamentals.viability.valuation === 'undervalued' ? 'text-green-400' :
+                    report.fundamentals.viability.valuation === 'fairly valued' ? 'text-blue-400' :
+                    report.fundamentals.viability.valuation === 'overvalued' ? 'text-red-400' :
+                    'text-gray-400'
+                  }`}>
+                    {report.fundamentals.viability.valuation}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30">
+                  <div className="text-red-200 text-sm mb-1">Risk Score</div>
+                  <div className="text-3xl font-bold text-white mb-1">
+                    {report.fundamentals.riskScore}<span className="text-lg text-red-300">/100</span>
+                  </div>
+                  <div className={`text-sm font-semibold uppercase ${
+                    report.fundamentals.risk.level === 'low' ? 'text-green-400' :
+                    report.fundamentals.risk.level === 'moderate' ? 'text-yellow-400' :
+                    report.fundamentals.risk.level === 'high' ? 'text-orange-400' :
+                    'text-red-400'
+                  }`}>
+                    {report.fundamentals.risk.level} risk
+                  </div>
+                </div>
+              </div>
+
+              {/* Quality Factors */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-green-300 mb-3">📈 Quality & Profitability</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                  {report.fundamentals.quality.roe !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">ROE</div>
+                      <div className="text-white font-semibold">{report.fundamentals.quality.roe.toFixed(1)}%</div>
+                    </div>
+                  )}
+                  {report.fundamentals.quality.roa !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">ROA</div>
+                      <div className="text-white font-semibold">{report.fundamentals.quality.roa.toFixed(1)}%</div>
+                    </div>
+                  )}
+                  {report.fundamentals.quality.operatingMargin !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Op Margin</div>
+                      <div className="text-white font-semibold">{report.fundamentals.quality.operatingMargin.toFixed(1)}%</div>
+                    </div>
+                  )}
+                  {report.fundamentals.quality.fcfMargin !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">FCF Margin</div>
+                      <div className="text-white font-semibold">{report.fundamentals.quality.fcfMargin.toFixed(1)}%</div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <p className="text-green-100 text-sm">{report.fundamentals.quality.summary}</p>
+                </div>
+              </div>
+
+              {/* Viability & Valuation */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-blue-300 mb-3">💰 Viability & Valuation</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                  {report.fundamentals.viability.pe !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">P/E Ratio</div>
+                      <div className="text-white font-semibold">{report.fundamentals.viability.pe.toFixed(1)}</div>
+                    </div>
+                  )}
+                  {report.fundamentals.viability.pb !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">P/B Ratio</div>
+                      <div className="text-white font-semibold">{report.fundamentals.viability.pb.toFixed(2)}</div>
+                    </div>
+                  )}
+                  {report.fundamentals.viability.revenueGrowth !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Revenue Growth</div>
+                      <div className={`font-semibold ${report.fundamentals.viability.revenueGrowth > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {report.fundamentals.viability.revenueGrowth > 0 ? '+' : ''}{report.fundamentals.viability.revenueGrowth.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                  {report.fundamentals.viability.analystRating !== 'unknown' && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Analyst Rating</div>
+                      <div className="text-white font-semibold text-xs uppercase">{report.fundamentals.viability.analystRating}</div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <p className="text-blue-100 text-sm">{report.fundamentals.viability.summary}</p>
+                </div>
+              </div>
+
+              {/* Risk Factors */}
+              <div>
+                <h4 className="text-lg font-semibold text-red-300 mb-3">⚠️ Risk Assessment</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                  {report.fundamentals.risk.debtToEbitda !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Debt/EBITDA</div>
+                      <div className={`font-semibold ${report.fundamentals.risk.debtToEbitda > 3 ? 'text-red-400' : 'text-green-400'}`}>
+                        {report.fundamentals.risk.debtToEbitda.toFixed(1)}×
+                      </div>
+                    </div>
+                  )}
+                  {report.fundamentals.risk.currentRatio !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Current Ratio</div>
+                      <div className={`font-semibold ${report.fundamentals.risk.currentRatio < 1.5 ? 'text-red-400' : 'text-green-400'}`}>
+                        {report.fundamentals.risk.currentRatio.toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                  {report.fundamentals.risk.daysToEarnings !== null && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Days to Earnings</div>
+                      <div className={`font-semibold ${report.fundamentals.risk.earningsRisk ? 'text-red-400' : 'text-white'}`}>
+                        {report.fundamentals.risk.daysToEarnings}
+                      </div>
+                    </div>
+                  )}
+                  {report.fundamentals.risk.insiderSentiment !== 'neutral' && (
+                    <div className="p-3 rounded-lg bg-white/5">
+                      <div className="text-blue-200 text-xs mb-1">Insider Sentiment</div>
+                      <div className={`font-semibold text-xs uppercase ${
+                        report.fundamentals.risk.insiderSentiment === 'bullish' ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {report.fundamentals.risk.insiderSentiment}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <p className="text-red-100 text-sm">{report.fundamentals.risk.summary}</p>
+                </div>
+                {report.fundamentals.risk.earningsRisk && (
+                  <div className="mt-3 p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
+                    <p className="text-yellow-200 text-sm font-semibold">
+                      ⚠️ HIGH EVENT RISK: Earnings report in {report.fundamentals.risk.daysToEarnings} days. Consider reducing position size or waiting until after earnings.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Recent News */}
+          {report.news && report.news.length > 0 && (
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+              <h3 className="text-xl font-bold text-white mb-4">📰 Recent News</h3>
+              
+              {report.newsSummary && (
+                <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-purple-200 text-sm font-semibold">Overall Sentiment</div>
+                    <div className={`text-lg font-bold uppercase ${
+                      report.newsSummary.overallSentiment === 'bullish' ? 'text-green-400' :
+                      report.newsSummary.overallSentiment === 'bearish' ? 'text-red-400' :
+                      'text-gray-400'
+                    }`}>
+                      {report.newsSummary.overallSentiment}
+                    </div>
+                  </div>
+                  <div className="text-purple-100 text-sm mb-2">{report.newsSummary.summary}</div>
+                  {report.newsSummary.keyThemes.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {report.newsSummary.keyThemes.map((theme, idx) => (
+                        <span key={idx} className="px-2 py-1 rounded-full bg-purple-500/30 text-purple-200 text-xs">
+                          {theme}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {report.news.map((article, idx) => (
+                  <div key={article.id} className="p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                    <div className="flex items-start justify-between mb-2">
+                      <a 
+                        href={article.article_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-white font-semibold hover:text-teal-300 transition-colors flex-1"
+                      >
+                        {article.title}
+                      </a>
+                      {article.sentiment && (
+                        <span className={`ml-3 px-2 py-1 rounded-full text-xs font-semibold ${
+                          article.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
+                          article.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {article.sentiment}
+                        </span>
+                      )}
+                    </div>
+                    {article.description && (
+                      <p className="text-blue-200 text-sm mb-2 line-clamp-2">{article.description}</p>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-blue-300">
+                      <span>{article.publisher || 'Unknown'}</span>
+                      <span>{new Date(article.published_utc).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comprehensive AI Analysis & Mentor Notes */}
+          <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
+            <h3 className="text-xl font-bold text-white mb-4">🤖 Comprehensive AI Analysis</h3>
             
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-teal-300 mb-2">📖 Narrative</h4>
+              <h4 className="text-lg font-semibold text-teal-300 mb-2">📖 Executive Summary</h4>
               <p className="text-blue-100 leading-relaxed">
                 {report.analysis.narrative}
-                {report.score.overall < 75 && (
-                  <span className="block mt-2 text-blue-300 italic text-sm">
-                    💡 Traders may prefer to wait for a clearer pattern or higher confirmation before entering for better risk/reward.
-                  </span>
-                )}
               </p>
             </div>
 
             <div className="mb-6">
-              <h4 className="text-lg font-semibold text-teal-300 mb-2">💡 Mentor Notes</h4>
+              <h4 className="text-lg font-semibold text-teal-300 mb-2">💡 Professional Trader Analysis</h4>
               <div className="text-blue-100 whitespace-pre-line leading-relaxed">
                 {report.analysis.mentorNotes}
                 {((report.riskManagement.direction === 'short' && report.technical.ema9 > report.technical.ema200) ||
                   (report.riskManagement.direction === 'long' && report.technical.ema9 < report.technical.ema200)) && (
                   <p className="mt-3 text-yellow-200 text-sm">
-                    ⚠️ Because this trade goes against the long-term trend (price {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA), 
-                    confirmation of {report.riskManagement.direction === 'long' ? 'breakout' : 'breakdown'} is essential before full sizing.
+                    ⚠️ Countertrend Setup: This trade goes against the long-term trend (price {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA). 
+                    Confirmation of {report.riskManagement.direction === 'long' ? 'breakout' : 'breakdown'} is essential before full sizing.
                   </p>
                 )}
-                <p className="mt-4 text-teal-200 italic text-sm border-t border-teal-500/30 pt-3">
-                  🎯 Remember — strong swing setups need structure (pattern), not just momentum. Patience pays.
-                </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {report.analysis.strengths.length > 0 && (
                 <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                  <h4 className="text-green-300 font-semibold mb-2">✅ Strengths</h4>
+                  <h4 className="text-green-300 font-semibold mb-2">✅ Bullish Factors</h4>
                   <ul className="list-disc list-inside space-y-1">
                     {report.analysis.strengths.map((item, idx) => (
                       <li key={idx} className="text-green-200 text-sm">{item}</li>
@@ -1269,11 +1571,11 @@ export default function AnalyzeClient() {
               )}
 
               {report.analysis.warnings.length > 0 && (
-                <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                  <h4 className="text-yellow-300 font-semibold mb-2">⚠️ Risk Factors</h4>
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <h4 className="text-red-300 font-semibold mb-2">⚠️ Bearish Factors</h4>
                   <ul className="list-disc list-inside space-y-1">
                     {report.analysis.warnings.map((item, idx) => (
-                      <li key={idx} className="text-yellow-200 text-sm">{item}</li>
+                      <li key={idx} className="text-red-200 text-sm">{item}</li>
                     ))}
                   </ul>
                 </div>
@@ -1281,7 +1583,7 @@ export default function AnalyzeClient() {
 
               {report.analysis.reasoning.length > 0 && (
                 <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                  <h4 className="text-blue-300 font-semibold mb-2">🔍 Rules Triggered</h4>
+                  <h4 className="text-blue-300 font-semibold mb-2">🔍 Key Drivers</h4>
                   <ul className="list-disc list-inside space-y-1">
                     {report.analysis.reasoning.map((item, idx) => (
                       <li key={idx} className="text-blue-200 text-sm">{item}</li>
@@ -1289,6 +1591,12 @@ export default function AnalyzeClient() {
                   </ul>
                 </div>
               )}
+            </div>
+
+            <div className="mt-6 p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
+              <p className="text-teal-200 italic text-sm">
+                🎯 <strong>Swing Trading Principle:</strong> Strong setups combine technical structure, fundamental support, and catalyst confirmation. Patience and proper position sizing are key to consistent profitability.
+              </p>
             </div>
           </div>
 

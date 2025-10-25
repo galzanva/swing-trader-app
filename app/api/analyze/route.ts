@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { PolygonClient } from "@/lib/data-vendors/polygon";
+import { FinnhubClient, type FinnhubComprehensiveFundamentals } from "@/lib/data-vendors/finnhub";
 import { calculateTechnicalIndicators, findSupportResistance } from "@/lib/indicators/technical";
 import { detectPatterns, getPrimaryPattern, getCompositePattern } from "@/lib/patterns/detector";
 import { detectAllChartPatterns } from "@/lib/patterns/chart-patterns";
@@ -304,6 +305,28 @@ export interface AnalysisReport {
     };
   };
   
+  // Fundamentals Analysis (from Finnhub)
+  fundamentals?: FinnhubComprehensiveFundamentals;
+  
+  // Recent News with Sentiment
+  news?: Array<{
+    id: string;
+    title: string;
+    published_utc: string;
+    article_url: string;
+    description?: string;
+    publisher?: string;
+    sentiment?: 'positive' | 'negative' | 'neutral';
+    sentiment_reasoning?: string;
+  }>;
+  
+  newsSummary?: {
+    overallSentiment: 'bullish' | 'bearish' | 'neutral';
+    sentimentScore: number; // -100 to +100
+    keyThemes: string[];
+    summary: string;
+  };
+  
   // Additional info
   marketData: {
     marketCap?: number;
@@ -345,6 +368,7 @@ export async function POST(request: Request) {
 
     // Check for API keys
     const polygonApiKey = process.env.POLYGON_API_KEY;
+    const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const openaiApiKey = process.env.OPENAI_API_KEY;
 
     if (!polygonApiKey) {
@@ -352,6 +376,10 @@ export async function POST(request: Request) {
         { error: "POLYGON_API_KEY not configured" },
         { status: 500 }
       );
+    }
+    
+    if (!finnhubApiKey) {
+      console.warn('[Analyze] FINNHUB_API_KEY not configured - fundamental analysis will be limited');
     }
 
     console.log(`[Analyze] Starting analysis for ${symbol} on ${timeframe}`);
@@ -618,6 +646,98 @@ export async function POST(request: Request) {
       squeezeAnalysis = undefined;
     }
 
+    // 6.8. Fetch Fundamentals from Finnhub (in parallel with news from Polygon)
+    let fundamentalsData: FinnhubComprehensiveFundamentals | undefined;
+    let newsArticles;
+    let newsSummary;
+    
+    try {
+      console.log(`[Analyze] Fetching fundamentals (Finnhub) and news (Polygon)...`);
+      
+      // Fetch in parallel
+      const finnhubClient = finnhubApiKey ? new FinnhubClient(finnhubApiKey) : null;
+      const [fundamentals, news] = await Promise.all([
+        finnhubClient ? finnhubClient.getComprehensiveFundamentals(symbol, marketData.currentPrice) : Promise.resolve(undefined),
+        polygonClient.getNews(symbol, 5) // Get 5 most recent articles
+      ]);
+      
+      // Process Finnhub fundamentals
+      if (fundamentals) {
+        fundamentalsData = fundamentals;
+        console.log(`[Analyze] Finnhub fundamentals - Quality: ${fundamentals.qualityScore}, Viability: ${fundamentals.viabilityScore}, Risk: ${fundamentals.riskScore}`);
+        console.log(`[Analyze] Valuation: ${fundamentals.viability.valuation}, Quality: ${fundamentals.quality.grade}, Risk: ${fundamentals.risk.level}`);
+      } else {
+        console.log(`[Analyze] No fundamentals data available for ${symbol}`);
+      }
+      
+      // Process news
+      if (news && news.length > 0) {
+        console.log(`[Analyze] Found ${news.length} news articles`);
+        
+        // Calculate sentiment
+        let positiveCount = 0;
+        let negativeCount = 0;
+        let neutralCount = 0;
+        const keyThemes: Set<string> = new Set();
+        
+        newsArticles = news.map(article => {
+          // Extract sentiment from insights
+          let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral';
+          let sentiment_reasoning = '';
+          
+          if (article.insights && article.insights.length > 0) {
+            const insight = article.insights.find(i => i.ticker === symbol) || article.insights[0];
+            sentiment = insight.sentiment;
+            sentiment_reasoning = insight.sentiment_reasoning || '';
+            
+            if (sentiment === 'positive') positiveCount++;
+            else if (sentiment === 'negative') negativeCount++;
+            else neutralCount++;
+          } else {
+            neutralCount++;
+          }
+          
+          // Extract themes from title (simple keyword extraction)
+          const titleWords = article.title.toLowerCase().split(' ');
+          const themes = ['earnings', 'revenue', 'growth', 'acquisition', 'partnership', 'lawsuit', 'downgrade', 'upgrade'];
+          titleWords.forEach(word => {
+            if (themes.some(theme => word.includes(theme))) {
+              keyThemes.add(word);
+            }
+          });
+          
+          return {
+            id: article.id,
+            title: article.title,
+            published_utc: article.published_utc,
+            article_url: article.article_url,
+            description: article.description,
+            publisher: article.publisher?.name,
+            sentiment,
+            sentiment_reasoning
+          };
+        });
+        
+        // Calculate overall sentiment
+        const sentimentScore = ((positiveCount - negativeCount) / news.length) * 100;
+        const overallSentiment: 'bullish' | 'bearish' | 'neutral' = 
+          sentimentScore > 20 ? 'bullish' : sentimentScore < -20 ? 'bearish' : 'neutral';
+        
+        newsSummary = {
+          overallSentiment,
+          sentimentScore,
+          keyThemes: Array.from(keyThemes),
+          summary: `${positiveCount} positive, ${negativeCount} negative, ${neutralCount} neutral articles. Overall sentiment: ${overallSentiment}.`
+        };
+        
+        console.log(`[Analyze] News sentiment: ${overallSentiment} (score: ${sentimentScore.toFixed(0)})`);
+      } else {
+        console.log(`[Analyze] No news articles found for ${symbol}`);
+      }
+    } catch (error) {
+      console.error("[Analyze] Error fetching fundamentals or news:", error);
+    }
+
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
     if (openaiApiKey) {
@@ -631,79 +751,224 @@ export async function POST(request: Request) {
           score,
           riskPlan,
           executionPlan,
-          squeezeAnalysis // Pass squeeze analysis to LLM
+          squeezeAnalysis, // Pass squeeze analysis to LLM
+          fundamentalsData, // Pass fundamentals to LLM
+          newsSummary // Pass news summary to LLM
         );
-        console.log(`[Analyze] Generated AI analysis with chart pattern context`);
+        console.log(`[Analyze] Generated AI analysis with fundamentals and news context`);
       } catch (error) {
         console.error("[Analyze] Error generating AI analysis:", error);
-        // Use fallback analysis
-        aiAnalysis = {
-          narrative: compositePattern.chartPattern 
-            ? `${compositePattern.chartPattern.name} chart pattern (${compositePattern.chartPattern.confidence}%) combined with ${compositePattern.candlestickPattern.name} provides ${compositePattern.fusionBonus > 0 ? 'strong' : 'conflicting'} signal. Overall score: ${score.overall}/100.`
-            : `Technical analysis shows ${compositePattern.candlestickPattern.name} pattern with ${score.overall}/100 setup score.`,
-          mentorNotes: compositePattern.analysis,
-          reasoning: [
-            `Candlestick: ${compositePattern.candlestickPattern.name} (${compositePattern.candlestickPattern.confidence}%)`,
-            compositePattern.chartPattern ? `Chart pattern: ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.confidence}%)` : 'No chart pattern detected',
-            `Fusion confidence: ${compositePattern.fusedConfidence}%`
-          ],
-          warnings: ["AI analysis failed - review data carefully"],
-          strengths: []
-        };
+        console.log("[Analyze] Falling back to comprehensive non-LLM analysis...");
+        // Use comprehensive fallback (same as no-key fallback below)
+        const trendDesc = indicators.trend === 'bullish' ? 'bullish' : indicators.trend === 'bearish' ? 'bearish' : 'neutral';
+        const priceVs200 = marketData.currentPrice > indicators.ema200 ? 'above' : 'below';
+        const countertrend = (executionDirection === 'bullish' && priceVs200 === 'below') || (executionDirection === 'bearish' && priceVs200 === 'above');
+        
+        const patternStr = compositePattern.chartPattern 
+          ? `${compositePattern.chartPattern.name} chart pattern (${compositePattern.chartPattern.confidence}% confidence, ${compositePattern.chartPattern.breakoutStatus})`
+          : 'candlestick-only setup';
+        
+        const squeezeStr = squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none'
+          ? `Squeeze dynamics show ${squeezeAnalysis.combined.potential} potential (score: ${squeezeAnalysis.combined.score}/100). ` +
+            (squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
+             squeezeAnalysis.ttmSqueeze.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.duration} bars - volatility compression building. ` : '') +
+            (squeezeAnalysis.shortSqueeze.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
+          : 'No significant squeeze dynamics detected. ';
+        
+        const newsStr = newsSummary
+          ? `Recent news sentiment is ${newsSummary.overallSentiment} (${newsSummary.sentimentScore > 0 ? '+' : ''}${newsSummary.sentimentScore.toFixed(0)}). `
+          : 'No recent news available. ';
+        
+        const narrative = `${symbol} presents a ${executionDirection} setup on ${timeframe} with ${patternStr}. ` +
+          `Technical: ${trendDesc} trend, RSI ${indicators.rsi.toFixed(1)}, ${indicators.alignment} alignment. ` +
+          squeezeStr + newsStr +
+          `Overall score: ${mainScore}/100 (${mainRating}). ` +
+          (countertrend ? `Note: This is a countertrend trade (price ${priceVs200} 200 EMA). ` : '');
+        
+        let mentorNotes = `**Technical Setup Analysis:**\n`;
+        mentorNotes += `${compositePattern.candlestickPattern.name} pattern with ${compositePattern.candlestickPattern.confidence}% confidence provides ${executionDirection} entry signal. `;
+        if (compositePattern.chartPattern) {
+          mentorNotes += `${compositePattern.chartPattern.name} structure confirms with ${compositePattern.chartPattern.confidence}% confidence (${compositePattern.chartPattern.breakoutStatus}). `;
+        }
+        mentorNotes += `Price action shows ${indicators.alignment} alignment in a ${trendDesc} trend (strength: ${indicators.strength}).\n\n`;
+        
+        if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+          mentorNotes += `**Squeeze Dynamics:**\n${squeezeAnalysis.combined.recommendation}\n\n`;
+        }
+        
+        if (newsSummary && newsSummary.overallSentiment !== 'neutral') {
+          mentorNotes += `**News Sentiment:**\n${newsSummary.summary} `;
+          mentorNotes += newsSummary.overallSentiment === 'bullish' ? 'Positive sentiment provides catalyst support. ' :
+                         'Negative sentiment creates headwind - watch for reversal. ';
+          mentorNotes += `\n\n`;
+        }
+        
+        mentorNotes += `**Risk Management:**\nEntry: $${riskPlan.entry.toFixed(2)}, Stop: $${riskPlan.stopLoss.toFixed(2)} (${riskPlan.riskPercent.toFixed(1)}% risk). R:R: ${riskPlan.riskReward.target1.toFixed(1)}:1.`;
+        
+        const reasoning = [
+          `Technical: ${compositePattern.candlestickPattern.name} + ${patternStr}`,
+          `Trend: ${trendDesc} (${indicators.strength} strength)`,
+          `Momentum: RSI ${indicators.rsi.toFixed(1)}, MACD ${indicators.macd.histogram > 0 ? 'positive' : 'negative'}`,
+        ];
+        if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+          reasoning.push(`Squeeze: ${squeezeAnalysis.combined.potential} potential`);
+        }
+        if (newsSummary) {
+          reasoning.push(`Sentiment: ${newsSummary.overallSentiment}`);
+        }
+        
+        const strengths = [];
+        if (mainScore >= 70) strengths.push('High quality technical setup');
+        if (compositePattern.fusionBonus > 10) strengths.push('Strong pattern alignment');
+        if (squeezeAnalysis && squeezeAnalysis.combined.score >= 50) strengths.push(`${squeezeAnalysis.combined.potential} squeeze dynamics`);
+        if (newsSummary && newsSummary.overallSentiment === (executionDirection === 'bullish' ? 'bullish' : 'bearish')) strengths.push('News sentiment aligned');
+        if (strengths.length === 0) strengths.push('Setup meets minimum criteria');
+        
+        const warnings = [];
+        if (countertrend) warnings.push('Countertrend trade - higher risk');
+        if (indicators.rsi > 70) warnings.push('RSI overbought');
+        if (indicators.rsi < 30) warnings.push('RSI oversold');
+        if (newsSummary && newsSummary.overallSentiment !== 'neutral' && newsSummary.overallSentiment !== (executionDirection === 'bullish' ? 'bullish' : 'bearish')) {
+          warnings.push('News sentiment conflicts with trade direction');
+        }
+        if (warnings.length === 0) warnings.push('Monitor for confirmation');
+        
+        aiAnalysis = { narrative, mentorNotes, reasoning, warnings, strengths };
       }
     } else {
-      // Fallback without AI
-      // Handle narrative based on pattern type
-      let chartInfo = '';
-      let chartBanner = '';
+      // Fallback without AI - Create comprehensive analysis using all available data
+      console.log('[Analyze] Using comprehensive fallback analysis (no OpenAI key)');
       
+      // Technical analysis
+      const trendDesc = indicators.trend === 'bullish' ? 'bullish' : indicators.trend === 'bearish' ? 'bearish' : 'neutral';
+      const priceVs200 = marketData.currentPrice > indicators.ema200 ? 'above' : 'below';
+      const countertrend = (executionDirection === 'bullish' && priceVs200 === 'below') || (executionDirection === 'bearish' && priceVs200 === 'above');
+      
+      // Pattern analysis
+      const patternStr = compositePattern.chartPattern 
+        ? `${compositePattern.chartPattern.name} chart pattern (${compositePattern.chartPattern.confidence}% confidence, ${compositePattern.chartPattern.breakoutStatus})`
+        : 'candlestick-only setup';
+      
+      // Squeeze analysis
+      const squeezeStr = squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none'
+        ? `Squeeze dynamics show ${squeezeAnalysis.combined.potential} potential (score: ${squeezeAnalysis.combined.score}/100). ` +
+          (squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
+           squeezeAnalysis.ttmSqueeze.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.duration} bars - volatility compression building. ` : '') +
+          (squeezeAnalysis.shortSqueeze.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
+        : 'No significant squeeze dynamics detected. ';
+      
+      // Fundamentals analysis
+      const fundamentalsStr = fundamentalsData
+        ? `Fundamentals: ${fundamentalsData.viability.valuation} valuation with ${fundamentalsData.quality.grade} quality ` +
+          `(Quality: ${fundamentalsData.qualityScore}/100, Viability: ${fundamentalsData.viabilityScore}/100, Risk: ${fundamentalsData.riskScore}/100). ` +
+          (fundamentalsData.viability.pe ? `P/E: ${fundamentalsData.viability.pe.toFixed(1)}. ` : '') +
+          (fundamentalsData.quality.roe ? `ROE: ${fundamentalsData.quality.roe.toFixed(1)}%. ` : '')
+        : 'Fundamentals data unavailable. ';
+      
+      // News sentiment
+      const newsStr = newsSummary
+        ? `Recent news sentiment is ${newsSummary.overallSentiment} (${newsSummary.sentimentScore > 0 ? '+' : ''}${newsSummary.sentimentScore.toFixed(0)}). `
+        : 'No recent news available. ';
+      
+      // Build comprehensive narrative
+      const narrative = `${symbol} presents a ${executionDirection} setup on ${timeframe} with ${patternStr}. ` +
+        `Technical: ${trendDesc} trend, RSI ${indicators.rsi.toFixed(1)}, ${indicators.alignment} alignment. ` +
+        squeezeStr + fundamentalsStr + newsStr +
+        `Overall score: ${mainScore}/100 (${mainRating}). ` +
+        (countertrend ? `Note: This is a countertrend trade (price ${priceVs200} 200 EMA). ` : '');
+      
+      // Build comprehensive mentor notes
+      let mentorNotes = `**Technical Setup Analysis:**\n`;
+      mentorNotes += `${compositePattern.candlestickPattern.name} pattern with ${compositePattern.candlestickPattern.confidence}% confidence provides ${executionDirection} entry signal. `;
       if (compositePattern.chartPattern) {
-        // Institutional pattern
-        chartInfo = ` ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.breakoutStatus}) provides market structure.`;
-        chartBanner = compositePattern.chartPattern.name;
-      } else if (useV2 && patternsV2 && patternsV2.candidate) {
-        // Candidate pattern
-        const candidate = patternsV2.candidate;
-        const topUnmet = candidate.unmetCriteria.length > 0 ? candidate.unmetCriteria[0] : '';
-        const nextStep = candidate.nextSteps.length > 0 ? candidate.nextSteps[0] : 'monitor for confirmation';
-        chartInfo = ` Candidate (Not Confirmed): ${candidate.name} — structure nearly fits institutional rules but fails: ${topUnmet}. Next: ${nextStep}.`;
-        chartBanner = `Candidate pattern detected (not institutional)`;
-      } else {
-        // No pattern
-        chartInfo = '';
-        chartBanner = '';
+        mentorNotes += `${compositePattern.chartPattern.name} structure confirms with ${compositePattern.chartPattern.confidence}% confidence (${compositePattern.chartPattern.breakoutStatus}). `;
+      }
+      mentorNotes += `Price action shows ${indicators.alignment} alignment in a ${trendDesc} trend (strength: ${indicators.strength}).\n\n`;
+      
+      if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+        mentorNotes += `**Squeeze Dynamics:**\n`;
+        mentorNotes += `${squeezeAnalysis.combined.recommendation}\n\n`;
       }
       
-      // Build mentor notes with candidate pattern guidance if applicable
-      let mentorNotes = compositePattern.analysis + ` Technical setup with ${score.rating} rating. ${score.recommendation} recommendation.`;
-      
-      // Add candidate pattern guidance
-      if (useV2 && patternsV2 && patternsV2.candidate && !patternsV2.institutional) {
-        const candidate = patternsV2.candidate;
-        mentorNotes += `\n\n📚 Pattern Education — Why Not Institutional:\nThe ${candidate.name} pattern shows potential but doesn't yet meet professional-grade criteria. `;
-        
-        if (candidate.unmetCriteria.length > 0) {
-          mentorNotes += `Key missing element: ${candidate.unmetCriteria[0].toLowerCase()}. `;
-        }
-        
-        if (candidate.nextSteps.length > 0) {
-          mentorNotes += `To upgrade to institutional (tradeable) status: ${candidate.nextSteps[0].toLowerCase()}. `;
-        }
-        
-        mentorNotes += `Until then, treat this as a learning opportunity rather than a trade signal. Institutional patterns have stricter requirements to reduce false signals and improve edge.`;
+      if (fundamentalsData) {
+        mentorNotes += `**Fundamental Backdrop:**\n`;
+        mentorNotes += `${fundamentalsData.quality.summary} ${fundamentalsData.viability.summary} `;
+        mentorNotes += `Risk assessment: ${fundamentalsData.risk.summary} `;
+        mentorNotes += `\n`;
+        mentorNotes += `• Quality Score: ${fundamentalsData.qualityScore}/100\n`;
+        mentorNotes += `• Viability Score: ${fundamentalsData.viabilityScore}/100\n`;
+        mentorNotes += `• Risk Score: ${fundamentalsData.riskScore}/100\n`;
+        mentorNotes += fundamentalsData.viability.valuation === 'undervalued' ? '→ Undervalued entry point supports long-term conviction. ' :
+                       fundamentalsData.viability.valuation === 'overvalued' ? '→ Overvaluation increases downside risk - use smaller position size. ' :
+                       '→ Fair valuation - technical factors drive near-term action. ';
+        mentorNotes += `\n\n`;
       }
+      
+      if (newsSummary && newsSummary.overallSentiment !== 'neutral') {
+        mentorNotes += `**News Sentiment:**\n`;
+        mentorNotes += `${newsSummary.summary} `;
+        mentorNotes += newsSummary.overallSentiment === 'bullish' ? 'Positive sentiment provides catalyst support. ' :
+                       'Negative sentiment creates headwind - watch for reversal. ';
+        mentorNotes += `\n\n`;
+      }
+      
+      mentorNotes += `**Risk Management:**\n`;
+      mentorNotes += `Entry: $${riskPlan.entry.toFixed(2)}, Stop: $${riskPlan.stopLoss.toFixed(2)} (${riskPlan.riskPercent.toFixed(1)}% risk). `;
+      mentorNotes += `R:R: ${riskPlan.riskReward.target1.toFixed(1)}:1. `;
+      if (countertrend) {
+        mentorNotes += `⚠️ Countertrend setup requires tight stops and confirmation. `;
+      }
+      mentorNotes += `Position sizing: ${riskPlan.positionSize} (risk: ${riskPlan.riskAmount}).`;
+      
+      // Build reasoning array
+      const reasoning = [
+        `Technical: ${compositePattern.candlestickPattern.name} + ${patternStr}`,
+        `Trend: ${trendDesc} (${indicators.strength} strength)`,
+        `Momentum: RSI ${indicators.rsi.toFixed(1)}, MACD ${indicators.macd.histogram > 0 ? 'positive' : 'negative'}`,
+        `Volume: Z-score ${indicators.volumeZScore.toFixed(2)}`,
+      ];
+      if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+        reasoning.push(`Squeeze: ${squeezeAnalysis.combined.potential} potential (${squeezeAnalysis.combined.score}/100)`);
+      }
+      if (fundamentalsData) {
+        reasoning.push(`Fundamentals: ${fundamentalsData.viability.valuation}, ${fundamentalsData.quality.grade} quality (Q:${fundamentalsData.qualityScore} V:${fundamentalsData.viabilityScore} R:${fundamentalsData.riskScore})`);
+      }
+      if (newsSummary) {
+        reasoning.push(`Sentiment: ${newsSummary.overallSentiment} (${newsSummary.sentimentScore > 0 ? '+' : ''}${newsSummary.sentimentScore.toFixed(0)})`);
+      }
+      
+      // Build strengths
+      const strengths = [];
+      if (mainScore >= 70) strengths.push('High quality technical setup');
+      if (compositePattern.fusionBonus > 10) strengths.push('Strong pattern alignment');
+      if (indicators.volumeZScore > 1) strengths.push('Above-average volume confirmation');
+      if (squeezeAnalysis && squeezeAnalysis.combined.score >= 50) strengths.push(`${squeezeAnalysis.combined.potential} squeeze dynamics`);
+      if (fundamentalsData && fundamentalsData.viability.valuation === 'undervalued') strengths.push('Undervalued fundamentals provide downside support');
+      if (fundamentalsData && fundamentalsData.quality.grade === 'excellent') strengths.push('Excellent fundamental quality');
+      if (fundamentalsData && fundamentalsData.qualityScore >= 70) strengths.push(`Strong fundamentals (Quality: ${fundamentalsData.qualityScore}/100)`);
+      if (newsSummary && newsSummary.overallSentiment === (executionDirection === 'bullish' ? 'bullish' : 'bearish')) strengths.push('News sentiment aligned with trade direction');
+      if (strengths.length === 0) strengths.push('Setup meets minimum criteria');
+      
+      // Build warnings
+      const warnings = [];
+      if (countertrend) warnings.push('Countertrend trade - higher risk, requires confirmation');
+      if (indicators.rsi > 70) warnings.push('RSI overbought - potential pullback risk');
+      if (indicators.rsi < 30) warnings.push('RSI oversold - potential bounce risk');
+      if (fundamentalsData && fundamentalsData.viability.valuation === 'overvalued') warnings.push('Overvalued fundamentals suggest elevated risk');
+      if (fundamentalsData && fundamentalsData.riskScore >= 70) warnings.push(`High fundamental risk (Risk: ${fundamentalsData.riskScore}/100)`);
+      if (fundamentalsData && fundamentalsData.risk.earningsRisk) warnings.push(`Earnings in ${fundamentalsData.risk.daysToEarnings} days - elevated event risk`);
+      if (newsSummary && newsSummary.overallSentiment !== 'neutral' && newsSummary.overallSentiment !== (executionDirection === 'bullish' ? 'bullish' : 'bearish')) {
+        warnings.push('News sentiment conflicts with trade direction');
+      }
+      if (mainScore < 60) warnings.push('Lower quality setup - consider waiting for better opportunity');
+      if (warnings.length === 0) warnings.push('Monitor for confirmation before entry');
       
       aiAnalysis = {
-        narrative: `${symbol} shows ${compositePattern.candlestickPattern.name} on ${timeframe}.${chartInfo} ${indicators.alignment} alignment (${indicators.trend}). Long-term bias: ${indicators.longTermBias}. RSI: ${indicators.rsi.toFixed(1)}, Overall score: ${score.overall}/100.`,
+        narrative,
         mentorNotes,
-        reasoning: [
-          `Candlestick: ${compositePattern.candlestickPattern.name}`,
-          chartBanner || 'No chart pattern',
-          `Fusion bonus: ${compositePattern.fusionBonus > 0 ? '+' : ''}${compositePattern.fusionBonus}`,
-          `${indicators.alignment} alignment, ${indicators.longTermBias} long-term bias`
-        ],
-        warnings: indicators.rsi > 70 ? ["RSI overbought"] : indicators.rsi < 30 ? ["RSI oversold"] : [],
-        strengths: score.overall > 70 ? ["High setup quality", compositePattern.fusionBonus > 10 ? "Strong pattern alignment" : "Favorable technical alignment"] : []
+        reasoning,
+        warnings,
+        strengths
       };
     }
 
@@ -851,6 +1116,12 @@ export async function POST(request: Request) {
       analysis: aiAnalysis,
       
       squeezeAnalysis,
+      
+      fundamentals: fundamentalsData,
+      
+      news: newsArticles,
+      
+      newsSummary,
       
       marketData: {
         marketCap: marketData.marketCap,

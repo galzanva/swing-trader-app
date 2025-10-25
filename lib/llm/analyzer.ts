@@ -20,7 +20,9 @@ export class LLMAnalyzer {
     score: any,
     riskPlan: any,
     executionPlan: any,
-    squeezeAnalysis?: any
+    squeezeAnalysis?: any,
+    fundamentals?: any,
+    newsSummary?: any
   ): Promise<{
     narrative: string;
     mentorNotes: string;
@@ -38,7 +40,9 @@ export class LLMAnalyzer {
         score,
         riskPlan,
         executionPlan,
-        squeezeAnalysis
+        squeezeAnalysis,
+        fundamentals,
+        newsSummary
       );
 
       // Call OpenAI API
@@ -100,7 +104,9 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     score: any,
     riskPlan: any,
     executionPlan: any,
-    squeezeAnalysis?: any
+    squeezeAnalysis?: any,
+    fundamentals?: any,
+    newsSummary?: any
   ): string {
     let context = `Analyze ${symbol} on ${timeframe} timeframe:\n\n`;
     
@@ -111,30 +117,39 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `- Chart Structure: ${compositePattern.chartPattern.name} (${compositePattern.chartPattern.confidence}%)\n`;
     }
     context += `- Trend: ${indicators.trend}, Strength: ${indicators.strength}\n`;
-    context += `- RSI: ${indicators.rsi.toFixed(1)}, Volume Z: ${indicators.volumeZScore.toFixed(2)}\n`;
-    context += `- EMAs: 9(${indicators.ema9.toFixed(2)}), 20(${indicators.ema20.toFixed(2)}), 50(${indicators.ema50.toFixed(2)})\n`;
+    const rsiSafe = typeof indicators.rsi === 'number' ? indicators.rsi : Number(indicators.rsi ?? 0);
+    const volZSafe = typeof indicators.volumeZScore === 'number' ? indicators.volumeZScore : Number(indicators.volumeZScore ?? 0);
+    const ema9Safe = typeof indicators.ema9 === 'number' ? indicators.ema9 : Number(indicators.ema9 ?? 0);
+    const ema20Safe = typeof indicators.ema20 === 'number' ? indicators.ema20 : Number(indicators.ema20 ?? 0);
+    const ema50Safe = typeof indicators.ema50 === 'number' ? indicators.ema50 : Number(indicators.ema50 ?? 0);
+    context += `- RSI: ${rsiSafe.toFixed(1)}, Volume Z: ${volZSafe.toFixed(2)}\n`;
+    context += `- EMAs: 9(${ema9Safe.toFixed(2)}), 20(${ema20Safe.toFixed(2)}), 50(${ema50Safe.toFixed(2)})\n`;
     context += `- Overall Score: ${score.overall}/100 (${score.rating})\n\n`;
 
     // Squeeze analysis (if available)
-    if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+    if (squeezeAnalysis && squeezeAnalysis.combined && squeezeAnalysis.combined.potential !== 'none') {
       const sq = squeezeAnalysis;
       context += `**Squeeze Dynamics:**\n`;
       context += `- Combined Potential: ${sq.combined.potential.toUpperCase()} (Score: ${sq.combined.score}/100)\n`;
       
-      if (sq.shortSqueeze.potential !== 'none') {
+      if (sq.shortSqueeze && sq.shortSqueeze.potential !== 'none') {
         context += `- Short Interest: ${sq.shortSqueeze.potential} potential\n`;
-        if (sq.shortSqueeze.daysToCover) context += `  • Days to Cover: ${sq.shortSqueeze.daysToCover.toFixed(1)}\n`;
-        if (sq.shortSqueeze.shortFloat) context += `  • Short Float: ${sq.shortSqueeze.shortFloat.toFixed(1)}%\n`;
-        if (sq.shortSqueeze.shortVolumeZ) context += `  • Volume Z-Score: ${sq.shortSqueeze.shortVolumeZ.toFixed(2)}\n`;
+        if (typeof sq.shortSqueeze.daysToCover === 'number') context += `  • Days to Cover: ${sq.shortSqueeze.daysToCover.toFixed(1)}\n`;
+        if (typeof sq.shortSqueeze.shortFloat === 'number') context += `  • Short Float: ${sq.shortSqueeze.shortFloat.toFixed(1)}%\n`;
+        if (typeof sq.shortSqueeze.shortVolumeZ === 'number') context += `  • Volume Z-Score: ${sq.shortSqueeze.shortVolumeZ.toFixed(2)}\n`;
       }
       
-      if (sq.ttmSqueeze.state !== 'OFF') {
-        context += `- TTM Squeeze: ${sq.ttmSqueeze.state} for ${sq.ttmSqueeze.duration} bars\n`;
-        context += `  • Momentum: ${sq.ttmSqueeze.momentumDirection} (${sq.ttmSqueeze.momentumStrength.toFixed(0)}%)\n`;
+      if (sq.ttmSqueeze && sq.ttmSqueeze.state !== 'OFF') {
+        const durationSafe = typeof sq.ttmSqueeze.duration === 'number' ? sq.ttmSqueeze.duration : Number(sq.ttmSqueeze.duration ?? 0);
+        const momStrSafe = typeof sq.ttmSqueeze.momentumStrength === 'number' ? sq.ttmSqueeze.momentumStrength : Number(sq.ttmSqueeze.momentumStrength ?? 0);
+        context += `- TTM Squeeze: ${sq.ttmSqueeze.state} for ${durationSafe} bars\n`;
+        if (sq.ttmSqueeze.momentumDirection) {
+          context += `  • Momentum: ${sq.ttmSqueeze.momentumDirection} (${momStrSafe.toFixed(0)}%)\n`;
+        }
         if (sq.ttmSqueeze.fireConfirmed) context += `  • 🔥 FIRE CONFIRMED - Breakout detected!\n`;
       }
       
-      if (sq.combined.alignment) {
+      if (sq.combined && sq.combined.alignment) {
         context += `- ⚡ BOTH SQUEEZES ALIGNED - Enhanced breakout potential\n`;
       }
       context += `\n`;
@@ -143,8 +158,10 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     // Risk/Reward
     context += `**Risk Profile:**\n`;
     context += `- Direction: ${riskPlan.direction.toUpperCase()}\n`;
-    context += `- R:R Ratio: ${riskPlan.rrRatio.toFixed(2)}:1\n`;
-    context += `- Stop Distance: ${(riskPlan.stopDistance * 100).toFixed(2)}%\n\n`;
+    const rrSafe = typeof riskPlan.rrRatio === 'number' ? riskPlan.rrRatio : Number(riskPlan.rrRatio ?? 0);
+    const stopDistSafe = typeof riskPlan.stopDistance === 'number' ? riskPlan.stopDistance : Number(riskPlan.stopDistance ?? 0);
+    context += `- R:R Ratio: ${rrSafe.toFixed(2)}:1\n`;
+    context += `- Stop Distance: ${(stopDistSafe * 100).toFixed(2)}%\n\n`;
 
     // Execution context
     if (executionPlan.warnings && executionPlan.warnings.length > 0) {
@@ -153,11 +170,57 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `\n`;
     }
 
-    context += `Provide analysis in this format:\n\n`;
-    context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on structure, not just criteria]\n\n`;
-    context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing considerations]\n\n`;
-    context += `**Key Factors to Monitor**\n[What traders should watch - catalysts, levels, squeeze dynamics]\n\n`;
-    context += `**Strengths:** [3-5 bullet points]\n**Warnings:** [2-4 bullet points]\n**Reasoning:** [3-5 technical factors]`;
+    // Comprehensive Fundamentals (Finnhub)
+    if (fundamentals && fundamentals.qualityScore !== undefined) {
+      context += `**Comprehensive Fundamental Analysis (Finnhub):**\n`;
+      context += `- Quality Score: ${fundamentals.qualityScore}/100 (${fundamentals.quality.grade})\n`;
+      context += `- Viability Score: ${fundamentals.viabilityScore}/100 (${fundamentals.viability.valuation})\n`;
+      context += `- Risk Score: ${fundamentals.riskScore}/100 (${fundamentals.risk.level} risk)\n\n`;
+      
+      context += `**Quality Factors:**\n`;
+      if (fundamentals.quality.roe !== null) context += `- ROE: ${fundamentals.quality.roe.toFixed(1)}%\n`;
+      if (fundamentals.quality.operatingMargin !== null) context += `- Operating Margin: ${fundamentals.quality.operatingMargin.toFixed(1)}%\n`;
+      if (fundamentals.quality.fcfMargin !== null) context += `- FCF Margin: ${fundamentals.quality.fcfMargin.toFixed(1)}%\n`;
+      context += `- ${fundamentals.quality.summary}\n\n`;
+      
+      context += `**Viability & Valuation:**\n`;
+      if (fundamentals.viability.pe !== null) context += `- P/E Ratio: ${fundamentals.viability.pe.toFixed(1)}\n`;
+      if (fundamentals.viability.pb !== null) context += `- P/B Ratio: ${fundamentals.viability.pb.toFixed(2)}\n`;
+      if (fundamentals.viability.revenueGrowth !== null) context += `- Revenue Growth: ${fundamentals.viability.revenueGrowth > 0 ? '+' : ''}${fundamentals.viability.revenueGrowth.toFixed(1)}%\n`;
+      if (fundamentals.viability.analystRating !== 'unknown') context += `- Analyst Rating: ${fundamentals.viability.analystRating}\n`;
+      context += `- ${fundamentals.viability.summary}\n\n`;
+      
+      context += `**Risk Factors:**\n`;
+      if (fundamentals.risk.debtToEbitda !== null) context += `- Debt/EBITDA: ${fundamentals.risk.debtToEbitda.toFixed(1)}\n`;
+      if (fundamentals.risk.currentRatio !== null) context += `- Current Ratio: ${fundamentals.risk.currentRatio.toFixed(2)}\n`;
+      if (fundamentals.risk.earningsRisk) context += `- ⚠️ EARNINGS IN ${fundamentals.risk.daysToEarnings} DAYS - HIGH EVENT RISK\n`;
+      if (fundamentals.risk.insiderSentiment !== 'neutral') context += `- Insider Sentiment: ${fundamentals.risk.insiderSentiment}\n`;
+      context += `- ${fundamentals.risk.summary}\n\n`;
+    }
+
+    // News sentiment (if available)
+    if (newsSummary && newsSummary.overallSentiment) {
+      context += `**Recent News Sentiment:**\n`;
+      context += `- Overall: ${newsSummary.overallSentiment.toUpperCase()} `;
+      if (typeof newsSummary.sentimentScore === 'number') {
+        context += `(Score: ${newsSummary.sentimentScore.toFixed(0)})\n`;
+      } else {
+        context += `\n`;
+      }
+      if (newsSummary.summary) {
+        context += `- Summary: ${newsSummary.summary}\n`;
+      }
+      if (newsSummary.keyThemes && Array.isArray(newsSummary.keyThemes) && newsSummary.keyThemes.length > 0) {
+        context += `- Key Themes: ${newsSummary.keyThemes.join(', ')}\n`;
+      }
+      context += `\n`;
+    }
+
+    context += `As a professional swing trader with expertise in technical AND fundamental analysis, provide:\n\n`;
+    context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure, fundamental backdrop, and news sentiment]\n\n`;
+    context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing - factor in valuation and sentiment]\n\n`;
+    context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics, fundamental catalysts, and news developments]\n\n`;
+    context += `**Strengths:** [3-5 bullet points covering technical, fundamental, and sentiment factors]\n**Warnings:** [2-4 bullet points including valuation risks and negative sentiment]\n**Reasoning:** [3-5 factors combining technical, fundamental, and news analysis]`;
 
     return context;
   }
