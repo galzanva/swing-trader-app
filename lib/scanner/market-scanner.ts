@@ -158,21 +158,22 @@ export class MarketScanner {
       // Phase 3: Detailed analysis (fetch OHLCV + indicators)
       const results: ScanResult[] = [];
       
-      // HIGH concurrency for paid Polygon Starter plan (unlimited API calls!)
+      // MAXIMUM concurrency for unlimited Polygon API access
       const hasSqueezeFilters = finalConfig.minShortFloat || finalConfig.minDaysToCover || (finalConfig.ttmSqueezeState && finalConfig.ttmSqueezeState !== 'any');
       const isOverviewMode = finalConfig.overviewMode === true;
       
-      // Maximize concurrency for paid plan
+      // Push concurrency limits for maximum performance with unlimited API
       let baseConcurrency: number;
       if (isOverviewMode) {
-        baseConcurrency = 30; // Overview: very fast, no strategy evaluation
+        baseConcurrency = 50; // Overview: maximum throughput, no strategy evaluation
       } else if (hasSqueezeFilters) {
-        baseConcurrency = 25; // Squeeze filtering: high concurrency
+        baseConcurrency = 40; // Squeeze filtering: high concurrency
       } else {
-        baseConcurrency = 20; // Strategy evaluation: moderate-high concurrency
+        baseConcurrency = 35; // Strategy evaluation: high concurrency for comprehensive scan
       }
       
-      const adaptiveConcurrency = Math.min(baseConcurrency, Math.ceil(filtered.length / 10));
+      // Use full concurrency without artificial caps
+      const adaptiveConcurrency = Math.min(baseConcurrency, Math.max(10, Math.ceil(filtered.length / 5)));
       
       console.log(`[Scanner] Using concurrency: ${adaptiveConcurrency} (paid plan - unlimited API calls!)${hasSqueezeFilters ? ' [squeeze filtering]' : isOverviewMode ? ' [overview mode]' : ''}`);
       
@@ -446,30 +447,14 @@ export class MarketScanner {
     console.log(`[Scanner] Sorted by dollar volume (highest liquidity first)`);
     
     // IMPORTANT: We already filtered ALL stocks above
-    // Now we need to decide how many to actually SCAN (fetch detailed data for)
-    // This is a performance optimization - we can't fetch OHLCV for 6000 stocks
+    // With unlimited API access, we can scan ALL filtered stocks
+    // No artificial limits - user has paid Polygon plan
     const hasSqueezeFilters = config.minShortFloat || config.minDaysToCover || (config.ttmSqueezeState && config.ttmSqueezeState !== 'any');
     const isOverviewMode = config.overviewMode === true;
     
-    let maxToScan: number;
-    if (isOverviewMode) {
-      // Overview mode: Scan top 1000 most liquid (user wants broad market view)
-      maxToScan = 1000;
-    } else if (hasSqueezeFilters) {
-      // Squeeze filters: scan 2000 (squeeze conditions are rare!)
-      maxToScan = 2000;
-    } else {
-      // Strategy evaluation: scan top 300 most liquid
-      maxToScan = 300;
-    }
+    console.log(`[Scanner] Will scan ALL ${filtered.length} filtered tickers (unlimited API access)${hasSqueezeFilters ? ' [squeeze filtering]' : isOverviewMode ? ' [overview mode]' : ' [strategy evaluation]'}`);
+    console.log(`[Scanner] No limits applied - leveraging paid Polygon plan for comprehensive scanning`);
     
-    if (filtered.length > maxToScan) {
-      console.log(`[Scanner] Will scan top ${maxToScan} most liquid tickers${hasSqueezeFilters ? ' (extended for squeeze filtering)' : isOverviewMode ? ' (overview mode - broad scan)' : ''}`);
-      console.log(`[Scanner] Note: ${filtered.length} stocks passed pre-filter, but we'll only fetch detailed data for top ${maxToScan} by liquidity`);
-      return filtered.slice(0, maxToScan);
-    }
-    
-    console.log(`[Scanner] Will scan all ${filtered.length} filtered tickers`);
     return filtered;
   }
 

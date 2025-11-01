@@ -217,13 +217,29 @@ export class ScannerAnalyzer {
       // Evaluate strategy (skip in overview mode)
       let evaluation = null;
       if (!isOverviewMode) {
+        console.log(`[Scanner] ${ticker}: Evaluating against strategy "${strategy.name}"...`);
+        
+        // Safe logging with fallbacks for undefined values
+        const priceSafe = typeof currentPrice === 'number' ? currentPrice.toFixed(2) : 'N/A';
+        const rsiSafe = typeof indicators.rsi14 === 'number' ? indicators.rsi14.toFixed(1) : 'N/A';
+        const volZSafe = typeof indicators.volZ === 'number' ? indicators.volZ.toFixed(2) : 'N/A';
+        const ema9Safe = typeof indicators.ema9 === 'number' ? indicators.ema9.toFixed(2) : 'N/A';
+        const ema20Safe = typeof indicators.ema20 === 'number' ? indicators.ema20.toFixed(2) : 'N/A';
+        const ema50Safe = typeof indicators.ema50 === 'number' ? indicators.ema50.toFixed(2) : 'N/A';
+        const ema200Safe = typeof indicators.ema200 === 'number' ? indicators.ema200.toFixed(2) : 'N/A';
+        
+        console.log(`[Scanner] ${ticker}: Current price: ${priceSafe}, RSI: ${rsiSafe}, VolZ: ${volZSafe}`);
+        console.log(`[Scanner] ${ticker}: EMAs - 9: ${ema9Safe}, 20: ${ema20Safe}, 50: ${ema50Safe}, 200: ${ema200Safe}`);
+        
         evaluation = evaluateUserStrategy(strategy, strategyInput);
         
         // If strategy check fails, skip this stock (not in overview mode)
         if (evaluation === null) {
-          console.log(`[Scanner] ${ticker}: Does not meet strategy criteria`);
+          console.log(`[Scanner] ${ticker}: ❌ Does not meet strategy criteria (check Evaluator logs above for details)`);
           return null;
         }
+        
+        console.log(`[Scanner] ${ticker}: ✅ PASSED strategy evaluation! Quality: ${(evaluation.quality * 100).toFixed(0)}%, Viability: ${(evaluation.viability * 100).toFixed(0)}%`);
       }
 
       // Calculate squeeze analysis for all stocks (for ranking)

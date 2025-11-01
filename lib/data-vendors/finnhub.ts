@@ -114,6 +114,18 @@ export interface FinnhubComprehensiveFundamentals {
   
   // Raw metrics for reference
   rawMetrics: FinnhubMetrics;
+  // Company profile for industry context
+  profile?: {
+    name?: string;
+    ticker?: string;
+    exchange?: string;
+    industry?: string;
+    sector?: string;
+    ipo?: string;
+    country?: string;
+    currency?: string;
+    marketCap?: number;
+  };
 }
 
 export class FinnhubClient {
@@ -227,6 +239,38 @@ export class FinnhubClient {
   }
 
   /**
+   * Fetch company profile (industry, sector, market cap)
+   */
+  async getCompanyProfile(symbol: string): Promise<{ industry?: string; sector?: string; name?: string; ticker?: string; exchange?: string; ipo?: string; country?: string; currency?: string; marketCap?: number } | null> {
+    try {
+      const url = `${this.baseUrl}/stock/profile2?symbol=${symbol}&token=${this.apiKey}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error(`[Finnhub] Error fetching profile for ${symbol}: ${response.statusText}`);
+        return null;
+      }
+      const data = await response.json();
+      if (!data) return null;
+      // Map finnhub fields to our profile shape
+      return {
+        name: data.name,
+        ticker: data.ticker,
+        exchange: data.exchange,
+        ipo: data.ipo,
+        country: data.country,
+        currency: data.currency,
+        // Finnhub uses 'finnhubIndustry' for industry; no sector provided
+        industry: data.finnhubIndustry,
+        sector: data.sector || undefined,
+        marketCap: typeof data.marketCapitalization === 'number' ? data.marketCapitalization : undefined
+      };
+    } catch (error) {
+      console.error(`[Finnhub] Exception fetching profile for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get comprehensive fundamental analysis
    * This is the main method that combines all data sources
    */
@@ -234,11 +278,12 @@ export class FinnhubClient {
     console.log(`[Finnhub] Fetching comprehensive fundamentals for ${symbol}...`);
     
     // Fetch all data in parallel
-    const [metrics, insiderData, recommendations, earningsCalendar] = await Promise.all([
+    const [metrics, insiderData, recommendations, earningsCalendar, profile] = await Promise.all([
       this.getBasicFinancials(symbol),
       this.getInsiderSentiment(symbol),
       this.getRecommendations(symbol),
-      this.getEarningsCalendar(symbol)
+      this.getEarningsCalendar(symbol),
+      this.getCompanyProfile(symbol)
     ]);
 
     if (!metrics) {
@@ -275,7 +320,8 @@ export class FinnhubClient {
       quality,
       viability,
       risk,
-      rawMetrics: metrics
+      rawMetrics: metrics,
+      profile: profile || undefined
     };
   }
 

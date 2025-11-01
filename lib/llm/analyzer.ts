@@ -127,10 +127,10 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     context += `- Overall Score: ${score.overall}/100 (${score.rating})\n\n`;
 
     // Squeeze analysis (if available)
-    if (squeezeAnalysis && squeezeAnalysis.combined && squeezeAnalysis.combined.potential !== 'none') {
+    if (squeezeAnalysis && squeezeAnalysis.combinedPotential && squeezeAnalysis.combinedPotential !== 'none') {
       const sq = squeezeAnalysis;
       context += `**Squeeze Dynamics:**\n`;
-      context += `- Combined Potential: ${sq.combined.potential.toUpperCase()} (Score: ${sq.combined.score}/100)\n`;
+      context += `- Combined Potential: ${sq.combinedPotential.toUpperCase()} (Score: ${sq.combinedScore}/100)\n`;
       
       if (sq.shortSqueeze && sq.shortSqueeze.potential !== 'none') {
         context += `- Short Interest: ${sq.shortSqueeze.potential} potential\n`;
@@ -139,17 +139,17 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
         if (typeof sq.shortSqueeze.shortVolumeZ === 'number') context += `  • Volume Z-Score: ${sq.shortSqueeze.shortVolumeZ.toFixed(2)}\n`;
       }
       
-      if (sq.ttmSqueeze && sq.ttmSqueeze.state !== 'OFF') {
-        const durationSafe = typeof sq.ttmSqueeze.duration === 'number' ? sq.ttmSqueeze.duration : Number(sq.ttmSqueeze.duration ?? 0);
+      if (sq.ttmSqueeze && sq.ttmSqueeze.current && sq.ttmSqueeze.current.state !== 'OFF') {
+        const durationSafe = typeof sq.ttmSqueeze.squeezeDuration === 'number' ? sq.ttmSqueeze.squeezeDuration : Number(sq.ttmSqueeze.squeezeDuration ?? 0);
         const momStrSafe = typeof sq.ttmSqueeze.momentumStrength === 'number' ? sq.ttmSqueeze.momentumStrength : Number(sq.ttmSqueeze.momentumStrength ?? 0);
-        context += `- TTM Squeeze: ${sq.ttmSqueeze.state} for ${durationSafe} bars\n`;
+        context += `- TTM Squeeze: ${sq.ttmSqueeze.current.state} for ${durationSafe} bars\n`;
         if (sq.ttmSqueeze.momentumDirection) {
           context += `  • Momentum: ${sq.ttmSqueeze.momentumDirection} (${momStrSafe.toFixed(0)}%)\n`;
         }
         if (sq.ttmSqueeze.fireConfirmed) context += `  • 🔥 FIRE CONFIRMED - Breakout detected!\n`;
       }
       
-      if (sq.combined && sq.combined.alignment) {
+      if (sq.alignment) {
         context += `- ⚡ BOTH SQUEEZES ALIGNED - Enhanced breakout potential\n`;
       }
       context += `\n`;
@@ -170,8 +170,13 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `\n`;
     }
 
-    // Comprehensive Fundamentals (Finnhub)
+    // Comprehensive Fundamentals (Finnhub) + Industry Context
     if (fundamentals && fundamentals.qualityScore !== undefined) {
+      const industry = fundamentals.profile?.industry || 'Unknown';
+      const sector = fundamentals.profile?.sector || 'Unknown';
+      context += `**Company & Industry Context:**\n`;
+      context += `- Sector: ${sector} | Industry: ${industry}\n`;
+      context += `- Use industry-aware interpretation (e.g., high P/E acceptable for hypergrowth software; low margins typical in retail). If industry is Unknown, default to broad-market norms.\n\n`;
       context += `**Comprehensive Fundamental Analysis (Finnhub):**\n`;
       context += `- Quality Score: ${fundamentals.qualityScore}/100 (${fundamentals.quality.grade})\n`;
       context += `- Viability Score: ${fundamentals.viabilityScore}/100 (${fundamentals.viability.valuation})\n`;
@@ -198,6 +203,11 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `- ${fundamentals.risk.summary}\n\n`;
     }
 
+    // Weighted Sub-Scores (render guidance for the model)
+    context += `**Scoring Weights (Guide):**\n`;
+    context += `- Technical: 25% | Momentum: 20% | Trend: 15% | Pattern: 25% | Volume: 5% | Fundamentals: 10%\n`;
+    context += `Explicitly compute a composite score (0-100) and a letter grade (A+..D).\n\n`;
+
     // News sentiment (if available)
     if (newsSummary && newsSummary.overallSentiment) {
       context += `**Recent News Sentiment:**\n`;
@@ -217,9 +227,9 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     }
 
     context += `As a professional swing trader with expertise in technical AND fundamental analysis, provide:\n\n`;
-    context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure, fundamental backdrop, and news sentiment]\n\n`;
+    context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure; how fundamentals (relative to industry norms) and sentiment strengthen or weaken conviction]\n\n`;
     context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing - factor in valuation and sentiment]\n\n`;
-    context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics, fundamental catalysts, and news developments]\n\n`;
+    context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics (TTM state/momentum), earnings date, valuation re-ratings, and industry-specific catalysts]\n\n`;
     context += `**Strengths:** [3-5 bullet points covering technical, fundamental, and sentiment factors]\n**Warnings:** [2-4 bullet points including valuation risks and negative sentiment]\n**Reasoning:** [3-5 factors combining technical, fundamental, and news analysis]`;
 
     return context;

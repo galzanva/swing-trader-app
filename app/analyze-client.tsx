@@ -218,6 +218,19 @@ export default function AnalyzeClient() {
                   </span>
                 </h2>
                 <p className="text-blue-200">{report.name}</p>
+                {report.fundamentals?.profile && (
+                  <p className="text-sm text-blue-300 mt-1">
+                    {report.fundamentals.profile.sector && (
+                      <span>{report.fundamentals.profile.sector}</span>
+                    )}
+                    {report.fundamentals.profile.sector && report.fundamentals.profile.industry && (
+                      <span className="mx-2">•</span>
+                    )}
+                    {report.fundamentals.profile.industry && (
+                      <span>{report.fundamentals.profile.industry}</span>
+                    )}
+                  </p>
+                )}
                 <p className="text-sm text-blue-300 mt-1">
                   Price (from data): <span className="text-white font-semibold">${report.currentPrice.toFixed(2)}</span>
                   {report.marketData.exchange && <span className="ml-4">• {report.marketData.exchange}</span>}
@@ -1296,6 +1309,23 @@ export default function AnalyzeClient() {
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">💼 Comprehensive Fundamental Analysis</h3>
               
+              {/* Company & Industry Context */}
+              {report.fundamentals.profile && (
+                <div className="mb-4 p-4 rounded-lg bg-white/5 border border-white/10 text-sm text-blue-100">
+                  <div className="flex flex-wrap gap-4">
+                    {report.fundamentals.profile.sector && (
+                      <div><span className="text-blue-300">Sector:</span> {report.fundamentals.profile.sector}</div>
+                    )}
+                    {report.fundamentals.profile.industry && (
+                      <div><span className="text-blue-300">Industry:</span> {report.fundamentals.profile.industry}</div>
+                    )}
+                    {report.fundamentals.profile.marketCap && (
+                      <div><span className="text-blue-300">Mkt Cap:</span> ${ (report.fundamentals.profile.marketCap/1e9).toFixed(1) }B</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Top-level Scores */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30">

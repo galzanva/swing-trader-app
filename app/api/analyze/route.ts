@@ -388,9 +388,9 @@ export async function POST(request: Request) {
     const polygonClient = new PolygonClient(polygonApiKey);
     const marketData = await polygonClient.getAggregatesWithShortInterest(symbol, timeframe as any);
 
-    if (marketData.bars.length < 200) {
-  return NextResponse.json(
-        { error: "Insufficient data for analysis. Need at least 200 bars." },
+    if (marketData.bars.length < 100) {
+      return NextResponse.json(
+        { error: "Insufficient data for analysis. Need at least 100 bars." },
         { status: 400 }
       );
     }
@@ -666,6 +666,9 @@ export async function POST(request: Request) {
         fundamentalsData = fundamentals;
         console.log(`[Analyze] Finnhub fundamentals - Quality: ${fundamentals.qualityScore}, Viability: ${fundamentals.viabilityScore}, Risk: ${fundamentals.riskScore}`);
         console.log(`[Analyze] Valuation: ${fundamentals.viability.valuation}, Quality: ${fundamentals.quality.grade}, Risk: ${fundamentals.risk.level}`);
+        if (fundamentals.profile) {
+          console.log(`[Analyze] Company Profile - Sector: ${fundamentals.profile.sector || 'N/A'}, Industry: ${fundamentals.profile.industry || 'N/A'}`);
+        }
       } else {
         console.log(`[Analyze] No fundamentals data available for ${symbol}`);
       }
@@ -768,11 +771,11 @@ export async function POST(request: Request) {
           ? `${compositePattern.chartPattern.name} chart pattern (${compositePattern.chartPattern.confidence}% confidence, ${compositePattern.chartPattern.breakoutStatus})`
           : 'candlestick-only setup';
         
-        const squeezeStr = squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none'
-          ? `Squeeze dynamics show ${squeezeAnalysis.combined.potential} potential (score: ${squeezeAnalysis.combined.score}/100). ` +
-            (squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
-             squeezeAnalysis.ttmSqueeze.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.duration} bars - volatility compression building. ` : '') +
-            (squeezeAnalysis.shortSqueeze.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
+        const squeezeStr = squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none'
+          ? `Squeeze dynamics show ${squeezeAnalysis.combinedPotential} potential (score: ${squeezeAnalysis.combinedScore}/100). ` +
+            (squeezeAnalysis.ttmSqueeze?.current?.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
+             squeezeAnalysis.ttmSqueeze?.current?.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.squeezeDuration} bars - volatility compression building. ` : '') +
+            (squeezeAnalysis.shortSqueeze?.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
           : 'No significant squeeze dynamics detected. ';
         
         const newsStr = newsSummary
@@ -792,8 +795,8 @@ export async function POST(request: Request) {
         }
         mentorNotes += `Price action shows ${indicators.alignment} alignment in a ${trendDesc} trend (strength: ${indicators.strength}).\n\n`;
         
-        if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
-          mentorNotes += `**Squeeze Dynamics:**\n${squeezeAnalysis.combined.recommendation}\n\n`;
+        if (squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none') {
+          mentorNotes += `**Squeeze Dynamics:**\n${squeezeAnalysis.recommendation}\n\n`;
         }
         
         if (newsSummary && newsSummary.overallSentiment !== 'neutral') {
@@ -810,8 +813,8 @@ export async function POST(request: Request) {
           `Trend: ${trendDesc} (${indicators.strength} strength)`,
           `Momentum: RSI ${indicators.rsi.toFixed(1)}, MACD ${indicators.macd.histogram > 0 ? 'positive' : 'negative'}`,
         ];
-        if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
-          reasoning.push(`Squeeze: ${squeezeAnalysis.combined.potential} potential`);
+        if (squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none') {
+          reasoning.push(`Squeeze: ${squeezeAnalysis.combinedPotential} potential`);
         }
         if (newsSummary) {
           reasoning.push(`Sentiment: ${newsSummary.overallSentiment}`);
@@ -820,7 +823,7 @@ export async function POST(request: Request) {
         const strengths = [];
         if (mainScore >= 70) strengths.push('High quality technical setup');
         if (compositePattern.fusionBonus > 10) strengths.push('Strong pattern alignment');
-        if (squeezeAnalysis && squeezeAnalysis.combined.score >= 50) strengths.push(`${squeezeAnalysis.combined.potential} squeeze dynamics`);
+        if (squeezeAnalysis && squeezeAnalysis.combinedScore >= 50) strengths.push(`${squeezeAnalysis.combinedPotential} squeeze dynamics`);
         if (newsSummary && newsSummary.overallSentiment === (executionDirection === 'bullish' ? 'bullish' : 'bearish')) strengths.push('News sentiment aligned');
         if (strengths.length === 0) strengths.push('Setup meets minimum criteria');
         
@@ -850,11 +853,11 @@ export async function POST(request: Request) {
         : 'candlestick-only setup';
       
       // Squeeze analysis
-      const squeezeStr = squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none'
-        ? `Squeeze dynamics show ${squeezeAnalysis.combined.potential} potential (score: ${squeezeAnalysis.combined.score}/100). ` +
-          (squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
-           squeezeAnalysis.ttmSqueeze.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.duration} bars - volatility compression building. ` : '') +
-          (squeezeAnalysis.shortSqueeze.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
+      const squeezeStr = squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none'
+        ? `Squeeze dynamics show ${squeezeAnalysis.combinedPotential} potential (score: ${squeezeAnalysis.combinedScore}/100). ` +
+          (squeezeAnalysis.ttmSqueeze?.current?.state === 'FIRE' ? 'TTM Squeeze FIRE detected - breakout in progress. ' : 
+           squeezeAnalysis.ttmSqueeze?.current?.state === 'ON' ? `TTM Squeeze ON for ${squeezeAnalysis.ttmSqueeze.squeezeDuration} bars - volatility compression building. ` : '') +
+          (squeezeAnalysis.shortSqueeze?.shortFloat ? `Short float at ${squeezeAnalysis.shortSqueeze.shortFloat.toFixed(1)}%. ` : '')
         : 'No significant squeeze dynamics detected. ';
       
       // Fundamentals analysis
@@ -885,9 +888,9 @@ export async function POST(request: Request) {
       }
       mentorNotes += `Price action shows ${indicators.alignment} alignment in a ${trendDesc} trend (strength: ${indicators.strength}).\n\n`;
       
-      if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
+      if (squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none') {
         mentorNotes += `**Squeeze Dynamics:**\n`;
-        mentorNotes += `${squeezeAnalysis.combined.recommendation}\n\n`;
+        mentorNotes += `${squeezeAnalysis.recommendation}\n\n`;
       }
       
       if (fundamentalsData) {
@@ -927,8 +930,8 @@ export async function POST(request: Request) {
         `Momentum: RSI ${indicators.rsi.toFixed(1)}, MACD ${indicators.macd.histogram > 0 ? 'positive' : 'negative'}`,
         `Volume: Z-score ${indicators.volumeZScore.toFixed(2)}`,
       ];
-      if (squeezeAnalysis && squeezeAnalysis.combined.potential !== 'none') {
-        reasoning.push(`Squeeze: ${squeezeAnalysis.combined.potential} potential (${squeezeAnalysis.combined.score}/100)`);
+      if (squeezeAnalysis && squeezeAnalysis.combinedPotential !== 'none') {
+        reasoning.push(`Squeeze: ${squeezeAnalysis.combinedPotential} potential (${squeezeAnalysis.combinedScore}/100)`);
       }
       if (fundamentalsData) {
         reasoning.push(`Fundamentals: ${fundamentalsData.viability.valuation}, ${fundamentalsData.quality.grade} quality (Q:${fundamentalsData.qualityScore} V:${fundamentalsData.viabilityScore} R:${fundamentalsData.riskScore})`);
@@ -942,7 +945,7 @@ export async function POST(request: Request) {
       if (mainScore >= 70) strengths.push('High quality technical setup');
       if (compositePattern.fusionBonus > 10) strengths.push('Strong pattern alignment');
       if (indicators.volumeZScore > 1) strengths.push('Above-average volume confirmation');
-      if (squeezeAnalysis && squeezeAnalysis.combined.score >= 50) strengths.push(`${squeezeAnalysis.combined.potential} squeeze dynamics`);
+      if (squeezeAnalysis && squeezeAnalysis.combinedScore >= 50) strengths.push(`${squeezeAnalysis.combinedPotential} squeeze dynamics`);
       if (fundamentalsData && fundamentalsData.viability.valuation === 'undervalued') strengths.push('Undervalued fundamentals provide downside support');
       if (fundamentalsData && fundamentalsData.quality.grade === 'excellent') strengths.push('Excellent fundamental quality');
       if (fundamentalsData && fundamentalsData.qualityScore >= 70) strengths.push(`Strong fundamentals (Quality: ${fundamentalsData.qualityScore}/100)`);

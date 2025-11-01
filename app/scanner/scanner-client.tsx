@@ -75,6 +75,16 @@ export default function ScannerClient() {
   
   const [showFilters, setShowFilters] = useState(false);
   
+  // Result filtering and sorting states
+  const [sortBy, setSortBy] = useState<'matchScore' | 'rsi' | 'atr' | 'price' | 'volume' | 'changePercent'>('matchScore');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [filterRsiMin, setFilterRsiMin] = useState<number>(0);
+  const [filterRsiMax, setFilterRsiMax] = useState<number>(100);
+  const [filterAtrMin, setFilterAtrMin] = useState<number>(0);
+  const [filterAtrMax, setFilterAtrMax] = useState<number>(100);
+  const [filterPriceMin, setFilterPriceMin] = useState<number>(0);
+  const [filterPriceMax, setFilterPriceMax] = useState<number>(999999);
+  
   const resultsPerPage = 10;
   
   // Check if we're in overview mode
@@ -231,11 +241,57 @@ export default function ScannerClient() {
     }
   };
 
+  // Apply filtering and sorting to results
+  const filteredResults = results.filter(r => {
+    // RSI filter
+    if (r.indicators) {
+      if (r.indicators.rsi14 < filterRsiMin || r.indicators.rsi14 > filterRsiMax) return false;
+      if (r.indicators.atrPct < filterAtrMin || r.indicators.atrPct > filterAtrMax) return false;
+    }
+    // Price filter
+    if (r.price < filterPriceMin || r.price > filterPriceMax) return false;
+    return true;
+  });
+  
+  const sortedResults = [...filteredResults].sort((a, b) => {
+    let aVal: number = 0;
+    let bVal: number = 0;
+    
+    switch (sortBy) {
+      case 'matchScore':
+        aVal = a.matchScore;
+        bVal = b.matchScore;
+        break;
+      case 'rsi':
+        aVal = a.indicators?.rsi14 ?? 50;
+        bVal = b.indicators?.rsi14 ?? 50;
+        break;
+      case 'atr':
+        aVal = a.indicators?.atrPct ?? 0;
+        bVal = b.indicators?.atrPct ?? 0;
+        break;
+      case 'price':
+        aVal = a.price;
+        bVal = b.price;
+        break;
+      case 'volume':
+        aVal = a.volume;
+        bVal = b.volume;
+        break;
+      case 'changePercent':
+        aVal = a.changePercent;
+        bVal = b.changePercent;
+        break;
+    }
+    
+    return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
+  });
+  
   // Pagination
-  const totalPages = Math.ceil(results.length / resultsPerPage);
+  const totalPages = Math.ceil(sortedResults.length / resultsPerPage);
   const startIndex = (currentPage - 1) * resultsPerPage;
   const endIndex = startIndex + resultsPerPage;
-  const currentResults = results.slice(startIndex, endIndex);
+  const currentResults = sortedResults.slice(startIndex, endIndex);
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
@@ -537,6 +593,9 @@ export default function ScannerClient() {
                   {results.filter(r => r.matchDetails.eligible).length}
                 </span>
                 <span className="text-blue-200 ml-2">qualified</span>
+                <span className="mx-3 text-blue-500">|</span>
+                <span className="text-lg font-semibold text-blue-400">{sortedResults.length}</span>
+                <span className="text-blue-200 ml-2">shown</span>
               </div>
 
               {/* Pagination Controls */}
@@ -561,6 +620,138 @@ export default function ScannerClient() {
                   </button>
                 </div>
               )}
+            </div>
+            
+            {/* Filtering and Sorting Controls */}
+            <div className="mb-6 bg-slate-800/50 backdrop-blur rounded-xl p-4 border border-slate-700">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {/* Sort By */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="matchScore">Match Score</option>
+                    <option value="rsi">RSI</option>
+                    <option value="atr">ATR %</option>
+                    <option value="price">Price</option>
+                    <option value="volume">Volume</option>
+                    <option value="changePercent">Change %</option>
+                  </select>
+                </div>
+                
+                {/* Sort Order */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="desc">High to Low</option>
+                    <option value="asc">Low to High</option>
+                  </select>
+                </div>
+                
+                {/* RSI Range */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">RSI Range</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={filterRsiMin}
+                      onChange={(e) => setFilterRsiMin(Number(e.target.value))}
+                      placeholder="Min"
+                      min="0"
+                      max="100"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    <span className="text-blue-300">-</span>
+                    <input
+                      type="number"
+                      value={filterRsiMax}
+                      onChange={(e) => setFilterRsiMax(Number(e.target.value))}
+                      placeholder="Max"
+                      min="0"
+                      max="100"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+                
+                {/* ATR % Range */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">ATR % Range</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={filterAtrMin}
+                      onChange={(e) => setFilterAtrMin(Number(e.target.value))}
+                      placeholder="Min"
+                      min="0"
+                      step="0.1"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    <span className="text-blue-300">-</span>
+                    <input
+                      type="number"
+                      value={filterAtrMax}
+                      onChange={(e) => setFilterAtrMax(Number(e.target.value))}
+                      placeholder="Max"
+                      min="0"
+                      step="0.1"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+                
+                {/* Price Range */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-2">Price Range</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={filterPriceMin}
+                      onChange={(e) => setFilterPriceMin(Number(e.target.value))}
+                      placeholder="Min"
+                      min="0"
+                      step="1"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    <span className="text-blue-300">-</span>
+                    <input
+                      type="number"
+                      value={filterPriceMax}
+                      onChange={(e) => setFilterPriceMax(Number(e.target.value))}
+                      placeholder="Max"
+                      min="0"
+                      step="1"
+                      className="w-full px-2 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Reset Filters Button */}
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    setFilterRsiMin(0);
+                    setFilterRsiMax(100);
+                    setFilterAtrMin(0);
+                    setFilterAtrMax(100);
+                    setFilterPriceMin(0);
+                    setFilterPriceMax(999999);
+                    setSortBy('matchScore');
+                    setSortOrder('desc');
+                  }}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm transition-colors"
+                >
+                  Reset Filters
+                </button>
+              </div>
             </div>
 
             {/* No Qualified Matches Warning */}

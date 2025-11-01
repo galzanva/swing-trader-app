@@ -58,9 +58,9 @@ export async function POST(request: Request) {
     const polygonClient = new PolygonClient(polygonApiKey);
     const marketData = await polygonClient.getAggregatesWithShortInterest(symbol, timeframe as any);
 
-    if (marketData.bars.length < 200) {
+    if (marketData.bars.length < 100) {
       return NextResponse.json(
-        { error: 'Insufficient data for analysis. Need at least 200 bars.' },
+        { error: 'Insufficient data for analysis. Need at least 100 bars.' },
         { status: 400 }
       );
     }
@@ -266,9 +266,9 @@ export async function GET(request: Request) {
     const polygonClient = new PolygonClient(polygonApiKey);
     const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
 
-    if (marketData.bars.length < 200) {
+    if (marketData.bars.length < 100) {
       return NextResponse.json(
-        { error: 'Insufficient data for analysis' },
+        { error: 'Insufficient data for analysis. Need at least 100 bars.' },
         { status: 400 }
       );
     }
