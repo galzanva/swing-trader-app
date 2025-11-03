@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { AnalysisReport } from "./api/analyze/route";
+import HelpIcon from "./components/help-icon";
+import PatternExplanationHelpModal from "./components/pattern-explanation-help-modal";
 
 // Normalize pattern names for consistent tone
 function normalizePatternName(name: string): string {
@@ -21,6 +23,7 @@ export default function AnalyzeClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [patternHelpOpen, setPatternHelpOpen] = useState(false);
 
   const handleAnalyze = async () => {
     if (!symbol.trim()) {
@@ -649,7 +652,14 @@ export default function AnalyzeClient() {
           {/* V2 Pattern Detection - Explainability */}
           {report.patternV2 && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-              <h3 className="text-xl font-bold text-white mb-4">🔍 Pattern Detection V2 - Explainability</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-xl font-bold text-white">🔍 Pattern Detection V2 - Explainability</h3>
+                <HelpIcon 
+                  onClick={() => setPatternHelpOpen(true)}
+                  tooltip="Click for detailed explanation of metrics and calculations"
+                  className="ml-2"
+                />
+              </div>
               <p className="text-blue-200 text-sm mb-4">
                 Deterministic pattern analysis with full transparency. All confidence scores computed by explicit rules.
               </p>
@@ -1636,6 +1646,12 @@ export default function AnalyzeClient() {
           </div>
         </div>
       )}
+
+      {/* Pattern Explanation Help Modal */}
+      <PatternExplanationHelpModal 
+        isOpen={patternHelpOpen}
+        onClose={() => setPatternHelpOpen(false)}
+      />
     </div>
   );
 }
