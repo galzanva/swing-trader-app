@@ -24,6 +24,9 @@ export default function AnalyzeClient() {
   const [error, setError] = useState("");
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [patternHelpOpen, setPatternHelpOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const handleAnalyze = async () => {
     if (!symbol.trim()) {
@@ -34,6 +37,8 @@ export default function AnalyzeClient() {
     setIsLoading(true);
     setError("");
     setReport(null);
+    setSaveSuccess(false);
+    setSaveError("");
 
     try {
       const response = await fetch("/api/analyze", {
@@ -53,6 +58,54 @@ export default function AnalyzeClient() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveReport = async () => {
+    if (!report) return;
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+    setSaveError("");
+
+    try {
+      const title = `${symbol.toUpperCase()} Deep Analysis - ${timeframe}`;
+      const description = `Deep analysis for ${symbol.toUpperCase()} on ${timeframe} timeframe. Generated on ${new Date().toLocaleDateString()}`;
+
+      const response = await fetch("/api/reports/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "deep-analysis",
+          title,
+          description,
+          parameters: {
+            symbol: symbol.toUpperCase(),
+            timeframe,
+          },
+          reportData: report,
+          cachedData: {
+            // Store cacheable data for optimization
+            technical: report.technical,
+            fundamentals: report.fundamentals,
+            timestamp: new Date().toISOString(),
+          },
+          tags: [symbol.toUpperCase(), timeframe, "deep-analysis"],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save report");
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 5000);
+    } catch (err: any) {
+      setSaveError(err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1640,8 +1693,64 @@ export default function AnalyzeClient() {
             </div>
           </div>
 
+          {/* Save Report Section */}
+          <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-lg rounded-2xl p-6 border border-blue-500/30">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">Save This Analysis</h3>
+                <p className="text-blue-200 text-sm">
+                  Save this report to your account for future reference, comparison, or to rerun with latest data
+                </p>
+              </div>
+              <button
+                onClick={handleSaveReport}
+                disabled={isSaving}
+                className="px-6 py-3 bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-semibold rounded-lg transition-all shadow-lg disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    <span>Save Report</span>
+                  </>
+                )}
+              </button>
+            </div>
+            
+            {/* Success/Error Messages */}
+            {saveSuccess && (
+              <div className="mt-4 p-3 bg-green-500/20 border border-green-500/50 rounded-lg">
+                <p className="text-green-300 text-sm flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span><strong>Success!</strong> Report saved to your account. View it in <a href="/reports" className="underline hover:text-green-200">Saved Reports</a>.</span>
+                </p>
+              </div>
+            )}
+            {saveError && (
+              <div className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+                <p className="text-red-300 text-sm flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <span><strong>Error:</strong> {saveError}</span>
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Timestamp */}
-          <div className="text-center text-blue-300 text-sm">
+          <div className="text-center text-blue-300 text-sm mt-4">
             Analysis generated at {new Date(report.timestamp).toLocaleString()}
           </div>
         </div>

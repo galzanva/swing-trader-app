@@ -34,29 +34,29 @@ export async function POST(request: NextRequest) {
 
     if (!isOverviewMode) {
       // Strategy mode - require strategyId
-      if (!strategyId) {
-        return NextResponse.json(
+    if (!strategyId) {
+      return NextResponse.json(
           { error: 'Strategy ID is required (or use overview mode)' },
-          { status: 400 }
-        );
-      }
+        { status: 400 }
+      );
+    }
 
-      // Get user's strategy
-      const strategies = await getUserStrategies(session.user.id, false);
+    // Get user's strategy
+    const strategies = await getUserStrategies(session.user.id, false);
       const userStrategy = strategies.find(s => s.id === strategyId);
 
       if (!userStrategy) {
-        return NextResponse.json(
-          { error: 'Strategy not found' },
-          { status: 404 }
-        );
-      }
+      return NextResponse.json(
+        { error: 'Strategy not found' },
+        { status: 404 }
+      );
+    }
 
       if (!userStrategy.isActive) {
-        return NextResponse.json(
-          { error: 'Strategy is not active' },
-          { status: 400 }
-        );
+      return NextResponse.json(
+        { error: 'Strategy is not active' },
+        { status: 400 }
+      );
       }
 
       strategy = userStrategy.dsl;
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       minPrice: config?.minPrice || 5,
       maxPrice: config?.maxPrice || 1000,
       minVolume: config?.minVolume || 500000,
-      marketCapPreset: config?.marketCapPreset || 'mid_plus',
+      marketCapPreset: config?.marketCapPreset || 'any', // Use 'any' by default - dollar volume is sufficient
       minDollarVolume: config?.minDollarVolume || 20_000_000,
       minAtrPct: config?.minAtrPct,
       maxAtrPct: config?.maxAtrPct,

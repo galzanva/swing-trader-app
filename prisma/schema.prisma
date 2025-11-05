@@ -28,6 +28,7 @@ model User {
   scanPresets   ScanPreset[]
   scanRuns      ScanRun[]
   strategies    UserStrategy[]
+  savedReports  SavedReport[]
   
   @@index([email])
 }
@@ -281,4 +282,44 @@ model UserStrategyBacktest {
   @@index([symbol, timeframe])
   @@index([signalDate])
   @@index([strategyId, symbol, signalDate])
+}
+
+// Saved Analysis Reports
+// Stores complete analysis reports with optimization for reruns
+model SavedReport {
+  id          String   @id @default(cuid())
+  userId      String
+  
+  // Report metadata
+  type        String   // "deep-analysis", "strategy-analysis", "backtest"
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  
+  // Input parameters (for rerun)
+  parameters  Json     // { symbol, timeframe, strategyId, config, etc. }
+  
+  // Full report data
+  reportData  Json     // Complete analysis results, metrics, charts
+  
+  // Cached data for optimization
+  cachedData  Json?    // Historical bars, indicators, fundamentals (static data)
+  
+  // Metadata
+  version     String   @default("1.0")  // Schema version for migrations
+  tags        String[] // User tags for organization
+  isPinned    Boolean  @default(false)  // Pin to top of list
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastViewedAt DateTime?
+  lastRerunAt  DateTime?
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([userId, type])
+  @@index([userId, createdAt])
+  @@index([userId, isPinned])
 }

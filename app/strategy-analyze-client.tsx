@@ -327,13 +327,13 @@ export default function StrategyAnalyzeClient() {
 
           {/* Trade Plan & Trade Case - Side by Side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Trade Plan */}
-            {result.evaluation.plan && (
-              <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
-                <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
+          {/* Trade Plan */}
+          {result.evaluation.plan && (
+            <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
+              <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
                 <div className="space-y-6">
-                  <div>
-                    <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
+                <div>
+                  <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
                   <div className="space-y-2">
                     {(() => {
                       const plan = result.evaluation.plan!;
@@ -363,18 +363,18 @@ export default function StrategyAnalyzeClient() {
                         </>
                       );
                     })()}
-                    <div className="flex justify-between">
-                      <span className="text-blue-200">Risk per Share:</span>
-                      <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-blue-200">Position Size:</span>
-                      <span className="font-medium text-white">{result.summary.positionSize.toFixed(1)}%</span>
-                    </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-200">Risk per Share:</span>
+                        <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-200">Position Size:</span>
+                        <span className="font-medium text-white">{result.summary.positionSize.toFixed(1)}%</span>
+                      </div>
                   </div>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
                   <div className="space-y-2">
                     {(() => {
                       const plan = result.evaluation.plan!;
@@ -394,10 +394,10 @@ export default function StrategyAnalyzeClient() {
                         );
                       });
                     })()}
-                    </div>
                   </div>
                 </div>
               </div>
+            </div>
             )}
 
             {/* Trade Case (FOR/AGAINST) */}

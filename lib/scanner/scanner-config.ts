@@ -95,9 +95,9 @@ export interface EnhancedScannerConfig {
 export const DEFAULT_SCANNER_CONFIG: EnhancedScannerConfig = {
   minPrice: 5,
   maxPrice: 10000,
-  marketCapPreset: 'mid_plus', // >= $2B by default
+  marketCapPreset: 'any', // No market cap filter by default - dollar volume is sufficient
   minVolume: 500_000,
-  minDollarVolume: 20_000_000, // $20M median
+  minDollarVolume: 20_000_000, // $20M median - this is the primary liquidity filter
   minAtrPct: 0,
   maxAtrPct: 100,
   trendDirection: 'any',

@@ -131,7 +131,11 @@ export class MarketScanner {
       });
 
       const snapshot = await this.getMarketSnapshot(finalConfig);
-      console.log(`[Scanner] Snapshot returned ${snapshot.length} tickers`);
+      console.log(`\n========== MARKET SNAPSHOT ==========`);
+      console.log(`[Scanner] ✅ Snapshot returned: ${snapshot.length} tickers`);
+      console.log(`[Scanner] Config: minPrice=$${finalConfig.minPrice}, maxPrice=$${finalConfig.maxPrice}, minVol=${finalConfig.minVolume?.toLocaleString()}`);
+      console.log(`[Scanner] Filters: minDollarVol=$${(finalConfig.minDollarVolume || 0) / 1_000_000}M, marketCap=${finalConfig.marketCapPreset}`);
+      console.log(`=====================================\n`);
       
       if (this.abortController.signal.aborted) {
         throw new Error('Scan aborted by user');
@@ -149,7 +153,9 @@ export class MarketScanner {
       });
 
       const filtered = this.preFilter(snapshot, strategy, finalConfig);
-      console.log(`[Scanner] Pre-filter passed: ${filtered.length} tickers`);
+      console.log(`\n========== PRE-FILTER RESULTS ==========`);
+      console.log(`[Scanner] ✅ Pre-filter passed: ${filtered.length}/${snapshot.length} tickers (${((filtered.length / snapshot.length) * 100).toFixed(1)}%)`);
+      console.log(`========================================\n`);
       
       if (this.abortController.signal.aborted) {
         throw new Error('Scan aborted by user');
@@ -224,12 +230,12 @@ export class MarketScanner {
         // Early exit if enabled and we have enough qualified matches
         // NEVER early exit in overview mode - user wants to see all filtered stocks
         if (!isOverviewMode) {
-          const qualifiedMatches = results.filter(r => r.matchDetails.eligible && r.matchScore >= 50);
+        const qualifiedMatches = results.filter(r => r.matchDetails.eligible && r.matchScore >= 50);
           const earlyExitThreshold = hasSqueezeFilters ? Math.max(maxResults, 20) : maxResults;
           
           if (finalConfig.earlyExitEnabled && qualifiedMatches.length >= earlyExitThreshold) {
             console.log(`[Scanner] Early exit: Found ${qualifiedMatches.length} qualified matches (threshold: ${earlyExitThreshold})`);
-            break;
+          break;
           }
         }
       }
@@ -290,7 +296,16 @@ export class MarketScanner {
         apiCalls: stats.apiCalls,
       });
 
+      console.log(`\n========== SCAN SUMMARY ==========`);
       console.log(`[Scanner] Scan complete. Returning ${finalResults.length} results.`);
+      console.log(`[Scanner] Overview mode: ${isOverviewMode ? 'YES' : 'NO'}`);
+      console.log(`[Scanner] Market snapshot returned: ${snapshot.length} stocks`);
+      console.log(`[Scanner] After pre-filter: ${filtered.length} stocks`);
+      console.log(`[Scanner] Analyzed: ${results.length} stocks`);
+      console.log(`[Scanner] Qualified: ${qualifiedResults.length} stocks`);
+      console.log(`[Scanner] Cache: ${stats.cacheHits} hits, ${stats.apiCalls} API calls`);
+      console.log(`==================================\n`);
+      
       return finalResults;
     } catch (error: any) {
       const stats = this.analyzer.getStats();
@@ -315,64 +330,51 @@ export class MarketScanner {
   }
 
   /**
-   * Get market snapshot using Polygon's Grouped Daily API
-   * This fetches ALL U.S. stocks in a single API call (6000-8000 stocks)
+   * Get market snapshot using Massive.com Full Market Snapshot API
+   * This fetches ALL U.S. stocks (10,000+) in a single API call!
    * Much more efficient for paid plans with unlimited API calls!
+   * Documentation: https://massive.com/docs/rest/stocks/snapshots/full-market-snapshot
    */
   private async getMarketSnapshot(config: ScannerConfig): Promise<any[]> {
     try {
-      console.log(`[Scanner] Fetching grouped daily for TODAY and YESTERDAY (2 API calls)...`);
+      console.log(`[Scanner] Fetching full market snapshot (1 API call for 10,000+ stocks)...`);
+
+      // Fetch market snapshot - Massive.com includes both day and prevDay automatically
+      const snapshotData = await this.polygonClient.getGroupedDaily();
       
-      // Fetch TODAY and YESTERDAY to calculate proper day-over-day change
-      const [todayData, yesterdayData] = await Promise.all([
-        this.polygonClient.getGroupedDaily(), // Today (or latest trading day)
-        this.polygonClient.getGroupedDaily(this.getDateNDaysAgo(2)), // Previous trading day
-      ]);
-      
-      if (!todayData.results || todayData.results.length === 0) {
-        console.warn('[Scanner] No results from grouped daily');
+      if (!snapshotData.results || snapshotData.results.length === 0) {
+        console.warn('[Scanner] No results from market snapshot');
         return this.getFallbackTickers();
       }
+      
+      console.log(`[Scanner] ✅ Market snapshot received: ${snapshotData.results.length} stocks`);
 
-      console.log(`[Scanner] Today: ${todayData.results.length} stocks, Yesterday: ${yesterdayData.results?.length || 0} stocks`);
-      
-      // Create a map of yesterday's data for quick lookup
-      const yesterdayMap = new Map<string, any>();
-      if (yesterdayData.results) {
-        yesterdayData.results.forEach((bar: any) => {
-          yesterdayMap.set(bar.T, bar);
-        });
-      }
-      
-      // Convert to snapshot format with proper day-over-day change
-      const snapshots = todayData.results.map(bar => {
-        const yesterdayBar = yesterdayMap.get(bar.T);
-        const prevClose = yesterdayBar ? yesterdayBar.c : bar.o; // Fallback to today's open if no prev data
-        const change = bar.c - prevClose;
-        const changePerc = (change / prevClose) * 100;
-        
+      // Massive.com snapshot already includes day, prevDay, and change data
+      // The conversion in polygon.ts has already formatted it correctly
+      const snapshots = snapshotData.results.map((bar: any) => {
         return {
           ticker: bar.T,
-          day: {
-            c: bar.c,  // Today's close
-            h: bar.h,  // Today's high
-            l: bar.l,  // Today's low
-            o: bar.o,  // Today's open
-            v: bar.v,  // Today's volume
-            vw: bar.vw, // Volume-weighted average price
+          day: bar.day || {
+            c: bar.c,
+            h: bar.h,
+            l: bar.l,
+            o: bar.o,
+            v: bar.v,
+            vw: bar.vw,
           },
-          prevDay: {
-            c: prevClose, // Yesterday's close (or today's open as fallback)
-            v: yesterdayBar?.v || bar.v,
+          prevDay: bar.prevDay || {
+            c: bar.c,
+            v: bar.v,
           },
-          todaysChangePerc: changePerc, // Proper day-over-day % change
+          todaysChange: bar.todaysChange,
+          todaysChangePerc: bar.todaysChangePerc,
           updated: bar.t,
         };
       });
 
       return snapshots;
     } catch (error) {
-      console.error('[Scanner] Error fetching grouped daily:', error);
+      console.error('[Scanner] Error fetching market snapshot:', error);
       // Fallback to common tickers if API fails
       return this.getFallbackTickers();
     }
@@ -439,13 +441,13 @@ export class MarketScanner {
     console.log(`[Scanner] Pre-filter: ${filtered.length}/${tickers.length} passed`);
     
     // ALWAYS sort by dollar volume (most liquid first)
-    filtered.sort((a, b) => {
-      const dollarVolA = (a.day?.c || a.prevDay?.c || 0) * (a.day?.v || a.prevDay?.v || 0);
-      const dollarVolB = (b.day?.c || b.prevDay?.c || 0) * (b.day?.v || b.prevDay?.v || 0);
-      return dollarVolB - dollarVolA;
-    });
+      filtered.sort((a, b) => {
+        const dollarVolA = (a.day?.c || a.prevDay?.c || 0) * (a.day?.v || a.prevDay?.v || 0);
+        const dollarVolB = (b.day?.c || b.prevDay?.c || 0) * (b.day?.v || b.prevDay?.v || 0);
+        return dollarVolB - dollarVolA;
+      });
     console.log(`[Scanner] Sorted by dollar volume (highest liquidity first)`);
-    
+      
     // IMPORTANT: We already filtered ALL stocks above
     // With unlimited API access, we can scan ALL filtered stocks
     // No artificial limits - user has paid Polygon plan
@@ -454,7 +456,7 @@ export class MarketScanner {
     
     console.log(`[Scanner] Will scan ALL ${filtered.length} filtered tickers (unlimited API access)${hasSqueezeFilters ? ' [squeeze filtering]' : isOverviewMode ? ' [overview mode]' : ' [strategy evaluation]'}`);
     console.log(`[Scanner] No limits applied - leveraging paid Polygon plan for comprehensive scanning`);
-    
+
     return filtered;
   }
 

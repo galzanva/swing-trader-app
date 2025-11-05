@@ -286,7 +286,7 @@ export default function ScannerClient() {
     
     return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
   });
-  
+
   // Pagination
   const totalPages = Math.ceil(sortedResults.length / resultsPerPage);
   const startIndex = (currentPage - 1) * resultsPerPage;
@@ -342,11 +342,11 @@ export default function ScannerClient() {
                 {strategies.length === 0 && (
                   <option value="" disabled>No strategies found</option>
                 )}
-                {strategies.map(strategy => (
-                  <option key={strategy.id} value={strategy.id}>
+              {strategies.map(strategy => (
+                <option key={strategy.id} value={strategy.id}>
                     🎯 {strategy.name} ({strategy.direction.toUpperCase()}, {strategy.timeframe})
-                  </option>
-                ))}
+                </option>
+              ))}
               </optgroup>
             </select>
             {isOverviewMode && (
@@ -396,61 +396,61 @@ export default function ScannerClient() {
             <div className="mb-4">
               <h3 className="text-sm font-semibold text-blue-200 mb-3">Basic Filters</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Dollar Volume */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Min Dollar Volume ($M)</label>
-                  <input
-                    type="number"
-                    value={minDollarVolume}
-                    onChange={(e) => setMinDollarVolume(Number(e.target.value))}
-                    disabled={isScanning}
-                    min="0"
-                    step="5"
-                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
+            {/* Dollar Volume */}
+            <div>
+              <label className="block text-xs font-medium text-blue-300 mb-1">Min Dollar Volume ($M)</label>
+              <input
+                type="number"
+                value={minDollarVolume}
+                onChange={(e) => setMinDollarVolume(Number(e.target.value))}
+                disabled={isScanning}
+                min="0"
+                step="5"
+                className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              />
+            </div>
 
-                {/* Trend Direction */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Trend Direction</label>
-                  <select
-                    value={trendDirection}
-                    onChange={(e) => setTrendDirection(e.target.value)}
-                    disabled={isScanning}
-                    className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                  >
-                    <option value="any">Any</option>
-                    <option value="uptrend">Uptrend (SMA50 &gt; SMA200)</option>
-                    <option value="downtrend">Downtrend (SMA50 &lt; SMA200)</option>
-                    <option value="neutral">Neutral</option>
-                  </select>
-                </div>
+            {/* Trend Direction */}
+            <div>
+              <label className="block text-xs font-medium text-blue-300 mb-1">Trend Direction</label>
+              <select
+                value={trendDirection}
+                onChange={(e) => setTrendDirection(e.target.value)}
+                disabled={isScanning}
+                className="w-full px-3 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <option value="any">Any</option>
+                <option value="uptrend">Uptrend (SMA50 &gt; SMA200)</option>
+                <option value="downtrend">Downtrend (SMA50 &lt; SMA200)</option>
+                <option value="neutral">Neutral</option>
+              </select>
+            </div>
 
-                {/* ATR% Range */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">ATR% Range</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={minAtrPct}
-                      onChange={(e) => setMinAtrPct(Number(e.target.value))}
-                      disabled={isScanning}
-                      min="0"
-                      step="0.5"
-                      placeholder="Min"
-                      className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                    />
-                    <input
-                      type="number"
-                      value={maxAtrPct}
-                      onChange={(e) => setMaxAtrPct(Number(e.target.value))}
-                      disabled={isScanning}
-                      min="0"
-                      step="0.5"
-                      placeholder="Max"
-                      className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                    />
-                  </div>
+            {/* ATR% Range */}
+            <div>
+              <label className="block text-xs font-medium text-blue-300 mb-1">ATR% Range</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={minAtrPct}
+                  onChange={(e) => setMinAtrPct(Number(e.target.value))}
+                  disabled={isScanning}
+                  min="0"
+                  step="0.5"
+                  placeholder="Min"
+                  className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                />
+                <input
+                  type="number"
+                  value={maxAtrPct}
+                  onChange={(e) => setMaxAtrPct(Number(e.target.value))}
+                  disabled={isScanning}
+                  min="0"
+                  step="0.5"
+                  placeholder="Max"
+                  className="w-1/2 px-2 py-2 bg-slate-700/50 border border-blue-500/20 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                />
+              </div>
                 </div>
               </div>
             </div>

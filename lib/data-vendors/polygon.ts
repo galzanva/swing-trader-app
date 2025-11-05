@@ -126,35 +126,68 @@ export class PolygonClient {
   }
 
   /**
-   * Fetch all stocks for a given date (grouped daily endpoint)
-   * This returns ALL U.S. stocks in a single API call - perfect for pre-filtering!
+   * Fetch all stocks snapshot (Massive.com full market snapshot)
+   * This returns ALL U.S. stocks (10,000+) in a single API call - perfect for pre-filtering!
+   * Documentation: https://massive.com/docs/rest/stocks/snapshots/full-market-snapshot
    */
   async getGroupedDaily(date?: string): Promise<GroupedDailyResponse> {
     try {
-      // Use yesterday or provided date
-      const targetDate = date || this.getYesterdayDate();
-      
-      const url = `${this.baseUrl}/v2/aggs/grouped/locale/us/market/stocks/${targetDate}`;
+      // Massive.com uses the snapshot endpoint (no date parameter needed - always returns latest)
+      const url = `${this.baseUrl}/v2/snapshot/locale/us/markets/stocks/tickers`;
       const params = new URLSearchParams({
-        adjusted: 'true',
         include_otc: 'false', // Exclude OTC by default
         apiKey: this.apiKey,
       });
 
-      console.log(`[Polygon] Fetching grouped daily for ${targetDate}...`);
+      console.log(`[Polygon/Massive] Fetching full market snapshot (10,000+ stocks)...`);
       const response = await fetch(`${url}?${params}`);
       
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Polygon API error (${response.status}): ${errorText}`);
+        console.error(`[Polygon/Massive] API error (${response.status}): ${errorText}`);
+        throw new Error(`Massive.com API error (${response.status}): ${errorText}`);
       }
 
-      const data: GroupedDailyResponse = await response.json();
-      console.log(`[Polygon] Grouped daily returned ${data.resultsCount || 0} stocks`);
+      const rawData: any = await response.json();
+      console.log(`[Polygon/Massive] Raw response - status: ${rawData.status}, count: ${rawData.count}`);
       
-      return data;
+      // Convert Massive.com snapshot format to our internal format
+      // Massive returns: { status, count, tickers: [{ticker, day, prevDay, todaysChange, todaysChangePerc}] }
+      // We need to preserve all the snapshot data including day, prevDay, and change data
+      const converted: GroupedDailyResponse = {
+        status: rawData.status,
+        resultsCount: rawData.count || 0,
+        results: (rawData.tickers || []).map((item: any) => ({
+          T: item.ticker,
+          c: item.day?.c || item.prevDay?.c || 0,
+          h: item.day?.h || item.prevDay?.h || 0,
+          l: item.day?.l || item.prevDay?.l || 0,
+          o: item.day?.o || item.prevDay?.o || 0,
+          v: item.day?.v || item.prevDay?.v || 0,
+          vw: item.day?.vw || 0,
+          t: item.updated || Date.now(),
+          otc: item.day?.otc || false,
+          // Preserve the full snapshot data for scanner
+          day: item.day,
+          prevDay: item.prevDay,
+          todaysChange: item.todaysChange,
+          todaysChangePerc: item.todaysChangePerc,
+        })),
+        adjusted: true,
+        queryCount: rawData.count || 0,
+      };
+      
+      console.log(`[Polygon/Massive] ✅ Snapshot converted: ${converted.results.length} stocks`);
+      
+      // DEBUG: Log a sample of tickers
+      if (converted.results && converted.results.length > 0) {
+        const sample = converted.results.slice(0, 5).map(r => r.T).join(', ');
+        console.log(`[Polygon/Massive] Sample tickers: ${sample}... (total: ${converted.results.length})`);
+      }
+      
+      return converted;
     } catch (error: any) {
-      console.error('[Polygon] Grouped daily fetch failed:', error.message);
+      console.error('[Polygon/Massive] Full market snapshot fetch failed:', error.message);
       throw error;
     }
   }
@@ -313,22 +346,38 @@ export class PolygonClient {
     exchange?: string;
   }> {
     try {
-      const url = `${this.baseUrl}/v3/reference/tickers/${symbol.toUpperCase()}?apiKey=${this.apiKey}`;
-      const response = await fetch(url);
+      // Massive.com updated the endpoint to use query parameters
+      // https://massive.com/docs/rest/stocks/tickers/all-tickers
+      const url = `${this.baseUrl}/v3/reference/tickers`;
+      const params = new URLSearchParams({
+        ticker: symbol.toUpperCase(),
+        apiKey: this.apiKey,
+      });
+      
+      const response = await fetch(`${url}?${params}`);
 
       if (!response.ok) {
+        console.warn(`[Polygon/Massive] Could not fetch ticker details for ${symbol} (${response.status})`);
         return { name: symbol.toUpperCase() };
       }
 
-      const data: PolygonTickerDetails = await response.json();
+      const data: any = await response.json();
+      
+      // Massive.com returns {results: [{ticker, name, market_cap, ...}]}
+      if (!data.results || data.results.length === 0) {
+        console.warn(`[Polygon/Massive] No ticker details found for ${symbol}`);
+        return { name: symbol.toUpperCase() };
+      }
+      
+      const tickerData = data.results[0];
 
       return {
-        name: data.results.name || symbol.toUpperCase(),
-        marketCap: data.results.market_cap,
-        exchange: data.results.primary_exchange
+        name: tickerData.name || symbol.toUpperCase(),
+        marketCap: tickerData.market_cap,
+        exchange: tickerData.primary_exchange
       };
     } catch (error) {
-      console.error("Error fetching ticker details:", error);
+      console.error("[Polygon/Massive] Error fetching ticker details:", error);
       return { name: symbol.toUpperCase() };
     }
   }
@@ -365,13 +414,14 @@ export class PolygonClient {
   }> {
     try {
       // Fetch short interest data (bi-monthly FINRA reports)
+      // https://massive.com/docs/rest/stocks/fundamentals/short-interest
       const shortInterestUrl = `${this.baseUrl}/stocks/v1/short-interest?ticker=${symbol.toUpperCase()}&limit=1&sort=settlement_date.desc&apiKey=${this.apiKey}`;
       
-      console.log(`[Polygon] Fetching short interest for ${symbol}...`);
+      console.log(`[Polygon/Massive] Fetching short interest for ${symbol}...`);
       const siResponse = await fetch(shortInterestUrl);
 
       if (!siResponse.ok) {
-        console.warn(`[Polygon] Could not fetch short interest data for ${symbol} (${siResponse.status})`);
+        console.warn(`[Polygon/Massive] Could not fetch short interest data for ${symbol} (${siResponse.status})`);
         return {};
       }
 
@@ -389,15 +439,21 @@ export class PolygonClient {
       const settlementDate = latestSI.settlement_date;
       
       // Fetch ticker details to get shares outstanding for short float calculation
-      const detailsUrl = `${this.baseUrl}/v3/reference/tickers/${symbol.toUpperCase()}?apiKey=${this.apiKey}`;
-      const detailsResponse = await fetch(detailsUrl);
+      const detailsUrl = `${this.baseUrl}/v3/reference/tickers`;
+      const detailsParams = new URLSearchParams({
+        ticker: symbol.toUpperCase(),
+        apiKey: this.apiKey,
+      });
+      const detailsResponse = await fetch(`${detailsUrl}?${detailsParams}`);
       
       let shortFloat: number | undefined;
       
       if (detailsResponse.ok) {
         const detailsData = await detailsResponse.json();
-        const sharesOutstanding = detailsData.results?.weighted_shares_outstanding || 
-                                  detailsData.results?.share_class_shares_outstanding;
+        // Massive.com returns results as an array
+        const tickerInfo = detailsData.results?.[0];
+        const sharesOutstanding = tickerInfo?.weighted_shares_outstanding || 
+                                  tickerInfo?.share_class_shares_outstanding;
         
         if (sharesOutstanding && shortInterest) {
           // Calculate short float % = (short interest / shares outstanding) * 100
@@ -407,6 +463,7 @@ export class PolygonClient {
       
       // Fetch recent short volume data (daily reporting)
       // This gives us the short volume ratio for recent trading activity
+      // https://massive.com/docs/rest/stocks/fundamentals/short-volume
       const shortVolumeUrl = `${this.baseUrl}/stocks/v1/short-volume?ticker=${symbol.toUpperCase()}&limit=1&sort=date.desc&apiKey=${this.apiKey}`;
       
       const svResponse = await fetch(shortVolumeUrl);

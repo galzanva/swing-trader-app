@@ -27,6 +27,7 @@ export default function Navbar({ session }: NavbarProps) {
       items: [
         { href: '/dashboard', label: '🎯 Strategy Analysis', exact: true },
         { href: '/analyze', label: '🔍 Deep Analysis' },
+        { href: '/reports', label: '📂 Saved Reports' },
       ] as NavItem[],
     },
     tools: {
