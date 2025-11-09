@@ -327,6 +327,21 @@ export interface AnalysisReport {
     summary: string;
   };
   
+  // Options Insight (from Massive.com options chain)
+  optionsInsight?: {
+    sentiment: 'bullish' | 'bearish' | 'neutral' | 'mixed';
+    confidence: 'high' | 'medium' | 'low';
+    message: string;
+    callPutRatio: number;
+    totalCallVolume: number;
+    totalPutVolume: number;
+    ivTrend: 'rising' | 'flat' | 'falling';
+    atmStrike: number;
+    topCallStrikes: Array<{ strike: number; volume: number; oi: number }>;
+    topPutStrikes: Array<{ strike: number; volume: number; oi: number }>;
+    expirations: string[];
+  };
+  
   // Additional info
   marketData: {
     marketCap?: number;
@@ -741,6 +756,53 @@ export async function POST(request: Request) {
       console.error("[Analyze] Error fetching fundamentals or news:", error);
     }
 
+    // Fetch and analyze options chain
+    let optionsInsight;
+    try {
+      console.log(`[Analyze] Fetching options chain for ${symbol}...`);
+      const optionsChain = await polygonClient.getOptionsChain(symbol, marketData.currentPrice);
+      
+      if (optionsChain) {
+        console.log(`[Analyze] Options chain received: ${optionsChain.contracts.length} contracts across ${[...new Set(optionsChain.contracts.map(c => c.expiration))].length} expirations`);
+        
+        try {
+          // Analyze options sentiment (use executionDirection from pattern hierarchy)
+          const fullOptionsInsight = polygonClient.analyzeOptionsInsight(optionsChain, {
+            direction: executionDirection,
+            rsi: indicators.rsi,
+            volZ: indicators.volumeZScore,
+            trend: compositePattern.candlestickPattern.name,
+          });
+          
+          // Store the insight (excluding raw data for API response)
+          optionsInsight = {
+            sentiment: fullOptionsInsight.sentiment,
+            confidence: fullOptionsInsight.confidence,
+            message: fullOptionsInsight.message,
+            callPutRatio: fullOptionsInsight.callPutRatio,
+            totalCallVolume: fullOptionsInsight.totalCallVolume,
+            totalPutVolume: fullOptionsInsight.totalPutVolume,
+            ivTrend: fullOptionsInsight.ivTrend,
+            atmStrike: fullOptionsInsight.atmStrike,
+            topCallStrikes: fullOptionsInsight.topCallStrikes,
+            topPutStrikes: fullOptionsInsight.topPutStrikes,
+            expirations: fullOptionsInsight.expirations,
+          };
+          
+          console.log(`[Analyze] ✅ Options sentiment: ${optionsInsight.sentiment} (${optionsInsight.confidence} confidence)`);
+          console.log(`[Analyze] ✅ Call/Put ratio: ${optionsInsight.callPutRatio.toFixed(2)}, IV trend: ${optionsInsight.ivTrend}`);
+          console.log(`[Analyze] ✅ Options insight successfully generated and will be included in report`);
+        } catch (analysisError) {
+          console.error(`[Analyze] Error analyzing options chain:`, analysisError);
+          optionsInsight = undefined;
+        }
+      } else {
+        console.log(`[Analyze] ⚠️ No options data available for ${symbol} (optionsChain is null)`);
+      }
+    } catch (error) {
+      console.error("[Analyze] Error fetching or analyzing options:", error);
+    }
+
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
     if (openaiApiKey) {
@@ -756,9 +818,10 @@ export async function POST(request: Request) {
           executionPlan,
           squeezeAnalysis, // Pass squeeze analysis to LLM
           fundamentalsData, // Pass fundamentals to LLM
-          newsSummary // Pass news summary to LLM
+          newsSummary, // Pass news summary to LLM
+          optionsInsight // Pass options insight to LLM
         );
-        console.log(`[Analyze] Generated AI analysis with fundamentals and news context`);
+        console.log(`[Analyze] Generated AI analysis with fundamentals, news, and options context`);
       } catch (error) {
         console.error("[Analyze] Error generating AI analysis:", error);
         console.log("[Analyze] Falling back to comprehensive non-LLM analysis...");
@@ -1125,6 +1188,8 @@ export async function POST(request: Request) {
       news: newsArticles,
       
       newsSummary,
+      
+      optionsInsight,
       
       marketData: {
         marketCap: marketData.marketCap,

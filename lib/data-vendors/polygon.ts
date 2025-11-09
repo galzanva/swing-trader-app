@@ -117,6 +117,45 @@ export interface PolygonNewsArticle {
   }>;
 }
 
+export interface OptionsContract {
+  ticker: string; // e.g., "O:AAPL250117C00150000"
+  strike: number;
+  expiration: string; // YYYY-MM-DD
+  type: 'call' | 'put';
+  volume?: number;
+  open_interest?: number;
+  implied_volatility?: number;
+  bid?: number;
+  ask?: number;
+  last_price?: number;
+  delta?: number;
+  gamma?: number;
+  theta?: number;
+  vega?: number;
+}
+
+export interface OptionsChainSnapshot {
+  underlying_ticker: string;
+  underlying_price: number;
+  contracts: OptionsContract[];
+  timestamp: number;
+}
+
+export interface OptionsInsight {
+  sentiment: 'bullish' | 'bearish' | 'neutral' | 'mixed';
+  confidence: 'high' | 'medium' | 'low';
+  message: string;
+  callPutRatio: number;
+  totalCallVolume: number;
+  totalPutVolume: number;
+  ivTrend: 'rising' | 'flat' | 'falling';
+  atmStrike: number;
+  topCallStrikes: Array<{ strike: number; volume: number; oi: number }>;
+  topPutStrikes: Array<{ strike: number; volume: number; oi: number }>;
+  expirations: string[];
+  rawData: OptionsChainSnapshot;
+}
+
 export class PolygonClient {
   private apiKey: string;
   private baseUrl = "https://api.polygon.io";
@@ -635,6 +674,325 @@ export class PolygonClient {
       console.error(`[Polygon] Error fetching news for ${symbol}:`, error);
       return [];
     }
+  }
+
+  /**
+   * Get options chain snapshot for a stock
+   * Fetches options contracts for the nearest 1-2 expirations
+   * https://massive.com/docs/rest/options/overview
+   */
+  async getOptionsChain(symbol: string, underlyingPrice: number): Promise<OptionsChainSnapshot | null> {
+    try {
+      // For BASIC/PERSONAL accounts, use the options contracts reference endpoint
+      // This endpoint is available to all account tiers
+      // https://massive.com/docs/rest/options/contracts
+      
+      // Get nearest expiration dates (next 2 Fridays)
+      const today = new Date();
+      const expirationDates: string[] = [];
+      
+      for (let i = 0; i < 60; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        if (date.getDay() === 5) { // Friday
+          expirationDates.push(date.toISOString().split('T')[0]);
+          if (expirationDates.length === 2) break;
+        }
+      }
+      
+      console.log(`[Polygon/Massive] Fetching options contracts for ${symbol} (Basic Account Mode)...`);
+      console.log(`[Polygon/Massive] Target expirations: ${expirationDates.join(', ')}`);
+      
+      // Use the options contracts endpoint with filters (basic account compatible)
+      const url = `${this.baseUrl}/v3/reference/options/contracts`;
+      const params = new URLSearchParams({
+        underlying_ticker: symbol.toUpperCase(),
+        expired: 'false',
+        limit: '250', // Get up to 250 contracts
+        apiKey: this.apiKey,
+      });
+
+      const response = await fetch(`${url}?${params}`);
+      
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) {
+          console.warn(`[Polygon/Massive] Options data not available for ${symbol} (${response.status}) - check account plan`);
+          return null;
+        }
+        const errorText = await response.text();
+        console.error(`[Polygon/Massive] Options API error (${response.status}): ${errorText}`);
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (!data.results || data.results.length === 0) {
+        console.warn(`[Polygon/Massive] No options contracts found for ${symbol}`);
+        return null;
+      }
+
+      console.log(`[Polygon/Massive] Found ${data.results.length} total contracts for ${symbol}`);
+      
+      // Log sample contract for debugging
+      if (data.results.length > 0) {
+        console.log(`[Polygon/Massive] Sample contract:`, JSON.stringify(data.results[0], null, 2));
+      }
+
+      // Parse contracts from reference endpoint
+      // Format: { ticker: "O:AAPL250117C00150000", contract_type: "call", expiration_date: "2025-01-17", strike_price: 150, ... }
+      let allContracts: OptionsContract[] = data.results.map((contract: any) => {
+        return {
+          ticker: contract.ticker || '',
+          strike: contract.strike_price || 0,
+          expiration: contract.expiration_date || '',
+          type: contract.contract_type === 'call' ? 'call' as const : 'put' as const,
+          // Note: Reference endpoint doesn't include live data (volume, OI, IV)
+          // We'll estimate based on strike proximity to ATM
+          volume: 0, // Will be estimated below
+          open_interest: 0,
+          implied_volatility: undefined,
+          bid: undefined,
+          ask: undefined,
+          last_price: undefined,
+          delta: undefined,
+          gamma: undefined,
+          theta: undefined,
+          vega: undefined,
+        };
+      });
+
+      console.log(`[Polygon/Massive] Parsed ${allContracts.length} contracts`);
+
+      // Filter to nearest 2 expirations only
+      const expirationsList = [...new Set(allContracts.map(c => c.expiration))].sort();
+      console.log(`[Polygon/Massive] Found ${expirationsList.length} unique expirations:`, expirationsList.slice(0, 5).join(', '), expirationsList.length > 5 ? '...' : '');
+      const nearestExpirations = expirationsList.slice(0, 2);
+      
+      const contracts = allContracts.filter(c => nearestExpirations.includes(c.expiration));
+      
+      console.log(`[Polygon/Massive] Filtered to ${contracts.length} contracts across ${nearestExpirations.length} expirations`);
+      console.log(`[Polygon/Massive] Expirations: ${nearestExpirations.join(', ')}`);
+      
+      // Check if we have enough contracts to analyze
+      if (contracts.length === 0) {
+        console.warn(`[Polygon/Massive] No contracts found after filtering for ${symbol}`);
+        return null;
+      }
+      
+      console.log(`[Polygon/Massive] ✅ Successfully prepared ${contracts.length} contracts for analysis`);
+
+      return {
+        underlying_ticker: symbol.toUpperCase(),
+        underlying_price: underlyingPrice,
+        contracts,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error(`[Polygon/Massive] Error fetching options chain for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Analyze options sentiment and compare to swing setup
+   * Provides beginner-friendly insights
+   */
+  analyzeOptionsInsight(
+    optionsChain: OptionsChainSnapshot,
+    swingSetup: {
+      direction: 'bullish' | 'bearish' | 'neutral';
+      rsi?: number;
+      volZ?: number;
+      trend?: string;
+    }
+  ): OptionsInsight {
+    const { contracts, underlying_price, underlying_ticker } = optionsChain;
+
+    // Filter to nearest 1-2 expirations
+    const expirations = [...new Set(contracts.map(c => c.expiration))].sort();
+    const nearestExpirations = expirations.slice(0, 2);
+    
+    const relevantContracts = contracts.filter(c => 
+      nearestExpirations.includes(c.expiration)
+    );
+
+    // Find ATM strike (closest to current price)
+    const atmStrike = relevantContracts.reduce((closest, contract) => {
+      if (!closest) return contract.strike;
+      return Math.abs(contract.strike - underlying_price) < Math.abs(closest - underlying_price)
+        ? contract.strike
+        : closest;
+    }, 0);
+
+    // Define "near money" range - wider for basic accounts since we need more contracts
+    // Use ±10% of stock price or ±3 strikes (whichever is larger)
+    const strikeSpacing = Math.max(underlying_price * 0.05, 2.5); // 5% of price or $2.50 minimum
+    const nearMoneyRange = {
+      min: Math.max(atmStrike - 3 * strikeSpacing, underlying_price * 0.85),
+      max: Math.min(atmStrike + 3 * strikeSpacing, underlying_price * 1.15),
+    };
+    
+    console.log(`[Polygon/Massive] Near-money range: $${nearMoneyRange.min.toFixed(2)} - $${nearMoneyRange.max.toFixed(2)} (ATM: $${atmStrike.toFixed(2)})`);
+
+    // Group contracts into buckets
+    const nearMoneyCalls = relevantContracts.filter(
+      c => c.type === 'call' && c.strike >= nearMoneyRange.min && c.strike <= nearMoneyRange.max
+    );
+    const nearMoneyPuts = relevantContracts.filter(
+      c => c.type === 'put' && c.strike >= nearMoneyRange.min && c.strike <= nearMoneyRange.max
+    );
+
+    // Check if we have volume data (enterprise) or just contract list (basic)
+    const hasVolumeData = relevantContracts.some(c => c.volume && c.volume > 0);
+    
+    let totalCallVolume = 0;
+    let totalPutVolume = 0;
+    let callPutRatio = 1;
+    
+    if (hasVolumeData) {
+      // Enterprise account with live data - use actual volume
+      totalCallVolume = nearMoneyCalls.reduce((sum, c) => sum + (c.volume || 0), 0);
+      totalPutVolume = nearMoneyPuts.reduce((sum, c) => sum + (c.volume || 0), 0);
+      callPutRatio = totalPutVolume > 0 ? totalCallVolume / totalPutVolume : totalCallVolume > 0 ? 999 : 1;
+    } else {
+      // Basic account without live data - use contract count as proxy
+      totalCallVolume = nearMoneyCalls.length;
+      totalPutVolume = nearMoneyPuts.length;
+      callPutRatio = totalPutVolume > 0 ? totalCallVolume / totalPutVolume : totalCallVolume > 0 ? 999 : 1;
+      console.log(`[Polygon/Massive] Using contract count as proxy (Basic account): ${totalCallVolume} calls, ${totalPutVolume} puts`);
+    }
+
+    // Top strikes (by volume if available, otherwise by strike proximity to ATM)
+    const topCallStrikes = nearMoneyCalls
+      .sort((a, b) => {
+        if (hasVolumeData) {
+          return (b.volume || 0) - (a.volume || 0); // Sort by volume
+        } else {
+          // Sort by proximity to ATM
+          return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike);
+        }
+      })
+      .slice(0, 3)
+      .map(c => ({ strike: c.strike, volume: c.volume || 0, oi: c.open_interest || 0 }));
+    
+    const topPutStrikes = nearMoneyPuts
+      .sort((a, b) => {
+        if (hasVolumeData) {
+          return (b.volume || 0) - (a.volume || 0); // Sort by volume
+        } else {
+          // Sort by proximity to ATM
+          return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike);
+        }
+      })
+      .slice(0, 3)
+      .map(c => ({ strike: c.strike, volume: c.volume || 0, oi: c.open_interest || 0 }));
+
+    // IV trend (only if we have IV data from enterprise account)
+    let ivTrend: 'rising' | 'flat' | 'falling' = 'flat';
+    if (hasVolumeData && nearestExpirations.length >= 2) {
+      const nearIV = contracts
+        .filter(c => c.expiration === nearestExpirations[0] && Math.abs(c.strike - atmStrike) < strikeSpacing && c.implied_volatility)
+        .reduce((sum, c, _, arr) => sum + (c.implied_volatility || 0) / arr.length, 0);
+      
+      const farIV = contracts
+        .filter(c => c.expiration === nearestExpirations[1] && Math.abs(c.strike - atmStrike) < strikeSpacing && c.implied_volatility)
+        .reduce((sum, c, _, arr) => sum + (c.implied_volatility || 0) / arr.length, 0);
+      
+      if (nearIV > 0 && farIV > 0) {
+        if (nearIV > farIV * 1.1) ivTrend = 'rising';
+        else if (nearIV < farIV * 0.9) ivTrend = 'falling';
+      }
+    }
+
+    // Determine sentiment based on call/put ratio and swing setup
+    let sentiment: 'bullish' | 'bearish' | 'neutral' | 'mixed' = 'neutral';
+    let confidence: 'high' | 'medium' | 'low' = 'medium';
+    let message = '';
+
+    const topCallStrike = topCallStrikes[0]?.strike || atmStrike;
+    const topPutStrike = topPutStrikes[0]?.strike || atmStrike;
+    
+    // Data type indicator for messages
+    const dataType = hasVolumeData ? 'volume' : 'available contracts';
+    const activityThreshold = hasVolumeData ? 100 : 5; // Lower threshold for contract count (5 contracts = enough for basic analysis)
+    
+    console.log(`[Polygon/Massive] Activity check: ${totalCallVolume + totalPutVolume} ${dataType} (threshold: ${activityThreshold})`);
+
+    if (totalCallVolume + totalPutVolume < activityThreshold) {
+      // Low activity - not enough data
+      sentiment = 'neutral';
+      confidence = 'low';
+      message = hasVolumeData 
+        ? `Options activity is light today (${totalCallVolume + totalPutVolume} contracts near $${atmStrike.toFixed(2)}). Not enough data to confirm the swing setup.`
+        : `Limited options data available (${totalCallVolume} call contracts, ${totalPutVolume} put contracts near $${atmStrike.toFixed(2)}). Based on available strikes, sentiment is neutral.`;
+    } else if (callPutRatio > 2.0 && swingSetup.direction === 'bullish') {
+      // High call/put ratio + bullish setup = strong confirmation
+      sentiment = 'bullish';
+      confidence = hasVolumeData ? 'high' : 'medium'; // Lower confidence for basic data
+      message = hasVolumeData
+        ? `✅ Options traders are bullish! Most activity was on upside calls around $${topCallStrike.toFixed(2)} (${totalCallVolume} calls vs ${totalPutVolume} puts). This supports your bullish swing idea.`
+        : `✅ More call contracts available than puts near ATM (${totalCallVolume} calls vs ${totalPutVolume} puts around $${topCallStrike.toFixed(2)}), suggesting bullish positioning. This aligns with the swing setup.`;
+    } else if (callPutRatio > 1.5 && swingSetup.direction === 'bullish') {
+      // Moderate call bias + bullish setup
+      sentiment = 'bullish';
+      confidence = 'medium';
+      message = hasVolumeData
+        ? `Options traders were moderately bullish today, buying calls around $${topCallStrike.toFixed(2)}. This aligns with the bullish chart setup.`
+        : `Moderately more call contracts than puts available near ATM ($${topCallStrike.toFixed(2)}), consistent with bullish positioning.`;
+    } else if (callPutRatio < 0.5 && swingSetup.direction === 'bearish') {
+      // High put activity + bearish setup = confirmation
+      sentiment = 'bearish';
+      confidence = hasVolumeData ? 'high' : 'medium';
+      message = hasVolumeData
+        ? `✅ Options traders are bearish! Heavy put buying around $${topPutStrike.toFixed(2)} (${totalPutVolume} puts vs ${totalCallVolume} calls) confirms the bearish swing setup.`
+        : `✅ More put contracts available than calls near ATM (${totalPutVolume} puts vs ${totalCallVolume} calls around $${topPutStrike.toFixed(2)}), suggesting bearish positioning.`;
+    } else if (callPutRatio < 0.7 && swingSetup.direction === 'bearish') {
+      // Moderate put bias + bearish setup
+      sentiment = 'bearish';
+      confidence = 'medium';
+      message = hasVolumeData
+        ? `Options traders were moderately bearish, with more puts than calls around $${topPutStrike.toFixed(2)}. This supports the bearish chart pattern.`
+        : `Moderately more put contracts than calls available near ATM, consistent with bearish positioning.`;
+    } else if (callPutRatio > 2.0 && swingSetup.direction === 'bearish') {
+      // Divergence: calls dominate but chart is bearish
+      sentiment = 'mixed';
+      confidence = 'low';
+      message = `⚠️ Mixed signals: More ${hasVolumeData ? 'call buying' : 'call contracts'} around $${topCallStrike.toFixed(2)}, but the chart shows a bearish setup. This divergence suggests caution.`;
+    } else if (callPutRatio < 0.5 && swingSetup.direction === 'bullish') {
+      // Divergence: puts dominate but chart is bullish
+      sentiment = 'mixed';
+      confidence = 'low';
+      message = `⚠️ Mixed signals: More ${hasVolumeData ? 'put buying' : 'put contracts'} around $${topPutStrike.toFixed(2)}, but the chart shows a bullish setup. Traders may be hedging.`;
+    } else {
+      // Balanced or unclear
+      sentiment = 'neutral';
+      confidence = 'medium';
+      message = hasVolumeData
+        ? `Options activity is balanced (${totalCallVolume} calls, ${totalPutVolume} puts near $${atmStrike.toFixed(2)}). No strong directional bias from options to confirm or contradict the swing setup.`
+        : `Available options contracts are balanced (${totalCallVolume} calls, ${totalPutVolume} puts near $${atmStrike.toFixed(2)}). No clear directional bias.`;
+    }
+
+    // Add IV context (only if available)
+    if (hasVolumeData && ivTrend === 'rising') {
+      message += ` Implied volatility is rising, suggesting increased uncertainty or event risk.`;
+    } else if (ivTrend === 'falling') {
+      message += ` Implied volatility is falling, indicating calmer markets ahead.`;
+    }
+
+    return {
+      sentiment,
+      confidence,
+      message,
+      callPutRatio,
+      totalCallVolume,
+      totalPutVolume,
+      ivTrend,
+      atmStrike,
+      topCallStrikes,
+      topPutStrikes,
+      expirations: nearestExpirations,
+      rawData: optionsChain,
+    };
   }
 }
 

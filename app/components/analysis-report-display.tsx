@@ -873,6 +873,178 @@ export default function AnalysisReportDisplay({ report }: AnalysisReportDisplayP
           </div>
         )}
 
+        {/* Options Insight */}
+        {report.optionsInsight && (
+          <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+            <h3 className="text-xl font-bold text-white mb-4">📊 Options Flow & Smart Money Sentiment</h3>
+            
+            {/* Main Message */}
+            <div className={`p-4 rounded-lg mb-4 border ${
+              report.optionsInsight.sentiment === 'bullish' && report.optionsInsight.confidence === 'high' ? 'bg-green-500/20 border-green-500/30' :
+              report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/10 border-green-500/20' :
+              report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? 'bg-red-500/20 border-red-500/30' :
+              report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/10 border-red-500/20' :
+              report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/10 border-yellow-500/20' :
+              'bg-white/5 border-white/10'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">
+                  {report.optionsInsight.sentiment === 'bullish' && report.optionsInsight.confidence === 'high' ? '🚀' :
+                   report.optionsInsight.sentiment === 'bullish' ? '📈' :
+                   report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? '🔻' :
+                   report.optionsInsight.sentiment === 'bearish' ? '📉' :
+                   report.optionsInsight.sentiment === 'mixed' ? '⚠️' :
+                   '➖'}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                      report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/30 text-green-200' :
+                      report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/30 text-red-200' :
+                      report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/30 text-yellow-200' :
+                      'bg-white/20 text-white'
+                    }`}>
+                      {report.optionsInsight.sentiment}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      report.optionsInsight.confidence === 'high' ? 'bg-white/20 text-blue-200' :
+                      report.optionsInsight.confidence === 'medium' ? 'bg-white/10 text-blue-300' :
+                      'bg-white/5 text-gray-300'
+                    }`}>
+                      {report.optionsInsight.confidence} confidence
+                    </span>
+                  </div>
+                  <p className="text-white text-base leading-relaxed">{report.optionsInsight.message}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Data Type Indicator for Basic Accounts */}
+            {report.optionsInsight.topCallStrikes.length > 0 && 
+             report.optionsInsight.topCallStrikes.every(s => s.volume === 0 && s.oi === 0) && (
+              <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="text-sm text-blue-200">
+                  <span className="font-semibold">📊 Basic Account Mode:</span> Live volume and open interest data not available with your current plan. 
+                  Analysis is based on available option contracts (contract count) rather than actual trading volume. 
+                  The sentiment is still valid but with lower confidence compared to live data.
+                </div>
+              </div>
+            )}
+
+            {/* Call/Put Activity Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                <div className="text-green-200 text-sm mb-1">
+                  {report.optionsInsight.topCallStrikes.every(s => s.volume === 0) ? 'Call Contracts' : 'Call Volume'}
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {report.optionsInsight.totalCallVolume.toLocaleString()}
+                </div>
+                <div className="text-xs text-green-300 mt-1">Near ATM ${report.optionsInsight.atmStrike.toFixed(2)}</div>
+              </div>
+
+              <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                <div className="text-red-200 text-sm mb-1">
+                  {report.optionsInsight.topPutStrikes.every(s => s.volume === 0) ? 'Put Contracts' : 'Put Volume'}
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {report.optionsInsight.totalPutVolume.toLocaleString()}
+                </div>
+                <div className="text-xs text-red-300 mt-1">Near ATM ${report.optionsInsight.atmStrike.toFixed(2)}</div>
+              </div>
+
+              <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                <div className="text-blue-200 text-sm mb-1">Call/Put Ratio</div>
+                <div className="text-2xl font-bold text-white">
+                  {report.optionsInsight.callPutRatio > 999 ? '999+' : report.optionsInsight.callPutRatio.toFixed(2)}
+                </div>
+                <div className="text-xs text-blue-300 mt-1">
+                  {report.optionsInsight.callPutRatio > 2 ? 'Heavily call-skewed' :
+                   report.optionsInsight.callPutRatio > 1.5 ? 'Moderately bullish' :
+                   report.optionsInsight.callPutRatio > 0.7 ? 'Balanced' :
+                   report.optionsInsight.callPutRatio > 0.5 ? 'Moderately bearish' :
+                   'Heavily put-skewed'}
+                </div>
+              </div>
+            </div>
+
+            {/* IV Trend & Expirations */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                <div className="text-blue-200 text-sm mb-1">Implied Volatility Trend</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-white text-lg font-semibold uppercase">{report.optionsInsight.ivTrend}</span>
+                  <span className="text-xs text-blue-300">
+                    {report.optionsInsight.ivTrend === 'rising' ? '(Increased uncertainty)' :
+                     report.optionsInsight.ivTrend === 'falling' ? '(Calmer markets)' :
+                     '(Stable volatility)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                <div className="text-blue-200 text-sm mb-1">Nearest Expirations</div>
+                <div className="text-white text-sm">
+                  {report.optionsInsight.expirations.join(', ')}
+                </div>
+              </div>
+            </div>
+
+            {/* Top Strikes */}
+            {(report.optionsInsight.topCallStrikes.length > 0 || report.optionsInsight.topPutStrikes.length > 0) && (() => {
+              // Check if we have volume data
+              const hasVolumeData = report.optionsInsight.topCallStrikes.some(s => s.volume > 0) || 
+                                   report.optionsInsight.topPutStrikes.some(s => s.volume > 0);
+              
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {report.optionsInsight.topCallStrikes.length > 0 && (
+                    <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                      <div className="text-green-200 text-sm font-semibold mb-1">
+                        🔥 {hasVolumeData ? 'Top Call Strikes by Volume' : 'Nearest Call Strikes'}
+                      </div>
+                      {!hasVolumeData && (
+                        <div className="text-xs text-blue-300 mb-3">Closest to current price (ATM)</div>
+                      )}
+                      <div className="space-y-2">
+                        {report.optionsInsight.topCallStrikes.map((strike, idx) => (
+                          <div key={idx} className={hasVolumeData ? "flex justify-between text-sm" : "text-sm"}>
+                            <span className="text-white font-mono">${strike.strike.toFixed(2)}</span>
+                            {hasVolumeData && (
+                              <span className="text-green-300">{strike.volume} vol / {strike.oi} OI</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {report.optionsInsight.topPutStrikes.length > 0 && (
+                    <div className="bg-white/5 p-4 rounded-lg border border-white/10">
+                      <div className="text-red-200 text-sm font-semibold mb-1">
+                        🔥 {hasVolumeData ? 'Top Put Strikes by Volume' : 'Nearest Put Strikes'}
+                      </div>
+                      {!hasVolumeData && (
+                        <div className="text-xs text-blue-300 mb-3">Closest to current price (ATM)</div>
+                      )}
+                      <div className="space-y-2">
+                        {report.optionsInsight.topPutStrikes.map((strike, idx) => (
+                          <div key={idx} className={hasVolumeData ? "flex justify-between text-sm" : "text-sm"}>
+                            <span className="text-white font-mono">${strike.strike.toFixed(2)}</span>
+                            {hasVolumeData && (
+                              <span className="text-red-300">{strike.volume} vol / {strike.oi} OI</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Fundamentals */}
         {report.fundamentals && (
           <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">

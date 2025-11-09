@@ -22,7 +22,8 @@ export class LLMAnalyzer {
     executionPlan: any,
     squeezeAnalysis?: any,
     fundamentals?: any,
-    newsSummary?: any
+    newsSummary?: any,
+    optionsInsight?: any
   ): Promise<{
     narrative: string;
     mentorNotes: string;
@@ -42,7 +43,8 @@ export class LLMAnalyzer {
         executionPlan,
         squeezeAnalysis,
         fundamentals,
-        newsSummary
+        newsSummary,
+        optionsInsight
       );
 
       // Call OpenAI API
@@ -57,12 +59,21 @@ export class LLMAnalyzer {
           messages: [
             {
               role: 'system',
-              content: `You are an expert swing trading mentor analyzing technical setups. Provide concise, actionable analysis focused on:
+              content: `You are an expert swing trading mentor with expertise in technical analysis and fundamentals. Provide concise, actionable analysis focused on:
 1. WHY the setup is tradeable (or not) - analyze market structure, not just criteria
 2. SPECIFIC entry tactics and risk management
 3. KEY factors traders should watch
 4. Squeeze dynamics (short interest + volatility compression)
 5. Real-world execution considerations
+
+🚨 CRITICAL - SCORE ACCURACY 🚨
+The VERY FIRST LINE of context contains the setup score. You MUST copy it EXACTLY.
+Example: If it says "FUBO Setup Score: 40/100 (D rating)", you write "40/100 (D rating)" - NO OTHER NUMBER.
+DO NOT compute your own score. DO NOT say "62/100" or "52/100" or any number other than what's provided.
+If you mention the score more than once, use the SAME number every time.
+
+🚨 OPTIONS RULES 🚨
+If context says "Options data is not available", do NOT mention options, call/put ratios, or smart money.
 
 Be direct and practical. Avoid repeating obvious criteria. Focus on insights a trader can act on.`
             },
@@ -106,9 +117,15 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     executionPlan: any,
     squeezeAnalysis?: any,
     fundamentals?: any,
-    newsSummary?: any
+    newsSummary?: any,
+    optionsInsight?: any
   ): string {
-    let context = `Analyze ${symbol} on ${timeframe} timeframe:\n\n`;
+    // START WITH THE SCORE - MOST IMPORTANT
+    let context = `**YOU MUST USE THIS EXACT SCORE IN YOUR ANALYSIS:**\n`;
+    context += `${symbol} Setup Score: ${score.overall}/100 (${score.overall >= 90 ? 'A+' : score.overall >= 76 ? 'A' : score.overall >= 61 ? 'B' : score.overall >= 41 ? 'C' : 'D'} rating)\n`;
+    context += `DO NOT say "40/100" or "52/100" or any other number. The score is ${score.overall}/100.\n\n`;
+    
+    context += `Analyze ${symbol} on ${timeframe} timeframe:\n\n`;
     
     // Technical setup
     context += `**Technical Setup:**\n`;
@@ -158,10 +175,11 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     // Risk/Reward
     context += `**Risk Profile:**\n`;
     context += `- Direction: ${riskPlan.direction.toUpperCase()}\n`;
-    const rrSafe = typeof riskPlan.rrRatio === 'number' ? riskPlan.rrRatio : Number(riskPlan.rrRatio ?? 0);
-    const stopDistSafe = typeof riskPlan.stopDistance === 'number' ? riskPlan.stopDistance : Number(riskPlan.stopDistance ?? 0);
-    context += `- R:R Ratio: ${rrSafe.toFixed(2)}:1\n`;
-    context += `- Stop Distance: ${(stopDistSafe * 100).toFixed(2)}%\n\n`;
+    // Use riskReward.target1 as the primary R:R ratio
+    const rrSafe = typeof riskPlan.riskReward?.target1 === 'number' ? riskPlan.riskReward.target1 : 0;
+    const riskPercSafe = typeof riskPlan.riskPercent === 'number' ? riskPlan.riskPercent : 0;
+    context += `- R:R Ratio: ${rrSafe.toFixed(2)}:1 (Target 1)\n`;
+    context += `- Risk: ${riskPercSafe.toFixed(1)}% from entry to stop\n\n`;
 
     // Execution context
     if (executionPlan.warnings && executionPlan.warnings.length > 0) {
@@ -203,10 +221,9 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `- ${fundamentals.risk.summary}\n\n`;
     }
 
-    // Weighted Sub-Scores (render guidance for the model)
-    context += `**Scoring Weights (Guide):**\n`;
-    context += `- Technical: 25% | Momentum: 20% | Trend: 15% | Pattern: 25% | Volume: 5% | Fundamentals: 10%\n`;
-    context += `Explicitly compute a composite score (0-100) and a letter grade (A+..D).\n\n`;
+    // Score breakdown for reference
+    context += `**Score Breakdown (for reference only - already stated above):**\n`;
+    context += `Technical ${score.technical}/100 | Momentum ${score.momentum}/100 | Trend ${score.trend}/100 | Pattern ${score.pattern}/100 | Volume ${score.volume}/100\n\n`;
 
     // News sentiment (if available)
     if (newsSummary && newsSummary.overallSentiment) {
@@ -226,11 +243,53 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       context += `\n`;
     }
 
-    context += `As a professional swing trader with expertise in technical AND fundamental analysis, provide:\n\n`;
-    context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure; how fundamentals (relative to industry norms) and sentiment strengthen or weaken conviction]\n\n`;
-    context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing - factor in valuation and sentiment]\n\n`;
-    context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics (TTM state/momentum), earnings date, valuation re-ratings, and industry-specific catalysts]\n\n`;
-    context += `**Strengths:** [3-5 bullet points covering technical, fundamental, and sentiment factors]\n**Warnings:** [2-4 bullet points including valuation risks and negative sentiment]\n**Reasoning:** [3-5 factors combining technical, fundamental, and news analysis]`;
+    // Options Flow Analysis (if available)
+    if (optionsInsight) {
+      context += `**Options Flow & Sentiment:**\n`;
+      context += `- Sentiment: ${optionsInsight.sentiment.toUpperCase()} (${optionsInsight.confidence} confidence)\n`;
+      if (typeof optionsInsight.callPutRatio === 'number' && !isNaN(optionsInsight.callPutRatio)) {
+        const cpRatio = optionsInsight.callPutRatio > 999 ? '999+' : optionsInsight.callPutRatio.toFixed(2);
+        context += `- Call/Put Ratio: ${cpRatio} (${optionsInsight.totalCallVolume} calls vs ${optionsInsight.totalPutVolume} puts near ATM $${optionsInsight.atmStrike.toFixed(2)})\n`;
+      }
+      context += `- IV Trend: ${optionsInsight.ivTrend.toUpperCase()} ${optionsInsight.ivTrend === 'rising' ? '(increased uncertainty/event risk)' : optionsInsight.ivTrend === 'falling' ? '(calmer markets)' : ''}\n`;
+      if (optionsInsight.topCallStrikes && optionsInsight.topCallStrikes.length > 0) {
+        const topCall = optionsInsight.topCallStrikes[0];
+        context += `- Top Call Activity: $${topCall.strike.toFixed(2)} strike (${topCall.volume} vol, ${topCall.oi} OI)\n`;
+      }
+      if (optionsInsight.topPutStrikes && optionsInsight.topPutStrikes.length > 0) {
+        const topPut = optionsInsight.topPutStrikes[0];
+        context += `- Top Put Activity: $${topPut.strike.toFixed(2)} strike (${topPut.volume} vol, ${topPut.oi} OI)\n`;
+      }
+      if (optionsInsight.expirations && optionsInsight.expirations.length > 0) {
+        context += `- Nearest Expirations: ${optionsInsight.expirations.join(', ')}\n`;
+      }
+      context += `- **Interpretation:** ${optionsInsight.message}\n`;
+      context += `\n`;
+    }
+
+    // REPEAT THE SCORE ONE MORE TIME RIGHT BEFORE INSTRUCTIONS
+    context += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    context += `🎯 REMINDER: Your Executive Summary MUST say "${symbol} Setup Score: ${score.overall}/100 (${score.overall >= 90 ? 'A+' : score.overall >= 76 ? 'A' : score.overall >= 61 ? 'B' : score.overall >= 41 ? 'C' : 'D'} rating)"\n`;
+    context += `DO NOT write any other number. The score is ${score.overall}/100, NOT 62/100 or 52/100.\n`;
+    context += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // Adjust instructions based on available data
+    const hasOptions = optionsInsight && optionsInsight.sentiment;
+    
+    if (hasOptions) {
+      context += `As a professional swing trader with expertise in technical AND fundamental analysis AND options flow, provide:\n\n`;
+      context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure; how fundamentals (relative to industry norms), sentiment, and options flow strengthen or weaken conviction]\n\n`;
+      context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing - factor in valuation, sentiment, and what options traders are positioning for]\n\n`;
+      context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics (TTM state/momentum), earnings date, valuation re-ratings, options positioning shifts (call/put activity), and industry-specific catalysts]\n\n`;
+      context += `**Strengths:** [3-5 bullet points covering technical, fundamental, sentiment, and options factors]\n**Warnings:** [2-4 bullet points including valuation risks, negative sentiment, and bearish options positioning]\n**Reasoning:** [3-5 factors combining technical, fundamental, news, and options flow analysis - explain what the options activity suggests about near-term price direction]`;
+    } else {
+      context += `As a professional swing trader with expertise in technical AND fundamental analysis, provide:\n\n`;
+      context += `**Market Structure & Setup Quality**\n[2-3 sentences on WHY this setup is tradeable based on technical structure; how fundamentals (relative to industry norms) and sentiment strengthen or weaken conviction]\n\n`;
+      context += `**Entry Tactics & Risk Management**\n[Specific guidance on entry timing, stop placement, position sizing - factor in valuation and sentiment]\n\n`;
+      context += `**Key Factors to Monitor**\n[Technical levels, squeeze dynamics (TTM state/momentum), earnings date, valuation re-ratings, and industry-specific catalysts]\n\n`;
+      context += `**Strengths:** [3-5 bullet points covering technical, fundamental, and sentiment factors]\n**Warnings:** [2-4 bullet points including valuation risks and negative sentiment]\n**Reasoning:** [3-5 factors combining technical, fundamental, and news analysis]\n\n`;
+      context += `NOTE: Options data is not available for this ticker. Do NOT mention options positioning, call/put activity, or smart money options flow in your analysis.`;
+    }
 
     return context;
   }
