@@ -29,6 +29,7 @@ model User {
   scanRuns      ScanRun[]
   strategies    UserStrategy[]
   savedReports  SavedReport[]
+  tradeJournal  TradeJournal[]
   
   @@index([email])
 }
@@ -322,4 +323,59 @@ model SavedReport {
   @@index([userId, type])
   @@index([userId, createdAt])
   @@index([userId, isPinned])
+}
+
+// Trading Journal with AI Analysis
+// Tracks real trades with auto-calculated metrics and market data enrichment
+model TradeJournal {
+  id          String   @id @default(cuid())
+  userId      String
+  
+  // User-provided fields (required)
+  ticker      String   @db.VarChar(10)
+  direction   String   @db.VarChar(10)  // "long" or "short"
+  entryPrice  Float
+  entryDate   DateTime
+  exitPrice   Float?   // Null if trade is still open
+  exitDate    DateTime?
+  amount      Float    // Dollar amount in the trade
+  
+  // User-provided fields (optional)
+  strategy    String?  @db.VarChar(100)  // Strategy name or "Other"
+  notes       String?  @db.Text          // Free-text notes for AI analysis
+  isOpen      Boolean  @default(false)   // Is trade still open?
+  
+  // Auto-calculated fields
+  returnPct   Float?   // Return percentage
+  rMultiple   Float?   // R multiple (if stop available)
+  holdingDays Int?     // Holding period in days
+  profitLoss  Float?   // P/L in dollars
+  
+  // Enriched market data (populated on save)
+  entryOHLC   Json?    // {open, high, low, close, volume} for entry date
+  exitOHLC    Json?    // {open, high, low, close, volume} for exit date
+  entryEMA9   Float?   // EMA 9 on entry date
+  entryEMA20  Float?   // EMA 20 on entry date
+  entryEMA50  Float?   // EMA 50 on entry date
+  entryRSI    Float?   // RSI on entry date
+  entryATR    Float?   // ATR on entry date
+  exitEMA9    Float?   // EMA 9 on exit date
+  exitEMA20   Float?   // EMA 20 on exit date
+  exitEMA50   Float?   // EMA 50 on exit date
+  exitRSI     Float?   // RSI on exit date
+  exitATR     Float?   // ATR on exit date
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([ticker])
+  @@index([strategy])
+  @@index([direction])
+  @@index([isOpen])
 }

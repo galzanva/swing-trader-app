@@ -41,6 +41,10 @@ export default function Navbar({ session }: NavbarProps) {
       label: 'Strategies',
       href: '/strategies',
     },
+    journal: {
+      label: '📓 Trading Journal',
+      href: '/journal',
+    },
   };
 
   const isActive = (href: string, exact: boolean = false) => {
@@ -173,6 +177,18 @@ export default function Navbar({ session }: NavbarProps) {
               }`}
             >
               {navItems.strategies.label}
+            </Link>
+
+            {/* Trading Journal Link */}
+            <Link
+              href={navItems.journal.href}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                isActive(navItems.journal.href)
+                  ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
+                  : 'text-blue-200 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {navItems.journal.label}
             </Link>
             </nav>
 
@@ -341,6 +357,19 @@ export default function Navbar({ session }: NavbarProps) {
                   }`}
                 >
                   {navItems.strategies.label}
+                </Link>
+
+                {/* Trading Journal Link */}
+                <Link
+                  href={navItems.journal.href}
+                  onClick={closeMobileMenu}
+                  className={`block px-4 py-3 rounded-lg text-base font-medium transition-all ${
+                    isActive(navItems.journal.href)
+                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white'
+                      : 'text-blue-200 hover:bg-white/10'
+                  }`}
+                >
+                  {navItems.journal.label}
                 </Link>
               </nav>
             </div>
