@@ -16,6 +16,7 @@ interface Trade {
   strategy: string | null;
   notes: string | null;
   isOpen: boolean;
+  exitReason: string | null;
   returnPct: number | null;
   rMultiple: number | null;
   holdingDays: number | null;
@@ -64,6 +65,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [strategy, setStrategy] = useState('');
   const [notes, setNotes] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [exitReason, setExitReason] = useState('');
 
   // Strategy options (user can select or type "Other")
   const strategyOptions = [
@@ -73,6 +75,13 @@ export default function JournalClient({ session }: JournalClientProps) {
     'Momentum',
     'Squeeze Play',
     'Other',
+  ];
+  
+  const exitReasonOptions = [
+    { value: 'hit_target', label: 'Hit Target' },
+    { value: 'stopped_out', label: 'Stopped Out' },
+    { value: 'manual_exit', label: 'Manual Exit' },
+    { value: 'time_exit', label: 'Time-Based Exit' },
   ];
 
   useEffect(() => {
@@ -129,6 +138,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         strategy: strategy || undefined,
         notes: notes || undefined,
         isOpen,
+        exitReason: exitReason && !isOpen ? (exitReason as any) : undefined,
       };
 
       const response = await fetch('/api/journal', {
@@ -167,6 +177,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setStrategy('');
     setNotes('');
     setIsOpen(false);
+    setExitReason('');
   };
 
   const handleEdit = (trade: Trade) => {
@@ -174,13 +185,19 @@ export default function JournalClient({ session }: JournalClientProps) {
     setTicker(trade.ticker);
     setDirection(trade.direction);
     setEntryPrice(trade.entryPrice.toString());
-    setEntryDate(new Date(trade.entryDate).toISOString().split('T')[0]);
+    
+    // Extract date portion without timezone conversion
+    const entryDateStr = trade.entryDate.split('T')[0];
+    const exitDateStr = trade.exitDate ? trade.exitDate.split('T')[0] : '';
+    
+    setEntryDate(entryDateStr);
     setExitPrice(trade.exitPrice?.toString() || '');
-    setExitDate(trade.exitDate ? new Date(trade.exitDate).toISOString().split('T')[0] : '');
+    setExitDate(exitDateStr);
     setAmount(trade.amount.toString());
     setStrategy(trade.strategy || '');
     setNotes(trade.notes || '');
     setIsOpen(trade.isOpen);
+    setExitReason(trade.exitReason || '');
     setShowAddForm(true);
   };
 
@@ -233,10 +250,13 @@ export default function JournalClient({ session }: JournalClientProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    // Parse date as UTC to avoid timezone shifts
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: 'UTC', // Display in UTC to match stored date
     });
   };
 
@@ -425,37 +445,56 @@ export default function JournalClient({ session }: JournalClientProps) {
               </div>
 
               {!isOpen && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Exit Price */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-200 mb-1">
-                      Exit Price {!isOpen && '*'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={exitPrice}
-                      onChange={(e) => setExitPrice(e.target.value)}
-                      placeholder="155.00"
-                      className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500"
-                      required={!isOpen}
-                    />
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Exit Price */}
+                    <div>
+                      <label className="block text-sm font-medium text-blue-200 mb-1">
+                        Exit Price {!isOpen && '*'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={exitPrice}
+                        onChange={(e) => setExitPrice(e.target.value)}
+                        placeholder="155.00"
+                        className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500"
+                        required={!isOpen}
+                      />
+                    </div>
+
+                    {/* Exit Date */}
+                    <div>
+                      <label className="block text-sm font-medium text-blue-200 mb-1">
+                        Exit Date {!isOpen && '*'}
+                      </label>
+                      <input
+                        type="date"
+                        value={exitDate}
+                        onChange={(e) => setExitDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        required={!isOpen}
+                      />
+                    </div>
                   </div>
 
-                  {/* Exit Date */}
+                  {/* Exit Reason */}
                   <div>
                     <label className="block text-sm font-medium text-blue-200 mb-1">
-                      Exit Date {!isOpen && '*'}
+                      Exit Reason (optional)
                     </label>
-                    <input
-                      type="date"
-                      value={exitDate}
-                      onChange={(e) => setExitDate(e.target.value)}
+                    <select
+                      value={exitReason}
+                      onChange={(e) => setExitReason(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      required={!isOpen}
-                    />
+                    >
+                      <option value="">Select exit reason...</option>
+                      {exitReasonOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
-                </div>
+                </>
               )}
 
               {/* Strategy */}

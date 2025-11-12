@@ -55,9 +55,15 @@ export async function POST(request: NextRequest) {
     // Build analysis context
     const winningTrades = trades.filter(t => (t.returnPct ?? 0) > 0);
     const losingTrades = trades.filter(t => (t.returnPct ?? 0) < 0);
+    
+    // Detect repeated profitable setups
+    const repeatableSetups = detectRepeatableSetups(trades);
+    
+    // Detect early exits
+    const earlyExits = detectEarlyExits(trades);
 
     // Analyze patterns in winning vs losing trades
-    const context = buildAnalysisContext(trades, winningTrades, losingTrades);
+    const context = buildAnalysisContext(trades, winningTrades, losingTrades, repeatableSetups, earlyExits);
 
     // Call OpenAI for pattern analysis
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -73,24 +79,29 @@ export async function POST(request: NextRequest) {
             role: 'system',
             content: `You are an expert trading analyst specializing in identifying patterns and improving trading strategies. 
 Your goal is to analyze a trader's journal and find:
-1. Common patterns in winning trades (what worked well)
-2. Common patterns in losing trades (what to avoid)
-3. Specific, actionable insights based on market conditions (ATR, RSI, EMA alignment)
-4. Strategy recommendations to improve win rate and R multiple
+1. **Repeated Profitable Setups** - Identify setups that have worked multiple times
+2. **Early Exit Issues** - Flag trades where the user exited too early and left gains on the table
+3. Common patterns in winning trades (what worked well)
+4. Common patterns in losing trades (what to avoid)
+5. Specific, actionable insights based on market conditions (ATR, RSI, EMA alignment)
 
 Focus on:
+- Repeatable setups with high success rates (format: "This setup has worked X of the last Y times")
+- Early exits where maxPotential R was much higher than realized R
 - Market conditions: High ATR days vs low ATR
 - RSI levels at entry and exit
 - EMA alignment (trend strength)
-- Holding period patterns
+- Exit reasons and holding discipline
 - Strategy effectiveness
-- Notes and user observations
 
-Be specific, data-driven, and actionable. Format your response in clear sections:
-- **Key Patterns in Winners**
-- **Key Patterns in Losers**
-- **Market Context Insights**
-- **Actionable Recommendations**`
+Be specific, data-driven, and actionable. Use beginner-friendly language with confidence indicators.
+Format your response in clear sections:
+- **🎯 Repeat These Setups** (high-confidence patterns to prioritize)
+- **⚠️ Holding Discipline Issues** (early exits that left money on table)
+- **✅ Key Patterns in Winners**
+- **❌ Key Patterns in Losers**
+- **📊 Market Context Insights**
+- **💡 Actionable Recommendations** (with confidence levels: High/Medium/Low)`
           },
           {
             role: 'user',
@@ -138,12 +149,183 @@ Be specific, data-driven, and actionable. Format your response in clear sections
   }
 }
 
+function detectRepeatableSetups(trades: any[]): Array<{
+  strategy: string;
+  conditions: string;
+  winCount: number;
+  totalCount: number;
+  winRate: number;
+  avgReturn: number;
+  confidence: 'High' | 'Medium' | 'Low';
+}> {
+  const setups: Map<string, any[]> = new Map();
+  
+  // Group trades by strategy and similar conditions
+  for (const trade of trades) {
+    if (!trade.strategy || trade.strategy === 'Other') continue;
+    
+    // Create condition signature based on indicators
+    const rsiZone = trade.entryRSI 
+      ? trade.entryRSI < 30 ? 'oversold' : trade.entryRSI > 70 ? 'overbought' : 'neutral'
+      : 'unknown';
+    
+    const emaAlignment = trade.entryEMA9 && trade.entryEMA20 && trade.entryEMA50
+      ? trade.entryEMA9 > trade.entryEMA20 && trade.entryEMA20 > trade.entryEMA50 
+        ? 'bullish' 
+        : trade.entryEMA9 < trade.entryEMA20 && trade.entryEMA20 < trade.entryEMA50
+          ? 'bearish'
+          : 'mixed'
+      : 'unknown';
+    
+    const atrLevel = trade.entryATR && trade.entryPrice
+      ? (trade.entryATR / trade.entryPrice * 100) < 1.5 ? 'low' : 
+        (trade.entryATR / trade.entryPrice * 100) > 2.5 ? 'high' : 'medium'
+      : 'unknown';
+    
+    const key = `${trade.strategy}|${rsiZone}|${emaAlignment}|${atrLevel}`;
+    const setupTrades = setups.get(key) || [];
+    setupTrades.push(trade);
+    setups.set(key, setupTrades);
+  }
+  
+  // Analyze each setup
+  const results: any[] = [];
+  
+  for (const [key, setupTrades] of setups.entries()) {
+    const [strategy, rsiZone, emaAlignment, atrLevel] = key.split('|');
+    const winCount = setupTrades.filter(t => (t.returnPct ?? 0) > 0).length;
+    const totalCount = setupTrades.length;
+    const winRate = (winCount / totalCount) * 100;
+    const avgReturn = setupTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalCount;
+    
+    // Only include setups with at least 3 occurrences and >60% win rate
+    if (totalCount >= 3 && winRate >= 60) {
+      let confidence: 'High' | 'Medium' | 'Low' = 'Low';
+      
+      if (totalCount >= 5 && winRate >= 75) confidence = 'High';
+      else if (totalCount >= 4 && winRate >= 65) confidence = 'Medium';
+      
+      const conditions = [
+        emaAlignment !== 'unknown' && `EMA ${emaAlignment}`,
+        rsiZone !== 'unknown' && rsiZone !== 'neutral' && `RSI ${rsiZone}`,
+        atrLevel !== 'unknown' && `ATR ${atrLevel}`,
+      ].filter(Boolean).join(', ');
+      
+      results.push({
+        strategy,
+        conditions: conditions || 'Standard conditions',
+        winCount,
+        totalCount,
+        winRate: parseFloat(winRate.toFixed(1)),
+        avgReturn: parseFloat(avgReturn.toFixed(2)),
+        confidence,
+      });
+    }
+  }
+  
+  // Sort by confidence and win rate
+  return results.sort((a, b) => {
+    const confScore = { High: 3, Medium: 2, Low: 1 };
+    if (confScore[a.confidence] !== confScore[b.confidence]) {
+      return confScore[b.confidence] - confScore[a.confidence];
+    }
+    return b.winRate - a.winRate;
+  });
+}
+
+function detectEarlyExits(trades: any[]): Array<{
+  ticker: string;
+  entryDate: string;
+  direction: string;
+  realizedR: number;
+  maxPotentialR: number;
+  leftOnTable: number;
+  exitReason: string | null;
+}> {
+  const earlyExits: any[] = [];
+  
+  for (const trade of trades) {
+    if (trade.isOpen) continue;
+    if (!trade.rMultiple || !trade.maxPotentialR) continue;
+    
+    const realizedR = trade.rMultiple;
+    const maxPotentialR = trade.maxPotentialR;
+    
+    // Flag if exited before 1R when trade went to 2R+
+    if (realizedR < 1 && maxPotentialR >= 2) {
+      earlyExits.push({
+        ticker: trade.ticker,
+        entryDate: new Date(trade.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        direction: trade.direction,
+        realizedR: parseFloat(realizedR.toFixed(2)),
+        maxPotentialR: parseFloat(maxPotentialR.toFixed(2)),
+        leftOnTable: parseFloat((maxPotentialR - realizedR).toFixed(2)),
+        exitReason: trade.exitReason,
+      });
+    }
+    // Also flag if exited at break-even or small win when much more was available
+    else if (realizedR < 1.5 && maxPotentialR >= 3) {
+      earlyExits.push({
+        ticker: trade.ticker,
+        entryDate: new Date(trade.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        direction: trade.direction,
+        realizedR: parseFloat(realizedR.toFixed(2)),
+        maxPotentialR: parseFloat(maxPotentialR.toFixed(2)),
+        leftOnTable: parseFloat((maxPotentialR - realizedR).toFixed(2)),
+        exitReason: trade.exitReason,
+      });
+    }
+  }
+  
+  return earlyExits;
+}
+
 function buildAnalysisContext(
   allTrades: any[],
   winners: any[],
-  losers: any[]
+  losers: any[],
+  repeatableSetups: any[],
+  earlyExits: any[]
 ): string {
   let context = `# Trading Journal Analysis\n\n`;
+  
+  // Repeatable setups section
+  if (repeatableSetups.length > 0) {
+    context += `## 🎯 REPEATABLE SETUPS (Prioritize These!)\n\n`;
+    context += `Found ${repeatableSetups.length} high-performing setup(s) with consistent results:\n\n`;
+    
+    repeatableSetups.forEach((setup, i) => {
+      context += `### ${i + 1}. ${setup.strategy} - ${setup.conditions}\n`;
+      context += `- **Performance**: ${setup.winCount} wins out of ${setup.totalCount} trades (${setup.winRate}% win rate)\n`;
+      context += `- **Avg Return**: ${setup.avgReturn > 0 ? '+' : ''}${setup.avgReturn}%\n`;
+      context += `- **Confidence**: ${setup.confidence} (based on sample size and consistency)\n`;
+      context += `- **Recommendation**: ${setup.confidence === 'High' 
+        ? '✅ This setup has proven itself—consider prioritizing it in your trading!' 
+        : setup.confidence === 'Medium'
+          ? '⚠️ Promising pattern, keep executing and tracking it.'
+          : '💡 Early signal, needs more data to confirm.'}\n\n`;
+    });
+  }
+  
+  // Early exit section
+  if (earlyExits.length > 0) {
+    context += `## ⚠️ HOLDING DISCIPLINE ISSUES (Early Exits)\n\n`;
+    context += `Identified ${earlyExits.length} trade(s) where you exited too early and left significant gains on the table:\n\n`;
+    
+    earlyExits.slice(0, 5).forEach((exit, i) => {
+      context += `${i + 1}. **${exit.ticker}** (${exit.entryDate}, ${exit.direction})\n`;
+      context += `   - Exited at: ${exit.realizedR}R\n`;
+      context += `   - Could have achieved: ${exit.maxPotentialR}R\n`;
+      context += `   - Left on table: ${exit.leftOnTable}R\n`;
+      context += `   - Exit reason: ${exit.exitReason || 'Not specified'}\n\n`;
+    });
+    
+    if (earlyExits.length > 5) {
+      context += `... and ${earlyExits.length - 5} more early exits.\n\n`;
+    }
+    
+    context += `**Key Insight**: Consider setting wider targets or using trailing stops to capture more of the move when trades work in your favor.\n\n`;
+  }
   
   // Overall stats
   const winRate = allTrades.length > 0 ? ((winners.length / allTrades.length) * 100).toFixed(1) : '0';

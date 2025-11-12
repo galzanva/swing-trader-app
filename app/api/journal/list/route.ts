@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
         strategy: true,
         notes: true,
         isOpen: true,
+        exitReason: true,
         returnPct: true,
         rMultiple: true,
         holdingDays: true,

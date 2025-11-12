@@ -318,6 +318,7 @@ model SavedReport {
   
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradeJournalEntries TradeJournal[] // Trades linked to this analysis report
   
   @@index([userId])
   @@index([userId, type])
@@ -344,12 +345,17 @@ model TradeJournal {
   strategy    String?  @db.VarChar(100)  // Strategy name or "Other"
   notes       String?  @db.Text          // Free-text notes for AI analysis
   isOpen      Boolean  @default(false)   // Is trade still open?
+  exitReason  String?  @db.VarChar(20)   // hit_target, stopped_out, manual_exit, time_exit
   
   // Auto-calculated fields
   returnPct   Float?   // Return percentage
   rMultiple   Float?   // R multiple (if stop available)
   holdingDays Int?     // Holding period in days
   profitLoss  Float?   // P/L in dollars
+  maxPotentialR Float? // Maximum R multiple achieved post-entry (for early exit detection)
+  
+  // Linked analysis report (auto-populated if analysis exists within ±3 days)
+  analysisReportId String? // Links to SavedReport for strategy feedback loop
   
   // Enriched market data (populated on save)
   entryOHLC   Json?    // {open, high, low, close, volume} for entry date
@@ -371,6 +377,7 @@ model TradeJournal {
   
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysisReport SavedReport? @relation(fields: [analysisReportId], references: [id], onDelete: SetNull)
   
   @@index([userId])
   @@index([userId, createdAt])
@@ -378,4 +385,6 @@ model TradeJournal {
   @@index([strategy])
   @@index([direction])
   @@index([isOpen])
+  @@index([analysisReportId])
+  @@index([exitReason])
 }

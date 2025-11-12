@@ -22,6 +22,7 @@ interface TradeInput {
   strategy?: string;
   notes?: string;
   isOpen?: boolean;
+  exitReason?: 'hit_target' | 'stopped_out' | 'manual_exit' | 'time_exit';
 }
 
 export async function POST(request: NextRequest) {
@@ -55,17 +56,58 @@ export async function POST(request: NextRequest) {
     }
 
     const ticker = body.ticker.toUpperCase();
-    const entryDate = new Date(body.entryDate);
-    const exitDate = body.exitDate ? new Date(body.exitDate) : null;
+    
+    // Parse dates without timezone conversion (keep as date-only, no time component)
+    // This prevents dates from shifting due to timezone offsets
+    const entryDate = new Date(body.entryDate + 'T00:00:00.000Z');
+    const exitDate = body.exitDate ? new Date(body.exitDate + 'T00:00:00.000Z') : null;
     const isOpen = body.isOpen ?? (exitDate === null);
 
     console.log(`[Journal] Processing trade: ${ticker} ${body.direction} Entry: ${body.entryPrice} @ ${entryDate.toISOString()}`);
 
-    // 1. Calculate metrics
+    // 1. Auto-link to recent analysis report (within ±3 days of entry)
+    let analysisReportId: string | null = null;
+    
+    try {
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      const entryTime = entryDate.getTime();
+      const windowStart = new Date(entryTime - threeDaysMs);
+      const windowEnd = new Date(entryTime + threeDaysMs);
+      
+      const recentReport = await prisma.savedReport.findFirst({
+        where: {
+          userId,
+          createdAt: {
+            gte: windowStart,
+            lte: windowEnd,
+          },
+          // Check if ticker matches in parameters
+          parameters: {
+            path: ['symbol'],
+            equals: ticker,
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+      
+      if (recentReport) {
+        analysisReportId = recentReport.id;
+        console.log(`[Journal] Linked to analysis report: ${analysisReportId}`);
+      }
+    } catch (error) {
+      console.error('[Journal] Error linking to analysis report:', error);
+      // Continue without linking
+    }
+
+    // 2. Calculate metrics
     let returnPct: number | null = null;
     let profitLoss: number | null = null;
     let holdingDays: number | null = null;
     let rMultiple: number | null = null;
+    let maxPotentialR: number | null = null;
+    let calculatedR: number | null = null; // Temporary for R calculation
 
     if (body.exitPrice && exitDate) {
       // Calculate return %
@@ -85,7 +127,7 @@ export async function POST(request: NextRequest) {
       console.log(`[Journal] Calculated metrics - Return: ${returnPct.toFixed(2)}%, P/L: $${profitLoss.toFixed(2)}, Days: ${holdingDays}`);
     }
 
-    // 2. Enrich with market data
+    // 3. Enrich with market data and calculate maxPotentialR for early exit detection
     const polygonApiKey = process.env.POLYGON_API_KEY;
     let entryOHLC: any = null;
     let exitOHLC: any = null;
@@ -174,6 +216,51 @@ export async function POST(request: NextRequest) {
               console.log(`[Journal] Exit indicators - EMA9: ${exitEMA9?.toFixed(2)}, RSI: ${exitRSI?.toFixed(2)}, ATR: ${exitATR?.toFixed(2)}`);
             }
           }
+          
+          // 3.5. Calculate maxPotentialR for early exit detection
+          if (body.exitPrice && exitDate && entryATR && entryBarIndex >= 0) {
+            try {
+              // Get bars from entry to 20 days after exit to see how far trade could have gone
+              const exitBarIndexForPotential = marketData.bars.findIndex(bar => {
+                const barDate = new Date(bar.timestamp).setHours(0, 0, 0, 0);
+                const exitDateOnly = new Date(exitDate.getTime()).setHours(0, 0, 0, 0);
+                return barDate >= exitDateOnly;
+              });
+              
+              if (exitBarIndexForPotential >= 0) {
+                const lookAheadBars = marketData.bars.slice(entryBarIndex, Math.min(exitBarIndexForPotential + 20, marketData.bars.length));
+                const stopDistance = 1.5 * entryATR;
+                const riskPerShare = stopDistance;
+                
+                let maxGain = 0;
+                
+                for (const bar of lookAheadBars) {
+                  let gain = 0;
+                  
+                  if (body.direction === 'long') {
+                    gain = bar.high - body.entryPrice;
+                    // Check if stop would have been hit
+                    if (bar.low < body.entryPrice - stopDistance) {
+                      break; // Would have stopped out
+                    }
+                  } else {
+                    gain = body.entryPrice - bar.low;
+                    // Check if stop would have been hit (for short)
+                    if (bar.high > body.entryPrice + stopDistance) {
+                      break; // Would have stopped out
+                    }
+                  }
+                  
+                  maxGain = Math.max(maxGain, gain);
+                }
+                
+                maxPotentialR = maxGain / riskPerShare;
+                console.log(`[Journal] Max potential R: ${maxPotentialR.toFixed(2)}R`);
+              }
+            } catch (error) {
+              console.error('[Journal] Error calculating maxPotentialR:', error);
+            }
+          }
         }
       } catch (error) {
         console.error('[Journal] Error fetching market data:', error);
@@ -181,7 +268,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Calculate R multiple (if ATR available and not open trade)
+    // 4. Calculate R multiple (if ATR available and not open trade)
     if (entryATR && body.exitPrice && returnPct !== null) {
       // Assume 1.5 ATR as default stop distance
       const stopDistance = 1.5 * entryATR;
@@ -194,7 +281,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Save to database
+    // 5. Save to database
     const tradeData = {
       userId,
       ticker,
@@ -207,10 +294,13 @@ export async function POST(request: NextRequest) {
       strategy: body.strategy ?? null,
       notes: body.notes ?? null,
       isOpen,
+      exitReason: body.exitReason ?? null,
       returnPct,
       rMultiple,
       holdingDays,
       profitLoss,
+      maxPotentialR,
+      analysisReportId,
       entryOHLC: entryOHLC ?? null,
       exitOHLC: exitOHLC ?? null,
       entryEMA9,
