@@ -376,8 +376,9 @@ export class FinnhubClient {
       else score += 5; // Heavy selling
     }
     
-    // Return average score
-    return factors > 0 ? Math.round(score / factors) : 50;
+    // Score is already 0-100, don't divide by factors
+    // (Each factor adds up to 25 points, 4 factors = 100 max)
+    return factors > 0 ? Math.round(score) : 0;
   }
 
   /**
@@ -424,7 +425,8 @@ export class FinnhubClient {
       }
     }
     
-    return factors > 0 ? Math.round(score / factors) : 50;
+    // Score is already 0-100, don't divide by factors
+    return factors > 0 ? Math.round(score) : 0;
   }
 
   /**
@@ -562,14 +564,17 @@ export class FinnhubClient {
     const interestCoverage = metrics.interestCoverageAnnual || null;
     const beta = metrics.beta || null;
     
-    // Calculate days to earnings
+    // Calculate days to earnings (use UTC dates to avoid timezone issues)
     let daysToEarnings: number | null = null;
     let earningsRisk = false;
     if (earningsCalendar) {
-      const earningsDate = new Date(earningsCalendar.date);
+      // Parse both dates at UTC midnight to avoid timezone shifts
+      const earningsDate = new Date(earningsCalendar.date + 'T00:00:00.000Z');
       const today = new Date();
-      daysToEarnings = Math.floor((earningsDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      earningsRisk = daysToEarnings >= 0 && daysToEarnings <= 10;
+      // Normalize today to UTC midnight for accurate day count
+      const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+      daysToEarnings = Math.floor((earningsDate.getTime() - todayUTC.getTime()) / (1000 * 60 * 60 * 24));
+      earningsRisk = Math.abs(daysToEarnings) <= 10; // Within 10 days before or after
     }
     
     // Determine insider sentiment

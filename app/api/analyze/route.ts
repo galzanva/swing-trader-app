@@ -182,6 +182,13 @@ export interface AnalysisReport {
       pattern: number;
       volume: number;
     };
+    ratingAdjustment?: {
+      originalScore: number;
+      originalRating: string;
+      adjustedScore: number;
+      adjustedRating: string;
+      reason: string;
+    };
   };
   
   // Entry, stop, targets
@@ -559,8 +566,8 @@ export async function POST(request: Request) {
       mainScore = score.overall;
     }
     
-    const mainRating = getRatingFromScore(mainScore);
-    const mainRecommendation = getRecommendationFromScore(mainScore, executionDirection);
+    let mainRating = getRatingFromScore(mainScore);
+    let mainRecommendation = getRecommendationFromScore(mainScore, executionDirection);
     
     console.log(`[Analyze] Setup score: ${mainScore}/100 (${mainRating}) - ${executionDirection} direction`);
 
@@ -805,6 +812,14 @@ export async function POST(request: Request) {
 
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
+    let ratingAdjustmentDetails: {
+      originalScore: number;
+      originalRating: string;
+      adjustedScore: number;
+      adjustedRating: string;
+      reason: string;
+    } | undefined;
+    
     if (openaiApiKey) {
       try {
         const llmAnalyzer = new LLMAnalyzer(openaiApiKey);
@@ -822,6 +837,26 @@ export async function POST(request: Request) {
           optionsInsight // Pass options insight to LLM
         );
         console.log(`[Analyze] Generated AI analysis with fundamentals, news, and options context`);
+        
+        // Apply AI rating adjustment if provided and store the adjustment details
+        if (aiAnalysis.ratingAdjustment) {
+          const originalScore = mainScore;
+          const originalRating = mainRating;
+          mainScore = aiAnalysis.ratingAdjustment.adjustedScore;
+          mainRating = aiAnalysis.ratingAdjustment.adjustedRating;
+          mainRecommendation = getRecommendationFromScore(mainScore, executionDirection);
+          
+          ratingAdjustmentDetails = {
+            originalScore,
+            originalRating,
+            adjustedScore: mainScore,
+            adjustedRating: mainRating,
+            reason: aiAnalysis.ratingAdjustment.reason
+          };
+          
+          console.log(`[Analyze] 🎯 AI ADJUSTED RATING: ${originalScore}/100 (${originalRating}) → ${mainScore}/100 (${mainRating})`);
+          console.log(`[Analyze] Reason: ${aiAnalysis.ratingAdjustment.reason}`);
+        }
       } catch (error) {
         console.error("[Analyze] Error generating AI analysis:", error);
         console.log("[Analyze] Falling back to comprehensive non-LLM analysis...");
@@ -1136,7 +1171,8 @@ export async function POST(request: Request) {
           trend: score.trend,
           pattern: score.pattern,
           volume: score.volume
-        }
+        },
+        ratingAdjustment: ratingAdjustmentDetails
       },
       
       riskManagement: {

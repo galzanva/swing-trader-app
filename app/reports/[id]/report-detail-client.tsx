@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AnalysisReportDisplay from '../../components/analysis-report-display';
+import StrategyAnalysisReportDisplay from '../../components/strategy-analysis-report-display';
 import type { AnalysisReport } from '../../api/analyze/route';
 
 interface SavedReport {
@@ -428,11 +429,11 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
       {/* Report Data - Render based on type */}
       {report.type === 'deep-analysis' ? (
         <AnalysisReportDisplay report={report.reportData as AnalysisReport} />
+      ) : report.type === 'strategy-analysis' ? (
+        <StrategyAnalysisReportDisplay report={report.reportData} />
       ) : (
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-          <h3 className="text-lg font-bold text-white mb-4">
-            {report.type === 'strategy-analysis' ? 'Strategy Analysis Report' : 'Report Data'}
-          </h3>
+          <h3 className="text-lg font-bold text-white mb-4">Report Data</h3>
           <div className="bg-slate-900/50 rounded-lg p-4 overflow-auto max-h-[600px]">
             <pre className="text-sm text-blue-200 whitespace-pre-wrap">
               {JSON.stringify(report.reportData, null, 2)}

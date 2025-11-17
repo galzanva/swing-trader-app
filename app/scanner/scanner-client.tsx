@@ -822,10 +822,9 @@ export default function ScannerClient() {
 
 // Result Card Component
 function ResultCard({ result }: { result: ScanResult }) {
-  const router = useRouter();
-  
   const handleAnalyze = () => {
-    router.push(`/?ticker=${result.ticker}`);
+    // Open strategy analysis in new tab to keep scanner results visible
+    window.open(`/strategy-analyze?symbol=${result.ticker}`, '_blank');
   };
 
   return (
@@ -963,9 +962,12 @@ function ResultCard({ result }: { result: ScanResult }) {
       {/* Analyze Button */}
       <button
         onClick={handleAnalyze}
-        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
       >
-        View Full Analysis →
+        <span>Strategy Analysis</span>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
       </button>
     </div>
   );

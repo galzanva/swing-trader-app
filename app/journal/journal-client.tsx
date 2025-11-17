@@ -44,6 +44,14 @@ interface JournalClientProps {
   session: Session;
 }
 
+interface SavedStrategyReport {
+  id: string;
+  title: string;
+  symbol: string;
+  timeframe: string;
+  createdAt: string;
+}
+
 export default function JournalClient({ session }: JournalClientProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -53,6 +61,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [savedStrategyReports, setSavedStrategyReports] = useState<SavedStrategyReport[]>([]);
 
   // Form state
   const [ticker, setTicker] = useState('');
@@ -63,6 +72,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [exitDate, setExitDate] = useState('');
   const [amount, setAmount] = useState('');
   const [strategy, setStrategy] = useState('');
+  const [selectedReportId, setSelectedReportId] = useState('');
   const [notes, setNotes] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [exitReason, setExitReason] = useState('');
@@ -86,7 +96,21 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   useEffect(() => {
     fetchTrades();
+    fetchSavedStrategyReports();
   }, []);
+
+  const fetchSavedStrategyReports = async () => {
+    try {
+      const response = await fetch('/api/reports/strategies');
+      const data = await response.json();
+      
+      if (data.success) {
+        setSavedStrategyReports(data.reports);
+      }
+    } catch (error) {
+      console.error('Error fetching saved strategy reports:', error);
+    }
+  };
 
   const fetchTrades = async () => {
     try {
@@ -136,6 +160,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         exitDate: exitDate || undefined,
         amount: parseFloat(amount),
         strategy: strategy || undefined,
+        analysisReportId: selectedReportId || undefined,
         notes: notes || undefined,
         isOpen,
         exitReason: exitReason && !isOpen ? (exitReason as any) : undefined,
@@ -175,6 +200,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setExitDate('');
     setAmount('');
     setStrategy('');
+    setSelectedReportId('');
     setNotes('');
     setIsOpen(false);
     setExitReason('');
@@ -497,17 +523,45 @@ export default function JournalClient({ session }: JournalClientProps) {
                 </>
               )}
 
-              {/* Strategy */}
+              {/* Link to Saved Strategy Report */}
               <div>
                 <label className="block text-sm font-medium text-blue-200 mb-1">
-                  Strategy (optional)
+                  📊 Link to Strategy Report (optional)
+                </label>
+                <select
+                  value={selectedReportId}
+                  onChange={(e) => setSelectedReportId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">None - Don't link to a report</option>
+                  {savedStrategyReports.length > 0 && (
+                    <optgroup label="Saved Strategy Reports">
+                      {savedStrategyReports.map(report => (
+                        <option key={report.id} value={report.id}>
+                          {report.symbol} - {report.title.substring(0, 40)}... ({new Date(report.createdAt).toLocaleDateString()})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                {savedStrategyReports.length === 0 && (
+                  <p className="text-xs text-blue-300 mt-1">
+                    No saved strategy reports yet. Analyze a stock with strategies and save the report to link it here.
+                  </p>
+                )}
+              </div>
+
+              {/* Strategy Type */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-1">
+                  Strategy Type (optional tag)
                 </label>
                 <select
                   value={strategy}
                   onChange={(e) => setStrategy(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
                 >
-                  <option value="">Select a strategy...</option>
+                  <option value="">Select a strategy type...</option>
                   {strategyOptions.map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}

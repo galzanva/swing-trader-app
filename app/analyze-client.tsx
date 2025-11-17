@@ -316,9 +316,53 @@ export default function AnalyzeClient() {
                    report.score.overall >= 41 ? "Neutral - wait for confirmation" : 
                    "Low conviction - avoid"}
                 </div>
+                
+                {/* AI Rating Adjustment Badge */}
+                {report.score.ratingAdjustment && (
+                  <div className="mt-3 p-2 bg-purple-500/20 border border-purple-400/40 rounded-lg">
+                    <div className="flex items-center gap-1 justify-end mb-1">
+                      <span className="text-purple-300 text-xs font-semibold">🤖 AI Adjusted</span>
+                    </div>
+                    <div className="text-xs text-purple-200">
+                      <span className="line-through opacity-60">{report.score.ratingAdjustment.originalRating} {report.score.ratingAdjustment.originalScore}</span>
+                      <span className="mx-1">→</span>
+                      <span className="font-semibold">{report.score.ratingAdjustment.adjustedRating} {report.score.ratingAdjustment.adjustedScore}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
+          
+          {/* AI Rating Adjustment Explanation (if adjusted) */}
+          {report.score.ratingAdjustment && (
+            <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">🤖</div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-purple-300 mb-2">AI Rating Adjustment</h3>
+                  <p className="text-purple-100 text-sm mb-3">
+                    {report.score.ratingAdjustment.reason}
+                  </p>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-300">Technical Score:</span>
+                      <span className="px-2 py-1 bg-white/10 rounded text-white font-semibold">
+                        {report.score.ratingAdjustment.originalRating} {report.score.ratingAdjustment.originalScore}/100
+                      </span>
+                    </div>
+                    <div className="text-purple-300">→</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-300">Final Score:</span>
+                      <span className="px-2 py-1 bg-purple-500/30 border border-purple-400/50 rounded text-purple-100 font-bold">
+                        {report.score.ratingAdjustment.adjustedRating} {report.score.ratingAdjustment.adjustedScore}/100
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Chart Pattern & Pattern Fusion */}
           {report.chartPattern && (

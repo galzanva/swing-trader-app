@@ -20,6 +20,7 @@ interface TradeInput {
   exitDate?: string;
   amount: number;
   strategy?: string;
+  analysisReportId?: string; // Link to saved strategy analysis report
   notes?: string;
   isOpen?: boolean;
   exitReason?: 'hit_target' | 'stopped_out' | 'manual_exit' | 'time_exit';
@@ -65,40 +66,45 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Journal] Processing trade: ${ticker} ${body.direction} Entry: ${body.entryPrice} @ ${entryDate.toISOString()}`);
 
-    // 1. Auto-link to recent analysis report (within ±3 days of entry)
-    let analysisReportId: string | null = null;
+    // 1. Link to analysis report (manual selection takes priority, otherwise auto-link)
+    let analysisReportId: string | null = body.analysisReportId || null;
     
-    try {
-      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-      const entryTime = entryDate.getTime();
-      const windowStart = new Date(entryTime - threeDaysMs);
-      const windowEnd = new Date(entryTime + threeDaysMs);
-      
-      const recentReport = await prisma.savedReport.findFirst({
-        where: {
-          userId,
-          createdAt: {
-            gte: windowStart,
-            lte: windowEnd,
+    // If no manual link provided, try to auto-link to recent analysis report (within ±3 days of entry)
+    if (!analysisReportId) {
+      try {
+        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+        const entryTime = entryDate.getTime();
+        const windowStart = new Date(entryTime - threeDaysMs);
+        const windowEnd = new Date(entryTime + threeDaysMs);
+        
+        const recentReport = await prisma.savedReport.findFirst({
+          where: {
+            userId,
+            createdAt: {
+              gte: windowStart,
+              lte: windowEnd,
+            },
+            // Check if ticker matches in parameters
+            parameters: {
+              path: ['symbol'],
+              equals: ticker,
+            },
           },
-          // Check if ticker matches in parameters
-          parameters: {
-            path: ['symbol'],
-            equals: ticker,
+          orderBy: {
+            createdAt: 'desc',
           },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
-      
-      if (recentReport) {
-        analysisReportId = recentReport.id;
-        console.log(`[Journal] Linked to analysis report: ${analysisReportId}`);
+        });
+        
+        if (recentReport) {
+          analysisReportId = recentReport.id;
+          console.log(`[Journal] Auto-linked to analysis report: ${analysisReportId}`);
+        }
+      } catch (error) {
+        console.error('[Journal] Error linking to analysis report:', error);
+        // Continue without linking
       }
-    } catch (error) {
-      console.error('[Journal] Error linking to analysis report:', error);
-      // Continue without linking
+    } else {
+      console.log(`[Journal] Manually linked to analysis report: ${analysisReportId}`);
     }
 
     // 2. Calculate metrics

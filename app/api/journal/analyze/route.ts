@@ -85,6 +85,12 @@ Your goal is to analyze a trader's journal and find:
 4. Common patterns in losing trades (what to avoid)
 5. Specific, actionable insights based on market conditions (ATR, RSI, EMA alignment)
 
+🚨 CRITICAL: USE ONLY THE DATA PROVIDED 🚨
+- Each trade shows "Entry: $XX.XX" and "Exit: $XX.XX" - use THESE prices ONLY
+- Do NOT infer prices from notes or other fields
+- Do NOT confuse stop loss/take profit targets with actual entry/exit prices
+- When referencing a trade, cite the EXACT entry and exit prices shown in the data
+
 Focus on:
 - Repeatable setups with high success rates (format: "This setup has worked X of the last Y times")
 - Early exits where maxPotential R was much higher than realized R
@@ -225,9 +231,11 @@ function detectRepeatableSetups(trades: any[]): Array<{
   
   // Sort by confidence and win rate
   return results.sort((a, b) => {
-    const confScore = { High: 3, Medium: 2, Low: 1 };
-    if (confScore[a.confidence] !== confScore[b.confidence]) {
-      return confScore[b.confidence] - confScore[a.confidence];
+    const confScore: Record<'High' | 'Medium' | 'Low', number> = { High: 3, Medium: 2, Low: 1 };
+    const aScore = confScore[a.confidence as 'High' | 'Medium' | 'Low'];
+    const bScore = confScore[b.confidence as 'High' | 'Medium' | 'Low'];
+    if (aScore !== bScore) {
+      return bScore - aScore;
     }
     return b.winRate - a.winRate;
   });
@@ -236,6 +244,8 @@ function detectRepeatableSetups(trades: any[]): Array<{
 function detectEarlyExits(trades: any[]): Array<{
   ticker: string;
   entryDate: string;
+  entryPrice: number;
+  exitPrice: number;
   direction: string;
   realizedR: number;
   maxPotentialR: number;
@@ -256,6 +266,8 @@ function detectEarlyExits(trades: any[]): Array<{
       earlyExits.push({
         ticker: trade.ticker,
         entryDate: new Date(trade.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        entryPrice: trade.entryPrice,
+        exitPrice: trade.exitPrice,
         direction: trade.direction,
         realizedR: parseFloat(realizedR.toFixed(2)),
         maxPotentialR: parseFloat(maxPotentialR.toFixed(2)),
@@ -268,6 +280,8 @@ function detectEarlyExits(trades: any[]): Array<{
       earlyExits.push({
         ticker: trade.ticker,
         entryDate: new Date(trade.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        entryPrice: trade.entryPrice,
+        exitPrice: trade.exitPrice,
         direction: trade.direction,
         realizedR: parseFloat(realizedR.toFixed(2)),
         maxPotentialR: parseFloat(maxPotentialR.toFixed(2)),
@@ -313,9 +327,11 @@ function buildAnalysisContext(
     context += `Identified ${earlyExits.length} trade(s) where you exited too early and left significant gains on the table:\n\n`;
     
     earlyExits.slice(0, 5).forEach((exit, i) => {
-      context += `${i + 1}. **${exit.ticker}** (${exit.entryDate}, ${exit.direction})\n`;
-      context += `   - Exited at: ${exit.realizedR}R\n`;
-      context += `   - Could have achieved: ${exit.maxPotentialR}R\n`;
+      context += `${i + 1}. **${exit.ticker}** (${exit.direction}, ${exit.entryDate})\n`;
+      context += `   - Entry: $${exit.entryPrice.toFixed(2)}\n`;
+      context += `   - Exit: $${exit.exitPrice.toFixed(2)}\n`;
+      context += `   - Realized R: ${exit.realizedR}R\n`;
+      context += `   - Max Potential R: ${exit.maxPotentialR}R\n`;
       context += `   - Left on table: ${exit.leftOnTable}R\n`;
       context += `   - Exit reason: ${exit.exitReason || 'Not specified'}\n\n`;
     });
@@ -379,12 +395,23 @@ function buildAnalysisContext(
       });
     }
     
-    // Sample winning trades with notes
-    const winnersWithNotes = winners.filter(t => t.notes && t.notes.trim().length > 0).slice(0, 3);
-    if (winnersWithNotes.length > 0) {
-      context += `\n### Sample Winning Trade Notes:\n`;
-      winnersWithNotes.forEach((t, i) => {
-        context += `${i + 1}. ${t.ticker} ${t.direction}: +${(t.returnPct ?? 0).toFixed(2)}% - "${t.notes}"\n`;
+    // Sample winning trades with full details
+    const sampleWinners = winners.slice(0, 5);
+    if (sampleWinners.length > 0) {
+      context += `\n### Sample Winning Trades (with prices and context):\n`;
+      sampleWinners.forEach((t, i) => {
+        const entryDateStr = new Date(t.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const exitDateStr = t.exitDate ? new Date(t.exitDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Open';
+        context += `${i + 1}. **${t.ticker}** ${t.direction.toUpperCase()}\n`;
+        context += `   - Entry: $${t.entryPrice.toFixed(2)} on ${entryDateStr}\n`;
+        context += `   - Exit: $${t.exitPrice ? t.exitPrice.toFixed(2) : 'N/A'} on ${exitDateStr}\n`;
+        context += `   - Return: +${(t.returnPct ?? 0).toFixed(2)}%\n`;
+        context += `   - R Multiple: ${t.rMultiple ? t.rMultiple.toFixed(2) + 'R' : 'N/A'}\n`;
+        if (t.holdingDays) context += `   - Held: ${t.holdingDays} days\n`;
+        if (t.strategy) context += `   - Strategy: ${t.strategy}\n`;
+        if (t.exitReason) context += `   - Exit Reason: ${t.exitReason}\n`;
+        if (t.notes && t.notes.trim().length > 0) context += `   - Notes: "${t.notes}"\n`;
+        context += `\n`;
       });
     }
     
@@ -430,12 +457,23 @@ function buildAnalysisContext(
       });
     }
     
-    // Sample losing trades with notes
-    const losersWithNotes = losers.filter(t => t.notes && t.notes.trim().length > 0).slice(0, 3);
-    if (losersWithNotes.length > 0) {
-      context += `\n### Sample Losing Trade Notes:\n`;
-      losersWithNotes.forEach((t, i) => {
-        context += `${i + 1}. ${t.ticker} ${t.direction}: ${(t.returnPct ?? 0).toFixed(2)}% - "${t.notes}"\n`;
+    // Sample losing trades with full details
+    const sampleLosers = losers.slice(0, 5);
+    if (sampleLosers.length > 0) {
+      context += `\n### Sample Losing Trades (with prices and context):\n`;
+      sampleLosers.forEach((t, i) => {
+        const entryDateStr = new Date(t.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const exitDateStr = t.exitDate ? new Date(t.exitDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Open';
+        context += `${i + 1}. **${t.ticker}** ${t.direction.toUpperCase()}\n`;
+        context += `   - Entry: $${t.entryPrice.toFixed(2)} on ${entryDateStr}\n`;
+        context += `   - Exit: $${t.exitPrice ? t.exitPrice.toFixed(2) : 'N/A'} on ${exitDateStr}\n`;
+        context += `   - Return: ${(t.returnPct ?? 0).toFixed(2)}%\n`;
+        context += `   - R Multiple: ${t.rMultiple ? t.rMultiple.toFixed(2) + 'R' : 'N/A'}\n`;
+        if (t.holdingDays) context += `   - Held: ${t.holdingDays} days\n`;
+        if (t.strategy) context += `   - Strategy: ${t.strategy}\n`;
+        if (t.exitReason) context += `   - Exit Reason: ${t.exitReason}\n`;
+        if (t.notes && t.notes.trim().length > 0) context += `   - Notes: "${t.notes}"\n`;
+        context += `\n`;
       });
     }
     

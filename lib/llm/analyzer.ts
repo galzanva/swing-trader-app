@@ -30,6 +30,11 @@ export class LLMAnalyzer {
     reasoning: string[];
     warnings: string[];
     strengths: string[];
+    ratingAdjustment?: {
+      adjustedScore: number;
+      adjustedRating: 'A+' | 'A' | 'B' | 'C' | 'D';
+      reason: string;
+    };
   }> {
     try {
       // Build comprehensive context for LLM
@@ -66,11 +71,25 @@ export class LLMAnalyzer {
 4. Squeeze dynamics (short interest + volatility compression)
 5. Real-world execution considerations
 
-🚨 CRITICAL - SCORE ACCURACY 🚨
-The VERY FIRST LINE of context contains the setup score. You MUST copy it EXACTLY.
-Example: If it says "FUBO Setup Score: 40/100 (D rating)", you write "40/100 (D rating)" - NO OTHER NUMBER.
-DO NOT compute your own score. DO NOT say "62/100" or "52/100" or any number other than what's provided.
-If you mention the score more than once, use the SAME number every time.
+🚨 RATING ADJUSTMENT AUTHORITY 🚨
+You can adjust the technical score by ±15 points (±1 full grade) after analyzing ALL factors:
+- Technical score is provided (e.g., "40/100 D rating")
+- You may UPGRADE if: strong fundamentals + positive catalysts + favorable sentiment outweigh weak technicals
+- You may DOWNGRADE if: fundamental risks + negative catalysts + adverse sentiment override strong technicals
+- Grade boundaries: 0-40=D, 41-60=C, 61-75=B, 76-89=A, 90+=A+
+
+To adjust, include this exact line in your response:
+RATING_ADJUSTMENT: [new_score]/100 [new_rating] - [one sentence reason]
+
+Example adjustments:
+- "RATING_ADJUSTMENT: 55/100 C - Upgraded from D due to excellent fundamentals (Quality 85/100) and positive earnings catalyst"
+- "RATING_ADJUSTMENT: 35/100 D - Downgraded from C due to overvaluation and negative earnings surprise"
+- If no adjustment needed, omit this line entirely
+
+🚨 SCORE USAGE 🚨
+When mentioning the score in your narrative:
+- If you adjusted it, use the NEW score everywhere
+- If not adjusted, use the ORIGINAL score exactly as provided
 
 🚨 OPTIONS RULES 🚨
 If context says "Options data is not available", do NOT mention options, call/put ratios, or smart money.
@@ -309,7 +328,33 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     reasoning: string[];
     warnings: string[];
     strengths: string[];
+    ratingAdjustment?: {
+      adjustedScore: number;
+      adjustedRating: 'A+' | 'A' | 'B' | 'C' | 'D';
+      reason: string;
+    };
   } {
+    // Extract rating adjustment if present
+    const ratingAdjustmentMatch = analysis.match(/RATING_ADJUSTMENT:\s*(\d+)\/100\s+(A\+|A|B|C|D)\s+-\s+(.+)/i);
+    let ratingAdjustment: { adjustedScore: number; adjustedRating: 'A+' | 'A' | 'B' | 'C' | 'D'; reason: string } | undefined;
+    
+    if (ratingAdjustmentMatch) {
+      const adjustedScore = parseInt(ratingAdjustmentMatch[1], 10);
+      const adjustedRating = ratingAdjustmentMatch[2].toUpperCase() as 'A+' | 'A' | 'B' | 'C' | 'D';
+      const reason = ratingAdjustmentMatch[3].trim();
+      
+      // Validate adjustment is within ±15 points
+      if (Math.abs(adjustedScore - score.overall) <= 15) {
+        ratingAdjustment = { adjustedScore, adjustedRating, reason };
+        console.log(`[LLM] Rating adjusted: ${score.overall} → ${adjustedScore} (${score.rating} → ${adjustedRating}): ${reason}`);
+      } else {
+        console.warn(`[LLM] Rating adjustment rejected: ${adjustedScore} is more than ±15 from original ${score.overall}`);
+      }
+      
+      // Remove the RATING_ADJUSTMENT line from the analysis text
+      analysis = analysis.replace(/RATING_ADJUSTMENT:[^\n]+\n?/gi, '');
+    }
+    
     // Extract sections
     const strengthsMatch = analysis.match(/\*\*Strengths:\*\*\s*([\s\S]*?)(?=\*\*Warnings:|$)/i);
     const warningsMatch = analysis.match(/\*\*Warnings:\*\*\s*([\s\S]*?)(?=\*\*Reasoning:|$)/i);
@@ -345,6 +390,7 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
       reasoning: reasoning.length > 0 ? reasoning : [`${compositePattern.candlestickPattern.name}`, `${indicators.trend} trend`, `RSI ${indicators.rsi.toFixed(1)}`],
       warnings: warnings.length > 0 ? warnings : indicators.rsi > 70 ? ['RSI overbought'] : indicators.rsi < 30 ? ['RSI oversold'] : [],
       strengths: strengths.length > 0 ? strengths : score.overall > 70 ? ['High quality setup'] : ['Meets technical criteria'],
+      ratingAdjustment,
     };
   }
 

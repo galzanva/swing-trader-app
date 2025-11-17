@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import SqueezeAnalysisCard from "./components/squeeze-analysis-card";
 import TradeCaseCard from "./components/trade-case-card";
 
@@ -134,14 +135,30 @@ interface StrategyResponse {
 }
 
 export default function StrategyAnalyzeClient() {
+  const searchParams = useSearchParams();
   const [symbol, setSymbol] = useState("");
   const [timeframe, setTimeframe] = useState("1day");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<StrategyResponse | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  const handleAnalyze = async () => {
-    if (!symbol.trim()) {
+  // Auto-fill symbol from URL parameter and trigger analysis
+  useEffect(() => {
+    const urlSymbol = searchParams.get('symbol');
+    if (urlSymbol) {
+      setSymbol(urlSymbol.toUpperCase());
+      // Auto-trigger analysis after a short delay to allow state to update
+      setTimeout(() => {
+        handleAnalyzeWithSymbol(urlSymbol.toUpperCase());
+      }, 100);
+    }
+  }, [searchParams]);
+
+  const handleAnalyzeWithSymbol = async (symbolToAnalyze: string) => {
+    if (!symbolToAnalyze.trim()) {
       setError("Please enter a ticker symbol");
       return;
     }
@@ -149,13 +166,15 @@ export default function StrategyAnalyzeClient() {
     setIsLoading(true);
     setError("");
     setResult(null);
+    setSaveSuccess(false);
+    setSaveError("");
 
     try {
       const response = await fetch("/api/strategy-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          symbol: symbol.toUpperCase(), 
+          symbol: symbolToAnalyze.toUpperCase(), 
           timeframe,
           recordHistory: true 
         })
@@ -173,6 +192,10 @@ export default function StrategyAnalyzeClient() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAnalyze = async () => {
+    await handleAnalyzeWithSymbol(symbol);
   };
 
   const getStatusColor = (status: string) => {
@@ -202,8 +225,75 @@ export default function StrategyAnalyzeClient() {
       .join(' ');
   };
 
+  const handleSaveReport = async () => {
+    if (!result) return;
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+    setSaveError("");
+
+    try {
+      // Get the strategy name from evaluation
+      const strategyName = result.evaluation.metadata?.isUserStrategy 
+        ? (result.evaluation.metadata?.strategyName || 'Custom Strategy')
+        : formatStrategyName(result.evaluation.strategy);
+
+      const title = `${symbol.toUpperCase()} Strategy Analysis - ${timeframe}`;
+      const description = `Strategy analysis for ${symbol.toUpperCase()} on ${timeframe} timeframe. Strategy: ${strategyName}. Generated on ${new Date().toLocaleDateString()}`;
+
+      // Build tags array, excluding 'user_defined' for user-created strategies
+      const tags = [
+        symbol.toUpperCase(),
+        timeframe,
+        "strategy-analysis",
+      ];
+      
+      // Add strategy name as tag only if it's not 'user_defined'
+      if (result.evaluation.strategy !== 'user_defined') {
+        tags.push(result.evaluation.strategy);
+      } else if (result.evaluation.metadata?.strategyName) {
+        // For user-defined strategies, add the custom strategy name instead
+        tags.push(result.evaluation.metadata.strategyName);
+      }
+
+      const response = await fetch("/api/reports/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "strategy-analysis",
+          title,
+          description,
+          parameters: {
+            symbol: symbol.toUpperCase(),
+            timeframe,
+          },
+          reportData: result,
+          cachedData: {
+            // Store cacheable data for optimization
+            squeezeAnalysis: result.squeezeAnalysis,
+            timestamp: new Date().toISOString(),
+          },
+          tags,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save report");
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 5000);
+    } catch (err: any) {
+      setSaveError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">
           AI Strategy Analysis v1.1
@@ -290,10 +380,47 @@ export default function StrategyAnalyzeClient() {
                   ${result.context.currentPrice.toFixed(2)} • {result.context.timeframe} • {result.context.spyRegime} regime
                 </p>
               </div>
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(result.evaluation.status)}`}>
-                {getStatusIcon(result.evaluation.status)} {result.evaluation.status.toUpperCase()}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveReport}
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all flex items-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <span>💾</span>
+                      Save Report
+                    </>
+                  )}
+                </button>
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(result.evaluation.status)}`}>
+                  {getStatusIcon(result.evaluation.status)} {result.evaluation.status.toUpperCase()}
+                </div>
               </div>
             </div>
+            
+            {/* Save Success/Error Messages */}
+            {saveSuccess && (
+              <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-green-800 text-sm">
+                  <span>✅</span>
+                  <span>Report saved successfully! View it in the <a href="/reports" className="underline font-medium">Reports</a> section.</span>
+                </div>
+              </div>
+            )}
+            {saveError && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-red-800 text-sm">
+                  <span>❌</span>
+                  <span>Failed to save: {saveError}</span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white/10 rounded-lg p-4 border border-white/10">
