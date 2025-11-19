@@ -32,6 +32,8 @@ export interface ScanResult {
   volume: number;
   marketCap?: number;
   matchScore: number; // 0-100, how well it matches the strategy
+  matchedStrategy?: string; // Name of the strategy that matched
+  matchedStrategyId?: string; // ID of user strategy (if user strategy matched)
   matchDetails: {
     eligible: boolean;
     viability?: number;

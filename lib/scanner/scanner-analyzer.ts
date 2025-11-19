@@ -272,6 +272,8 @@ export class ScannerAnalyzer {
         volume,
         marketCap: snapshotData.marketCap,
         matchScore,
+        matchedStrategy: strategy.name, // Add strategy name that matched
+        matchedStrategyId: evaluation?.metadata?.userStrategyId, // Add user strategy ID if applicable
         matchDetails: {
           eligible: isOverviewMode ? true : (evaluation !== null), // Always eligible in overview mode
           viability: evaluation?.viability,

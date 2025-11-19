@@ -186,10 +186,11 @@ export default function StrategiesManageClient({ userId }: StrategiesManageClien
                 
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/strategies/edit/${strategy.id}`}
-                    className="px-4 py-2 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg text-sm font-medium transition-all"
+                    href={`/strategies/builder?edit=${strategy.id}`}
+                    className="px-4 py-2 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
                   >
-                    Edit
+                    <span>✏️</span>
+                    <span>Edit</span>
                   </Link>
                   <button
                     onClick={() => toggleActive(strategy.id)}

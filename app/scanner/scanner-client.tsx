@@ -21,6 +21,8 @@ interface ScanResult {
   volume: number;
   marketCap?: number;
   matchScore: number;
+  matchedStrategy?: string; // Name of the strategy that matched
+  matchedStrategyId?: string; // ID of user strategy (if user strategy matched)
   matchDetails: {
     eligible: boolean;
     viability?: number;
@@ -61,6 +63,7 @@ export default function ScannerClient() {
   const [results, setResults] = useState<ScanResult[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string>('');
+  const [scanCompleted, setScanCompleted] = useState(false); // Track if a scan has completed
   
   // Filter states
   const [minDollarVolume, setMinDollarVolume] = useState(20);
@@ -122,6 +125,7 @@ export default function ScannerClient() {
     setError('');
     setResults([]);
     setCurrentPage(1);
+    setScanCompleted(false); // Reset completed flag
     setScanProgress(isOverviewMode ? 'Scanning market (overview mode)...' : 'Initializing scan...');
     setScanPercent(0);
     setCacheStats(null);
@@ -238,6 +242,7 @@ export default function ScannerClient() {
       setScanPercent(0);
     } finally {
       setIsScanning(false);
+      setScanCompleted(true); // Mark scan as completed
     }
   };
 
@@ -807,13 +812,52 @@ export default function ScannerClient() {
         {/* Empty State */}
         {!isScanning && results.length === 0 && (
           <div className="text-center py-16">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-2xl font-bold text-white mb-2">
-              Ready to Scan
-            </h3>
-            <p className="text-blue-200">
-              Select a strategy and click "Start Scan" to find matching stocks
-            </p>
+            {scanCompleted ? (
+              <>
+                <div className="text-6xl mb-4">🔍</div>
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  No Matches Found
+                </h3>
+                <p className="text-blue-200 mb-4">
+                  The scan completed but didn't find any stocks matching your strategy criteria
+                </p>
+                <div className="max-w-2xl mx-auto bg-blue-500/10 border border-blue-500/30 rounded-xl p-6 text-left">
+                  <h4 className="text-lg font-semibold text-white mb-3">💡 Tips to Find Matches:</h4>
+                  <ul className="space-y-2 text-sm text-blue-200">
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400">•</span>
+                      <span><strong>Try a different strategy</strong> - Some strategies work better in different market conditions</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400">•</span>
+                      <span><strong>Adjust filters</strong> - Lower minimum ATR, volume, or dollar volume requirements</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400">•</span>
+                      <span><strong>Broaden eligibility</strong> - Edit your strategy to be less restrictive (fewer EMAs, wider RSI range)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400">•</span>
+                      <span><strong>Check market regime</strong> - Bullish strategies work best in uptrends; bearish strategies in downtrends</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400">•</span>
+                      <span><strong>Use Overview Mode</strong> - Select "Overview Mode" to see all qualified stocks without strategy matching</span>
+                    </li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl mb-4">📊</div>
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  Ready to Scan
+                </h3>
+                <p className="text-blue-200">
+                  Select a strategy and click "Start Scan" to find matching stocks
+                </p>
+              </>
+            )}
           </div>
         )}
       </main>
@@ -940,6 +984,17 @@ function ResultCard({ result }: { result: ScanResult }) {
           <div className="text-sm font-semibold text-green-300 mb-2">
             ✓ Qualifies for Strategy
           </div>
+          {result.matchedStrategy && (
+            <div className="text-xs text-blue-300 mb-2 flex items-center gap-1">
+              <span className="opacity-75">Matched:</span>
+              <span className="font-semibold">{result.matchedStrategy}</span>
+              {result.matchedStrategyId && (
+                <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full border border-purple-500/30">
+                  Custom
+                </span>
+              )}
+            </div>
+          )}
           {result.matchDetails.rrFirst && (
             <div className="text-sm text-blue-200">
               R:R = {result.matchDetails.rrFirst.toFixed(2)}:1
@@ -959,16 +1014,23 @@ function ResultCard({ result }: { result: ScanResult }) {
         </div>
       )}
 
-      {/* Analyze Button */}
-      <button
-        onClick={handleAnalyze}
-        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-      >
-        <span>Strategy Analysis</span>
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-      </button>
+      {/* Analyze Button with Notice */}
+      <div>
+        {result.matchedStrategy && (
+          <div className="text-xs text-blue-300/70 mb-2 italic">
+            ℹ️ Re-evaluates with fresh data - results may differ
+          </div>
+        )}
+        <button
+          onClick={handleAnalyze}
+          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span>Strategy Analysis</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
