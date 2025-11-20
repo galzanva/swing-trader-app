@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import Navbar from '../components/navbar';
-import StrategyAnalyzeClient from '../strategy-analyze-client';
+import DashboardNewClient from '../dashboard-new-client';
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -16,11 +16,11 @@ export default async function DashboardPage() {
       <Navbar session={session} />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <StrategyAnalyzeClient />
+        <DashboardNewClient session={session} />
       </main>
 
       {/* Principles Footer */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-12">
         <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
           <h3 className="text-xl font-bold text-white mb-4">Our Principles</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

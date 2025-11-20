@@ -22,10 +22,14 @@ export default function Navbar({ session }: NavbarProps) {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   const navItems = {
+    dashboard: {
+      label: '🏠 Dashboard',
+      href: '/dashboard',
+    },
     analysis: {
       label: '📊 Analysis',
       items: [
-        { href: '/dashboard', label: '🎯 Strategy Analysis', exact: true },
+        { href: '/strategy-analyze', label: '🎯 Strategy Analysis' },
         { href: '/analyze', label: '🔍 Deep Analysis' },
         { href: '/reports', label: '📂 Saved Reports' },
       ] as NavItem[],
@@ -97,6 +101,18 @@ export default function Navbar({ session }: NavbarProps) {
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center space-x-1">
+            {/* Dashboard Link */}
+            <Link
+              href={navItems.dashboard.href}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                isActive(navItems.dashboard.href, true)
+                  ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
+                  : 'text-blue-200 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {navItems.dashboard.label}
+            </Link>
+
             {/* Analysis Dropdown */}
             <div className="relative">
               <button
@@ -276,6 +292,19 @@ export default function Navbar({ session }: NavbarProps) {
             {/* Mobile Menu Content */}
             <div className="flex-1 overflow-y-auto px-4 py-6">
               <nav className="space-y-2">
+                {/* Dashboard Link */}
+                <Link
+                  href={navItems.dashboard.href}
+                  onClick={closeMobileMenu}
+                  className={`block px-4 py-3 rounded-lg text-base font-medium transition-all ${
+                    isActive(navItems.dashboard.href, true)
+                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white'
+                      : 'text-blue-200 hover:bg-white/10'
+                  }`}
+                >
+                  {navItems.dashboard.label}
+                </Link>
+
                 {/* Analysis Dropdown */}
                 <div>
                   <button
