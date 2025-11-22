@@ -30,10 +30,9 @@ interface OpenTradeWithPL {
 
 async function getCurrentPrice(ticker: string): Promise<{ price: number; isStale: boolean; source: string }> {
   try {
-    // Use snapshot endpoint to get most recent trade (includes pre/post market with 15-min delay)
-    // This gives us the last trade price which is the most current price available
-    const url = `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${POLYGON_API_KEY}`;
-    const response = await fetch(url);
+    // Use snapshot endpoint to get most recent price data
+    const snapshotUrl = `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${POLYGON_API_KEY}`;
+    const response = await fetch(snapshotUrl);
     
     if (!response.ok) {
       console.warn(`[Dashboard] Could not fetch price for ${ticker}: ${response.status}`);
@@ -49,17 +48,17 @@ async function getCurrentPrice(ticker: string): Promise<{ price: number; isStale
 
     const snapshot = data.ticker;
     
-    // Priority: lastTrade (most recent) > day.c (today's close) > prevDay.c (yesterday's close)
+    // Priority: lastTrade.p (most recent, includes after-hours) > day.c (today's close) > prevDay.c (yesterday's close)
     let price = 0;
     let timestamp = 0;
     let source = 'unknown';
     
-    // Try to get the most recent trade price (includes pre/post market)
+    // Try to get the most recent trade price (includes pre/post market, 15-min delayed)
     if (snapshot.lastTrade && snapshot.lastTrade.p) {
       price = snapshot.lastTrade.p;
       timestamp = snapshot.lastTrade.t || snapshot.updated || Date.now();
-      source = 'last_trade'; // Most recent trade (could be pre/post market)
-      console.log(`[Dashboard] ${ticker}: Using last trade price $${price.toFixed(2)} from ${new Date(timestamp).toLocaleString()}`);
+      source = 'last_trade';
+      console.log(`[Dashboard] ${ticker}: Using last trade $${price.toFixed(2)} from ${new Date(timestamp / 1000000).toLocaleString()}`);
     } 
     // Fall back to today's close if available
     else if (snapshot.day && snapshot.day.c) {
@@ -82,7 +81,9 @@ async function getCurrentPrice(ticker: string): Promise<{ price: number; isStale
     }
     
     // Check if data is stale (more than 2 days old)
-    const dataAge = Date.now() - timestamp;
+    // Polygon timestamps are in nanoseconds, convert to milliseconds
+    const timestampMs = timestamp > 1000000000000 ? timestamp / 1000000 : timestamp;
+    const dataAge = Date.now() - timestampMs;
     const isStale = dataAge > 2 * 24 * 60 * 60 * 1000; // 2 days
     
     if (isStale) {

@@ -56,26 +56,40 @@ export async function GET(request: NextRequest) {
     const losersData = await losersResponse.json();
 
     // Parse gainers
-    const gainers: TopMover[] = (gainersData.tickers || []).slice(0, 10).map((ticker: any) => ({
-      ticker: ticker.ticker,
-      name: ticker.name,
-      price: ticker.day?.c || ticker.prevDay?.c || 0,
-      change: ticker.todaysChange || 0,
-      changePercent: ticker.todaysChangePerc || 0,
-      volume: ticker.day?.v || 0,
-      marketCap: ticker.market_cap
-    }));
+    const gainers: TopMover[] = (gainersData.tickers || [])
+      .filter((ticker: any) => {
+        const price = ticker.day?.c || ticker.prevDay?.c || 0;
+        const volume = Math.max(ticker.day?.v || 0, ticker.prevDay?.v || 0);
+        return price >= 5 && volume >= 1000000;
+      })
+      .slice(0, 10)
+      .map((ticker: any) => ({
+        ticker: ticker.ticker,
+        name: ticker.name,
+        price: ticker.day?.c || ticker.prevDay?.c || 0,
+        change: ticker.todaysChange || 0,
+        changePercent: ticker.todaysChangePerc || 0,
+        volume: ticker.day?.v || 0,
+        marketCap: ticker.market_cap
+      }));
 
     // Parse losers
-    const losers: TopMover[] = (losersData.tickers || []).slice(0, 10).map((ticker: any) => ({
-      ticker: ticker.ticker,
-      name: ticker.name,
-      price: ticker.day?.c || ticker.prevDay?.c || 0,
-      change: ticker.todaysChange || 0,
-      changePercent: ticker.todaysChangePerc || 0,
-      volume: ticker.day?.v || 0,
-      marketCap: ticker.market_cap
-    }));
+    const losers: TopMover[] = (losersData.tickers || [])
+      .filter((ticker: any) => {
+        const price = ticker.day?.c || ticker.prevDay?.c || 0;
+        const volume = Math.max(ticker.day?.v || 0, ticker.prevDay?.v || 0);
+        return price >= 5 && volume >= 1000000;
+      })
+      .slice(0, 10)
+      .map((ticker: any) => ({
+        ticker: ticker.ticker,
+        name: ticker.name,
+        price: ticker.day?.c || ticker.prevDay?.c || 0,
+        change: ticker.todaysChange || 0,
+        changePercent: ticker.todaysChangePerc || 0,
+        volume: ticker.day?.v || 0,
+        marketCap: ticker.market_cap
+      }));
 
     console.log(`[Dashboard] Fetched ${gainers.length} gainers and ${losers.length} losers`);
 
