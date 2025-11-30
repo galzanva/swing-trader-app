@@ -173,10 +173,10 @@ export default function StrategyAnalyzeClient() {
       const response = await fetch("/api/strategy-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          symbol: symbolToAnalyze.toUpperCase(), 
+        body: JSON.stringify({
+          symbol: symbolToAnalyze.toUpperCase(),
           timeframe,
-          recordHistory: true 
+          recordHistory: true
         })
       });
 
@@ -234,7 +234,7 @@ export default function StrategyAnalyzeClient() {
 
     try {
       // Get the strategy name from evaluation
-      const strategyName = result.evaluation.metadata?.isUserStrategy 
+      const strategyName = result.evaluation.metadata?.isUserStrategy
         ? (result.evaluation.metadata?.strategyName || 'Custom Strategy')
         : formatStrategyName(result.evaluation.strategy);
 
@@ -247,7 +247,7 @@ export default function StrategyAnalyzeClient() {
         timeframe,
         "strategy-analysis",
       ];
-      
+
       // Add strategy name as tag only if it's not 'user_defined'
       if (result.evaluation.strategy !== 'user_defined') {
         tags.push(result.evaluation.strategy);
@@ -299,7 +299,7 @@ export default function StrategyAnalyzeClient() {
           AI Strategy Analysis v1.1
         </h1>
         <p className="text-blue-200">
-          Advanced swing trading strategy evaluation with 6 specific strategies, 
+          Advanced swing trading strategy evaluation with 6 specific strategies,
           multi-bar confirmations, and historical performance context.
         </p>
       </div>
@@ -403,7 +403,7 @@ export default function StrategyAnalyzeClient() {
                 </div>
               </div>
             </div>
-            
+
             {/* Save Success/Error Messages */}
             {saveSuccess && (
               <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
@@ -426,7 +426,7 @@ export default function StrategyAnalyzeClient() {
               <div className="bg-white/10 rounded-lg p-4 border border-white/10">
                 <div className="text-sm text-blue-200">Strategy</div>
                 <div className="text-lg font-semibold text-white">
-                  {result.evaluation.metadata?.isUserStrategy 
+                  {result.evaluation.metadata?.isUserStrategy
                     ? (result.evaluation.metadata?.strategyName || 'Custom Strategy')
                     : formatStrategyName(result.evaluation.strategy)}
                 </div>
@@ -454,42 +454,42 @@ export default function StrategyAnalyzeClient() {
 
           {/* Trade Plan & Trade Case - Side by Side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Trade Plan */}
-          {result.evaluation.plan && (
-            <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
-              <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
+            {/* Trade Plan */}
+            {result.evaluation.plan && (
+              <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl p-6 border border-white/10">
+                <h3 className="text-xl font-semibold text-white mb-4">Trade Plan</h3>
                 <div className="space-y-6">
-                <div>
-                  <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
-                  <div className="space-y-2">
-                    {(() => {
-                      const plan = result.evaluation.plan!;
-                      const entry = plan.entry;
-                      const stop = plan.stop;
-                      const current = result.context.currentPrice;
-                      const dir = plan.direction;
-                      const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
-                      const entryOffset = (entry - current) / current; // entry vs current
-                      const stopPct = (stop - entry) / entry; // signed for both long/short
-                      return (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-blue-200">Direction:</span>
-                            <span className={`font-medium ${dir === 'long' ? 'text-green-600' : 'text-red-600'}`}>
-                              {dir.toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-blue-200">Entry:</span>
-                            <span className="font-medium text-white">${entry.toFixed(2)} • {formatPct(entryOffset)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-blue-200">Stop Loss:</span>
-                            <span className="font-medium text-white">${stop.toFixed(2)} • {formatPct(stopPct)}</span>
-                          </div>
-                        </>
-                      );
-                    })()}
+                  <div>
+                    <h4 className="text-lg font-medium text-white mb-3">Entry & Risk</h4>
+                    <div className="space-y-2">
+                      {(() => {
+                        const plan = result.evaluation.plan!;
+                        const entry = plan.entry;
+                        const stop = plan.stop;
+                        const current = result.context.currentPrice;
+                        const dir = plan.direction;
+                        const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+                        const entryOffset = (entry - current) / current; // entry vs current
+                        const stopPct = (stop - entry) / entry; // signed for both long/short
+                        return (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-blue-200">Direction:</span>
+                              <span className={`font-medium ${dir === 'long' ? 'text-green-600' : 'text-red-600'}`}>
+                                {dir.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-blue-200">Entry:</span>
+                              <span className="font-medium text-white">${entry.toFixed(2)} • {formatPct(entryOffset)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-blue-200">Stop Loss:</span>
+                              <span className="font-medium text-white">${stop.toFixed(2)} • {formatPct(stopPct)}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                       <div className="flex justify-between">
                         <span className="text-blue-200">Risk per Share:</span>
                         <span className="font-medium text-white">${result.summary.risk.toFixed(2)}</span>
@@ -498,38 +498,38 @@ export default function StrategyAnalyzeClient() {
                         <span className="text-blue-200">Position Size:</span>
                         <span className="font-medium text-white">{result.summary.positionSize.toFixed(1)}%</span>
                       </div>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
-                  <div className="space-y-2">
-                    {(() => {
-                      const plan = result.evaluation.plan!;
-                      const entry = plan.entry;
-                      const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
-                      return plan.targets.map((target, index) => {
-                        const targetPct = plan.direction === 'long' ? (target.level - entry) / entry : (entry - target.level) / entry;
-                        return (
-                          <div key={index} className="flex justify-between">
-                            <span className="text-blue-200">
-                              {target.label || `T${index + 1}`}:
-                            </span>
-                            <span className="font-medium text-white">
-                              ${target.level.toFixed(2)} (R:R {target.rr.toFixed(2)}) • {formatPct(targetPct)}
-                            </span>
-                          </div>
-                        );
-                      });
-                    })()}
+                  <div>
+                    <h4 className="text-lg font-medium text-white mb-3">Targets</h4>
+                    <div className="space-y-2">
+                      {(() => {
+                        const plan = result.evaluation.plan!;
+                        const entry = plan.entry;
+                        const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(1)}%`;
+                        return plan.targets.map((target, index) => {
+                          const targetPct = plan.direction === 'long' ? (target.level - entry) / entry : (entry - target.level) / entry;
+                          return (
+                            <div key={index} className="flex justify-between">
+                              <span className="text-blue-200">
+                                {target.label || `T${index + 1}`}:
+                              </span>
+                              <span className="font-medium text-white">
+                                ${target.level.toFixed(2)} (R:R {target.rr.toFixed(2)}) • {formatPct(targetPct)}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
             )}
 
             {/* Trade Case (FOR/AGAINST) */}
             {result.mentor && (result.mentor.forTrade || result.mentor.againstTrade) && (
-              <TradeCaseCard 
+              <TradeCaseCard
                 forTrade={result.mentor.forTrade}
                 againstTrade={result.mentor.againstTrade}
               />
@@ -545,188 +545,58 @@ export default function StrategyAnalyzeClient() {
           <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl border border-white/10 p-6">
             <h3 className="text-xl font-semibold text-white mb-4">Technical Indicators</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">EMA 9</div>
-                  <div className="text-lg font-semibold text-white">${result.technical.ema9.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">EMA 20</div>
-                  <div className="text-lg font-semibold text-white">${result.technical.ema20.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">EMA 50</div>
-                  <div className="text-lg font-semibold text-white">${result.technical.ema50.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">EMA 200</div>
-                  <div className="text-lg font-semibold text-white">${result.technical.ema200.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">RSI 14</div>
-                  <div className="text-lg font-semibold text-white">{result.technical.rsi14.toFixed(1)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">ATR</div>
-                  <div className="text-lg font-semibold text-white">${result.technical.atr.toFixed(2)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">ATR %</div>
-                  <div className="text-lg font-semibold text-white">{result.technical.atrPct.toFixed(2)}%</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-blue-200">Volume Z</div>
-                  <div className="text-lg font-semibold text-white">{result.technical.volZ.toFixed(2)}</div>
-                </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">EMA 9</div>
+                <div className="text-lg font-semibold text-white">${result.technical.ema9.toFixed(2)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">EMA 20</div>
+                <div className="text-lg font-semibold text-white">${result.technical.ema20.toFixed(2)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">EMA 50</div>
+                <div className="text-lg font-semibold text-white">${result.technical.ema50.toFixed(2)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">EMA 200</div>
+                <div className="text-lg font-semibold text-white">${result.technical.ema200.toFixed(2)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">RSI 14</div>
+                <div className="text-lg font-semibold text-white">{result.technical.rsi14.toFixed(1)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">ATR</div>
+                <div className="text-lg font-semibold text-white">${result.technical.atr.toFixed(2)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">ATR %</div>
+                <div className="text-lg font-semibold text-white">{result.technical.atrPct.toFixed(2)}%</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-blue-200">Volume Z</div>
+                <div className="text-lg font-semibold text-white">{result.technical.volZ.toFixed(2)}</div>
+              </div>
             </div>
           </div>
 
-          {/* Historical Context */}
-          {result.evaluation.historicalRecent && (
-            <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl border border-white/10 p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Historical Backtest Performance</h3>
-              {result.evaluation.historicalRecent && (
-                <div className="space-y-6">
-                  <div>
-                    <h4 className="text-lg font-medium text-white mb-3">
-                      Backtested on Last 200 Bars ({result.context.symbol})
-                    </h4>
-                    <p className="text-sm text-blue-200 mb-4">
-                      Real historical occurrences of this pattern on {result.context.symbol}
-                    </p>
-                    
-                    {/* Sample Count & Quality Warning */}
-                    <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
-                      <div className="flex items-center justify-between">
-                        <span className="text-blue-200">Total Signals:</span>
-                        <span className={`font-semibold ${result.evaluation.historicalRecent.hasMinSamples ? 'text-green-300' : 'text-amber-300'}`}>
-                          {result.evaluation.historicalRecent.samples} {!result.evaluation.historicalRecent.hasMinSamples && '(< 10)'}
-                        </span>
-                      </div>
-                      {result.evaluation.historicalRecent.isWeakHistory && (
-                        <div className="mt-2 text-sm text-amber-300 flex items-start gap-2">
-                          <span>⚠</span>
-                          <span>Weak historical performance detected (win rate &lt; 20% or negative avg P&L)</span>
-                        </div>
-                      )}
-                      {!result.evaluation.historicalRecent.hasMinSamples && (
-                        <div className="mt-2 text-sm text-amber-300 flex items-start gap-2">
-                          <span>⚠</span>
-                          <span>Limited sample size - statistics may not be reliable</span>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Multi-Horizon Win Rates */}
-                    <div className="mb-4">
-                      <h5 className="text-md font-medium text-white mb-3">Multi-Horizon Win Rates</h5>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">5 Days</div>
-                          <div className="text-xl font-bold text-white">
-                            {(result.evaluation.historicalRecent.winRate5d * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">10 Days</div>
-                          <div className="text-xl font-bold text-white">
-                            {(result.evaluation.historicalRecent.winRate10d * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">20 Days</div>
-                          <div className="text-xl font-bold text-white">
-                            {(result.evaluation.historicalRecent.winRate20d * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Multi-Horizon Average P&L */}
-                    <div className="mb-4">
-                      <h5 className="text-md font-medium text-white mb-3">Multi-Horizon Avg P&L</h5>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">5 Days</div>
-                          <div className={`text-xl font-bold ${result.evaluation.historicalRecent.avgPnL5d >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                            {(result.evaluation.historicalRecent.avgPnL5d * 100).toFixed(2)}%
-                          </div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">10 Days</div>
-                          <div className={`text-xl font-bold ${result.evaluation.historicalRecent.avgPnL10d >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                            {(result.evaluation.historicalRecent.avgPnL10d * 100).toFixed(2)}%
-                          </div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3 text-center">
-                          <div className="text-blue-200 text-sm mb-1">20 Days</div>
-                          <div className={`text-xl font-bold ${result.evaluation.historicalRecent.avgPnL20d >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                            {(result.evaluation.historicalRecent.avgPnL20d * 100).toFixed(2)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* First-Touch Distribution */}
-                    <div className="mb-4">
-                      <h5 className="text-md font-medium text-white mb-3">First-Touch Outcome Distribution</h5>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="text-blue-200 text-sm mb-1">T1 First</div>
-                          <div className="text-lg font-bold text-white">{result.evaluation.historicalRecent.firstTouchT1}</div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="text-blue-200 text-sm mb-1">T2 First</div>
-                          <div className="text-lg font-bold text-white">{result.evaluation.historicalRecent.firstTouchT2}</div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="text-blue-200 text-sm mb-1">T3 First</div>
-                          <div className="text-lg font-bold text-white">{result.evaluation.historicalRecent.firstTouchT3}</div>
-                        </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="text-blue-200 text-sm mb-1">Stop First</div>
-                          <div className="text-lg font-bold text-red-300">{result.evaluation.historicalRecent.firstTouchStop}</div>
-                        </div>
-                      </div>
-                      <div className="mt-3 text-sm text-blue-200">
-                        Average days held: <span className="font-semibold text-white">{result.evaluation.historicalRecent.avgDaysHeld.toFixed(1)}</span>
-                      </div>
-                    </div>
-
-                    {/* Last Signal */}
-                    {result.evaluation.historicalRecent.lastSignal && (
-                      <div className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="text-sm text-blue-200 mb-1">Most Recent Signal:</div>
-                        <div className="text-white">
-                          {result.evaluation.historicalRecent.lastSignal.date} → {result.evaluation.historicalRecent.lastSignal.firstTouch} first 
-                          ({result.evaluation.historicalRecent.lastSignal.daysHeld}d held, 10d P&L: 
-                          <span className={result.evaluation.historicalRecent.lastSignal.pnl10d >= 0 ? 'text-green-300' : 'text-red-300'}>
-                            {' '}{(result.evaluation.historicalRecent.lastSignal.pnl10d * 100).toFixed(2)}%
-                          </span>)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Strategy Evaluation Summary */}
           {result.evaluation.metadata?.strategyDetails && result.evaluation.metadata.strategyDetails.length > 0 && (
             <div className="bg-white/5 backdrop-blur-lg rounded-xl shadow-xl border border-white/10 p-6">
               <h3 className="text-xl font-semibold text-white mb-4">Strategy Evaluation Summary</h3>
               <div className="mb-4 text-blue-100">
-                Evaluated <span className="font-semibold text-white">{result.evaluation.metadata.totalEvaluated || 6}</span> strategies • 
-                <span className="font-semibold text-teal-300"> {result.evaluation.metadata.eligibleFound || 0}</span> eligible • 
+                Evaluated <span className="font-semibold text-white">{result.evaluation.metadata.totalEvaluated || 6}</span> strategies •
+                <span className="font-semibold text-teal-300"> {result.evaluation.metadata.eligibleFound || 0}</span> eligible •
                 <span className="font-semibold text-green-300"> {result.evaluation.metadata.passedRR || 0}</span> passed R:R minimum
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {result.evaluation.metadata.strategyDetails.map((detail: any, index: number) => (
-                  <div key={index} className={`p-4 rounded-lg border ${
-                    detail.strategy === result.evaluation.strategy 
-                      ? 'bg-teal-500/20 border-teal-500/50' 
-                      : 'bg-white/5 border-white/10'
-                  }`}>
+                  <div key={index} className={`p-4 rounded-lg border ${detail.strategy === result.evaluation.strategy
+                    ? 'bg-teal-500/20 border-teal-500/50'
+                    : 'bg-white/5 border-white/10'
+                    }`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-medium text-white">
                         {formatStrategyName(detail.strategy)}
@@ -769,7 +639,7 @@ export default function StrategyAnalyzeClient() {
               {result.mentor.explanation.split('\n\n').map((section, index) => {
                 // Skip empty sections
                 if (!section.trim()) return null;
-                
+
                 // Check if it's a header (starts with ** and ends with **)
                 const isHeader = section.match(/^\*\*(.*?)\*\*$/);
                 if (isHeader) {
@@ -781,11 +651,11 @@ export default function StrategyAnalyzeClient() {
                     </div>
                   );
                 }
-                
+
                 // Check if it's a bullet point section
                 const lines = section.split('\n');
                 const hasBullets = lines.some(line => line.trim().startsWith('•') || line.trim().startsWith('-'));
-                
+
                 if (hasBullets) {
                   return (
                     <div key={index} className="space-y-2">
@@ -809,7 +679,7 @@ export default function StrategyAnalyzeClient() {
                     </div>
                   );
                 }
-                
+
                 // Regular paragraph
                 return (
                   <div key={index} className="space-y-3">

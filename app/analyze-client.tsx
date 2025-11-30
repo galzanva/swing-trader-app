@@ -202,7 +202,7 @@ export default function AnalyzeClient() {
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-red-300 mb-2">Critical: Very Stale Data</h3>
                   <p className="text-red-100 mb-3">
-                    This analysis is based on data from <strong>{new Date(report.marketData.lastBarDate).toLocaleDateString()}</strong> 
+                    This analysis is based on data from <strong>{new Date(report.marketData.lastBarDate).toLocaleDateString()}</strong>
                     - that's <strong>{report.marketData.dataAgeDays} days ago</strong>!
                   </p>
                   <p className="text-red-100 mb-3">
@@ -221,7 +221,7 @@ export default function AnalyzeClient() {
               </div>
             </div>
           )}
-          
+
           {report.marketData.dataAgeDays > 1 && report.marketData.dataAgeDays <= 7 && (
             <div className="bg-yellow-500/20 backdrop-blur-lg rounded-2xl p-6 border border-yellow-500/50">
               <div className="flex items-start gap-4">
@@ -229,13 +229,13 @@ export default function AnalyzeClient() {
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-yellow-300 mb-2">📊 Data Source & Freshness</h3>
                   <p className="text-yellow-100 mb-3">
-                    <strong>Data Source:</strong> Polygon.io Stocks Starter (15-min delayed data)<br/>
-                    <strong>Last data:</strong> {new Date(report.marketData.lastBarDate).toLocaleDateString()} 
-                    {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' : ' (End-of-Day complete)'}<br/>
+                    <strong>Data Source:</strong> Polygon.io Stocks Starter (15-min delayed data)<br />
+                    <strong>Last data:</strong> {new Date(report.marketData.lastBarDate).toLocaleDateString()}
+                    {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' : ' (End-of-Day complete)'}<br />
                     <strong>Current Price (from data):</strong> ${report.currentPrice.toFixed(2)}
                   </p>
                   <p className="text-yellow-100 mb-3">
-                    ⚠️ <strong>Confirmation Required:</strong> Verify price on broker/TradingView before acting. 
+                    ⚠️ <strong>Confirmation Required:</strong> Verify price on broker/TradingView before acting.
                     {report.marketData.dataAgeDays === 0 ? ' Intraday may still be forming.' : ' Data is from previous session.'}
                   </p>
                   <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mt-3">
@@ -258,16 +258,15 @@ export default function AnalyzeClient() {
               <div>
                 <h2 className="text-3xl font-bold text-white mb-2">
                   {report.symbol} — {report.timeframe}
-                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${
-                    report.hasConflict ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' :
-                    report.executionDirection === 'bullish' ? 'bg-green-500/20 text-green-300 border border-green-500/50' : 
-                    report.executionDirection === 'bearish' ? 'bg-red-500/20 text-red-300 border border-red-500/50' : 
-                    'bg-gray-500/20 text-gray-300 border border-gray-500/50'
-                  }`}>
-                    {report.hasConflict ? '⚖️ CONFLICTING' : 
-                     report.executionDirection === 'bullish' ? '📈 LONG' : 
-                     report.executionDirection === 'bearish' ? '📉 SHORT' : 
-                     '➡️ NEUTRAL'} Setup
+                  <span className={`ml-4 px-3 py-1 rounded-lg text-sm font-semibold ${report.hasConflict ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' :
+                      report.executionDirection === 'bullish' ? 'bg-green-500/20 text-green-300 border border-green-500/50' :
+                        report.executionDirection === 'bearish' ? 'bg-red-500/20 text-red-300 border border-red-500/50' :
+                          'bg-gray-500/20 text-gray-300 border border-gray-500/50'
+                    }`}>
+                    {report.hasConflict ? '⚖️ CONFLICTING' :
+                      report.executionDirection === 'bullish' ? '📈 LONG' :
+                        report.executionDirection === 'bearish' ? '📉 SHORT' :
+                          '➡️ NEUTRAL'} Setup
                   </span>
                   <span className="mx-2 text-blue-300">•</span>
                   <span className={`px-3 py-1 rounded-lg text-sm font-semibold border ${getPatternColor(report.pattern.type)}`}>
@@ -296,27 +295,31 @@ export default function AnalyzeClient() {
                   )}
                 </p>
                 <p className="text-xs text-blue-400 mt-1">
-                  Last data: {new Date(report.marketData.lastBarDate).toLocaleDateString()} 
-                  {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' : 
-                   report.marketData.dataAgeDays > 0 ? ` (${report.marketData.dataAgeDays} day${report.marketData.dataAgeDays > 1 ? 's' : ''} old)` : 
-                   ' (End-of-Day complete)'}
+                  Last data: {new Date(report.marketData.lastBarDate).toLocaleDateString()}
+                  {report.marketData.dataAgeDays === 0 ? ' (15-min delayed, bar may be forming)' :
+                    report.marketData.dataAgeDays > 0 ? ` (${report.marketData.dataAgeDays} day${report.marketData.dataAgeDays > 1 ? 's' : ''} old)` :
+                      ' (End-of-Day complete)'}
                 </p>
               </div>
 
               <div className="text-right">
-                <div className={`text-5xl font-bold ${getRatingColor(report.score.rating)}`}>
-                  {report.score.rating}
+                <div className={`text-5xl font-bold ${getRatingColor(
+                  report.score.ratingAdjustment?.adjustedRating || report.score.rating
+                )}`}>
+                  {report.score.ratingAdjustment?.adjustedRating || report.score.rating}
                 </div>
-                <div className="text-white font-semibold mt-2">{report.score.overall}/100</div>
+                <div className="text-white font-semibold mt-2">
+                  {report.score.ratingAdjustment?.adjustedScore || report.score.overall}/100
+                </div>
                 <div className="text-blue-200 text-sm mb-1">{report.score.recommendation}</div>
                 <div className="text-blue-300 text-xs italic">
-                  {report.score.overall >= 76 ? "High conviction setup" : 
-                   report.score.overall >= 70 ? "Solid setup, watch confirmation" : 
-                   report.score.overall >= 61 ? "Moderate setup — watch confirmation" : 
-                   report.score.overall >= 41 ? "Neutral - wait for confirmation" : 
-                   "Low conviction - avoid"}
+                  {(report.score.ratingAdjustment?.adjustedScore || report.score.overall) >= 76 ? "High conviction setup" :
+                    (report.score.ratingAdjustment?.adjustedScore || report.score.overall) >= 70 ? "Solid setup, watch confirmation" :
+                      (report.score.ratingAdjustment?.adjustedScore || report.score.overall) >= 61 ? "Moderate setup — watch confirmation" :
+                        (report.score.ratingAdjustment?.adjustedScore || report.score.overall) >= 41 ? "Neutral - wait for confirmation" :
+                          "Low conviction - avoid"}
                 </div>
-                
+
                 {/* AI Rating Adjustment Badge */}
                 {report.score.ratingAdjustment && (
                   <div className="mt-3 p-2 bg-purple-500/20 border border-purple-400/40 rounded-lg">
@@ -333,7 +336,7 @@ export default function AnalyzeClient() {
               </div>
             </div>
           </div>
-          
+
           {/* AI Rating Adjustment Explanation (if adjusted) */}
           {report.score.ratingAdjustment && (
             <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
@@ -368,7 +371,7 @@ export default function AnalyzeClient() {
           {report.chartPattern && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">📐 Chart Pattern Analysis</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
                   <h4 className="text-purple-300 font-semibold mb-2">🏗️ Market Structure</h4>
@@ -483,7 +486,7 @@ export default function AnalyzeClient() {
               <h3 className="text-xl font-bold text-white mb-4">📐 Chart Pattern Analysis</h3>
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                 <p className="text-blue-200 text-sm">
-                  <strong>No major chart pattern detected.</strong> Analysis relies on candlestick pattern ({report.pattern.name}) and immediate support/resistance levels. 
+                  <strong>No major chart pattern detected.</strong> Analysis relies on candlestick pattern ({report.pattern.name}) and immediate support/resistance levels.
                   Chart patterns like flags, triangles, and double tops/bottoms provide structural context - when present, they can significantly boost signal confidence.
                 </p>
               </div>
@@ -499,22 +502,20 @@ export default function AnalyzeClient() {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {report.allChartPatterns.map((pattern, idx) => (
-                  <div 
+                  <div
                     key={idx}
-                    className={`p-4 rounded-lg border ${
-                      idx === 0 
-                        ? 'bg-blue-500/20 border-blue-500/50' 
+                    className={`p-4 rounded-lg border ${idx === 0
+                        ? 'bg-blue-500/20 border-blue-500/50'
                         : 'bg-white/5 border-white/10'
-                    }`}
+                      }`}
                   >
                     {idx === 0 && (
                       <div className="text-blue-300 text-xs font-semibold mb-2">PRIMARY PATTERN</div>
                     )}
                     <div className="flex justify-between items-start mb-2">
-                      <div className={`font-semibold ${
-                        pattern.type === 'bullish' ? 'text-green-400' : 
-                        pattern.type === 'bearish' ? 'text-red-400' : 'text-white'
-                      }`}>
+                      <div className={`font-semibold ${pattern.type === 'bullish' ? 'text-green-400' :
+                          pattern.type === 'bearish' ? 'text-red-400' : 'text-white'
+                        }`}>
                         {pattern.name}
                       </div>
                       <div className="text-white text-sm font-bold">
@@ -524,10 +525,9 @@ export default function AnalyzeClient() {
                     <div className="text-blue-300 text-xs mb-1">
                       {pattern.confidenceLabel}
                     </div>
-                    <div className={`text-xs ${
-                      pattern.breakoutStatus === 'confirmed' ? 'text-green-400' :
-                      pattern.breakoutStatus === 'pending' ? 'text-yellow-400' : 'text-blue-400'
-                    }`}>
+                    <div className={`text-xs ${pattern.breakoutStatus === 'confirmed' ? 'text-green-400' :
+                        pattern.breakoutStatus === 'pending' ? 'text-yellow-400' : 'text-blue-400'
+                      }`}>
                       Breakout: {pattern.breakoutStatus}
                     </div>
                   </div>
@@ -572,10 +572,9 @@ export default function AnalyzeClient() {
                 </div>
                 <div className="bg-white/10 rounded-lg p-3">
                   <div className="text-green-200 text-xs mb-1">Volume Z-Score</div>
-                  <div className={`font-bold text-lg ${
-                    report.patternV2.institutional.volumeZScore >= 1.0 ? 'text-green-400' : 
-                    report.patternV2.institutional.volumeZScore >= 0.5 ? 'text-yellow-400' : 'text-white'
-                  }`}>
+                  <div className={`font-bold text-lg ${report.patternV2.institutional.volumeZScore >= 1.0 ? 'text-green-400' :
+                      report.patternV2.institutional.volumeZScore >= 0.5 ? 'text-yellow-400' : 'text-white'
+                    }`}>
                     {report.patternV2.institutional.volumeZScore.toFixed(2)}σ
                   </div>
                 </div>
@@ -631,7 +630,7 @@ export default function AnalyzeClient() {
               {/* Notice: No Institutional Pattern */}
               <div className="bg-blue-900/40 backdrop-blur-lg rounded-xl p-4 border border-blue-500/50 mb-4">
                 <p className="text-blue-200 text-sm">
-                  ℹ️ <strong>No institutional chart pattern detected.</strong> A candidate structure is shown below for learning and monitoring; 
+                  ℹ️ <strong>No institutional chart pattern detected.</strong> A candidate structure is shown below for learning and monitoring;
                   it is capped at 65 until confirmation criteria are met.
                 </p>
               </div>
@@ -639,61 +638,61 @@ export default function AnalyzeClient() {
               <div className="bg-gradient-to-br from-orange-900/40 to-amber-900/40 backdrop-blur-lg rounded-2xl p-6 border-2 border-orange-500/50 shadow-xl">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-2xl">⚠️</span>
-                <h3 className="text-xl font-bold text-white">
-                  Candidate (Not Confirmed) — {report.patternV2.candidate.name}
-                </h3>
+                  <h3 className="text-xl font-bold text-white">
+                    Candidate (Not Confirmed) — {report.patternV2.candidate.name}
+                  </h3>
+                </div>
+                <p className="text-orange-200 text-sm mb-4 font-medium">
+                  Fails institutional criteria. For learning; monitor for confirmation.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-orange-200 text-xs mb-1">Direction</div>
+                    <div className="text-white font-bold text-lg capitalize">{report.patternV2.candidate.direction}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-orange-200 text-xs mb-1">Confidence (Capped at 80)</div>
+                    <div className="text-white font-bold text-lg">{report.patternV2.candidate.confidence}% ({report.patternV2.candidate.confidenceLabel})</div>
+                  </div>
+                </div>
+
+                {/* Met Criteria */}
+                {report.patternV2.candidate.metCriteria.length > 0 && (
+                  <div className="bg-green-500/10 rounded-lg p-4 mb-4 border border-green-500/30">
+                    <h4 className="text-green-300 font-semibold mb-2">✅ Met Criteria</h4>
+                    <ul className="space-y-1">
+                      {report.patternV2.candidate.metCriteria.map((criterion, idx) => (
+                        <li key={idx} className="text-green-100 text-sm">• {criterion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Unmet Criteria (what's missing for institutional) */}
+                {report.patternV2.candidate.unmetCriteria.length > 0 && (
+                  <div className="bg-red-500/10 rounded-lg p-4 mb-4 border border-red-500/30">
+                    <h4 className="text-red-300 font-semibold mb-2">❌ Unmet Criteria (for Institutional Grade)</h4>
+                    <ul className="space-y-1">
+                      {report.patternV2.candidate.unmetCriteria.map((criterion, idx) => (
+                        <li key={idx} className="text-red-100 text-sm">• {criterion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Next Steps (what confirmations are needed) */}
+                {report.patternV2.candidate.nextSteps.length > 0 && (
+                  <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/30">
+                    <h4 className="text-blue-300 font-semibold mb-2">🎯 Next Steps (Confirmations Needed)</h4>
+                    <ul className="space-y-1">
+                      {report.patternV2.candidate.nextSteps.map((step, idx) => (
+                        <li key={idx} className="text-blue-100 text-sm">• {step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-              <p className="text-orange-200 text-sm mb-4 font-medium">
-                Fails institutional criteria. For learning; monitor for confirmation.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="bg-white/10 rounded-lg p-3">
-                  <div className="text-orange-200 text-xs mb-1">Direction</div>
-                  <div className="text-white font-bold text-lg capitalize">{report.patternV2.candidate.direction}</div>
-                </div>
-                <div className="bg-white/10 rounded-lg p-3">
-                  <div className="text-orange-200 text-xs mb-1">Confidence (Capped at 80)</div>
-                  <div className="text-white font-bold text-lg">{report.patternV2.candidate.confidence}% ({report.patternV2.candidate.confidenceLabel})</div>
-                </div>
-              </div>
-
-              {/* Met Criteria */}
-              {report.patternV2.candidate.metCriteria.length > 0 && (
-                <div className="bg-green-500/10 rounded-lg p-4 mb-4 border border-green-500/30">
-                  <h4 className="text-green-300 font-semibold mb-2">✅ Met Criteria</h4>
-                  <ul className="space-y-1">
-                    {report.patternV2.candidate.metCriteria.map((criterion, idx) => (
-                      <li key={idx} className="text-green-100 text-sm">• {criterion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Unmet Criteria (what's missing for institutional) */}
-              {report.patternV2.candidate.unmetCriteria.length > 0 && (
-                <div className="bg-red-500/10 rounded-lg p-4 mb-4 border border-red-500/30">
-                  <h4 className="text-red-300 font-semibold mb-2">❌ Unmet Criteria (for Institutional Grade)</h4>
-                  <ul className="space-y-1">
-                    {report.patternV2.candidate.unmetCriteria.map((criterion, idx) => (
-                      <li key={idx} className="text-red-100 text-sm">• {criterion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Next Steps (what confirmations are needed) */}
-              {report.patternV2.candidate.nextSteps.length > 0 && (
-                <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/30">
-                  <h4 className="text-blue-300 font-semibold mb-2">🎯 Next Steps (Confirmations Needed)</h4>
-                  <ul className="space-y-1">
-                    {report.patternV2.candidate.nextSteps.map((step, idx) => (
-                      <li key={idx} className="text-blue-100 text-sm">• {step}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
             </>
           )}
 
@@ -707,10 +706,10 @@ export default function AnalyzeClient() {
                 </h3>
               </div>
               <p className="text-red-200 text-sm mb-4 font-medium">
-                {report.patternV2.discarded.name} detected but failed extreme violation thresholds. 
+                {report.patternV2.discarded.name} detected but failed extreme violation thresholds.
                 This pattern is excluded from composite scoring due to severe rule violations.
               </p>
-              
+
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="bg-red-900/30 rounded-lg p-3 border border-red-700/50">
                   <div className="text-red-300 text-xs mb-1">Pattern Type</div>
@@ -752,7 +751,7 @@ export default function AnalyzeClient() {
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-xl font-bold text-white">🔍 Pattern Detection V2 - Explainability</h3>
-                <HelpIcon 
+                <HelpIcon
                   onClick={() => setPatternHelpOpen(true)}
                   tooltip="Click for detailed explanation of metrics and calculations"
                   className="ml-2"
@@ -761,7 +760,7 @@ export default function AnalyzeClient() {
               <p className="text-blue-200 text-sm mb-4">
                 Deterministic pattern analysis with full transparency. All confidence scores computed by explicit rules.
               </p>
-              
+
               {/* Composite Reasons */}
               {report.patternV2.compositeReasons && report.patternV2.compositeReasons.length > 0 && (
                 <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
@@ -773,7 +772,7 @@ export default function AnalyzeClient() {
                   </ul>
                 </div>
               )}
-              
+
               {/* Chart Pattern Reasons */}
               {report.patternV2.chartPatternReasons && report.patternV2.chartPatternReasons.length > 0 && (
                 <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/30">
@@ -785,7 +784,7 @@ export default function AnalyzeClient() {
                   </ul>
                 </div>
               )}
-              
+
               {/* Chart Pattern Metadata */}
               {report.patternV2.chartPatternMetadata && (
                 <div className="mb-4 p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
@@ -824,10 +823,9 @@ export default function AnalyzeClient() {
                     {report.patternV2.chartPatternMetadata.breakoutVolZ !== undefined && (
                       <div>
                         <div className="text-purple-200 text-xs">Breakout VolZ</div>
-                        <div className={`font-bold ${
-                          report.patternV2.chartPatternMetadata.breakoutVolZ > 1 ? 'text-green-400' : 
-                          report.patternV2.chartPatternMetadata.breakoutVolZ < -1 ? 'text-red-400' : 'text-white'
-                        }`}>
+                        <div className={`font-bold ${report.patternV2.chartPatternMetadata.breakoutVolZ > 1 ? 'text-green-400' :
+                            report.patternV2.chartPatternMetadata.breakoutVolZ < -1 ? 'text-red-400' : 'text-white'
+                          }`}>
                           {report.patternV2.chartPatternMetadata.breakoutVolZ.toFixed(1)}σ
                         </div>
                       </div>
@@ -847,7 +845,7 @@ export default function AnalyzeClient() {
                   </div>
                 </div>
               )}
-              
+
               {/* Candlestick Facts */}
               {report.patternV2.candlestickFacts && Object.keys(report.patternV2.candlestickFacts).length > 0 && (
                 <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
@@ -886,10 +884,9 @@ export default function AnalyzeClient() {
                     {report.patternV2.candlestickFacts.volZ !== undefined && (
                       <div>
                         <div className="text-yellow-200 text-xs">Vol Z-Score</div>
-                        <div className={`font-bold ${
-                          report.patternV2.candlestickFacts.volZ > 1 ? 'text-green-400' : 
-                          report.patternV2.candlestickFacts.volZ < -1 ? 'text-red-400' : 'text-white'
-                        }`}>
+                        <div className={`font-bold ${report.patternV2.candlestickFacts.volZ > 1 ? 'text-green-400' :
+                            report.patternV2.candlestickFacts.volZ < -1 ? 'text-red-400' : 'text-white'
+                          }`}>
                           {report.patternV2.candlestickFacts.volZ.toFixed(1)}σ
                         </div>
                       </div>
@@ -903,10 +900,10 @@ export default function AnalyzeClient() {
                   </div>
                 </div>
               )}
-              
+
               <div className="mt-4 p-3 rounded-lg bg-teal-500/10 border border-teal-500/30">
                 <p className="text-teal-200 text-xs">
-                  💡 <strong>Deterministic Analysis:</strong> All scores and confidences are computed using explicit rules. 
+                  💡 <strong>Deterministic Analysis:</strong> All scores and confidences are computed using explicit rules.
                   No black-box algorithms - every number is verifiable and explainable.
                 </p>
               </div>
@@ -919,64 +916,62 @@ export default function AnalyzeClient() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-white">🎯 Execution Plan</h3>
                 {/* Status Badge */}
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  report.execution.status === 'ready' ? 'bg-green-500 text-white' :
-                  report.execution.status === 'candidate' ? 'bg-orange-500 text-white' :
-                  report.execution.status === 'missed' ? 'bg-yellow-500 text-black' :
-                  report.execution.status === 'blocked' ? 'bg-red-500 text-white' :
-                  'bg-gray-500 text-white'
-                }`}>
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${report.execution.status === 'ready' ? 'bg-green-500 text-white' :
+                    report.execution.status === 'candidate' ? 'bg-orange-500 text-white' :
+                      report.execution.status === 'missed' ? 'bg-yellow-500 text-black' :
+                        report.execution.status === 'blocked' ? 'bg-red-500 text-white' :
+                          'bg-gray-500 text-white'
+                  }`}>
                   {report.execution.status === 'ready' ? '✅ READY (Institutional)' :
-                   report.execution.status === 'candidate' ? 
-                     (report.patternSource === 'institutional' ? '🟡 INSTITUTIONAL - Pending Volume' :
-                      report.score.overall < 65 ? `🔸 CANDIDATE (${report.score.overall}/100)` : '🔸 CANDIDATE - Capped at 65') :
-                   report.execution.status === 'missed' ? '⏱️ MISSED - Wait for Retest' :
-                   report.execution.status === 'blocked' ? '⛔ BLOCKED - Earnings/Liquidity' :
-                   'NEUTRAL'}
+                    report.execution.status === 'candidate' ?
+                      (report.patternSource === 'institutional' ? '🟡 INSTITUTIONAL - Pending Volume' :
+                        report.score.overall < 65 ? `🔸 CANDIDATE (${report.score.overall}/100)` : '🔸 CANDIDATE - Capped at 65') :
+                      report.execution.status === 'missed' ? '⏱️ MISSED - Wait for Retest' :
+                        report.execution.status === 'blocked' ? '⛔ BLOCKED - Earnings/Liquidity' :
+                          'NEUTRAL'}
                 </span>
               </div>
-              
+
               {/* Entry Trigger */}
               <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="text-blue-200 text-sm uppercase tracking-wide mb-1">
                       {report.execution.entry.type === 'breakout' ? '📈 Breakout Entry' :
-                       report.execution.entry.type === 'breakdown' ? '📉 Breakdown Entry' :
-                       report.execution.entry.type === 'retest' ? '🔁 Retest Entry' :
-                       '💹 Market Entry'}
+                        report.execution.entry.type === 'breakdown' ? '📉 Breakdown Entry' :
+                          report.execution.entry.type === 'retest' ? '🔁 Retest Entry' :
+                            '💹 Market Entry'}
                     </div>
                     <div className="text-white font-bold text-2xl">${report.execution.entry.triggerPrice}</div>
                   </div>
-                    {report.execution.viabilityIndex && (
-                      <div className="text-right">
-                        <div className="text-xs text-gray-300 uppercase">Viability Index</div>
-                        <div className={`text-lg font-bold ${
-                          report.execution.viabilityIndex >= 2.0 ? 'text-green-400' :
+                  {report.execution.viabilityIndex && (
+                    <div className="text-right">
+                      <div className="text-xs text-gray-300 uppercase">Viability Index</div>
+                      <div className={`text-lg font-bold ${report.execution.viabilityIndex >= 2.0 ? 'text-green-400' :
                           report.execution.viabilityIndex >= 1.2 ? 'text-yellow-400' :
-                          'text-red-400'
+                            'text-red-400'
                         }`}>
-                          {report.execution.viabilityIndex.toFixed(2)} {report.execution.viabilityLabel && `(${report.execution.viabilityLabel})`}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          = base {((report.execution.targets[0].price - report.execution.entry.triggerPrice) / (report.execution.stopLoss.price - report.execution.entry.triggerPrice)).toFixed(1)} × vol {report.technical.volumeZScore < -0.5 ? '0.5' : report.technical.volumeZScore > 0.3 ? '1.25' : '1.0'} × CT {report.currentPrice > report.technical.ema200 && report.executionDirection === 'bearish' ? '0.8' : '1.0'}
-                        </div>
-                        {report.technical.volumeZScore < -0.5 && (
-                          <div className="text-xs text-red-300 mt-1">
-                            Vol penalty: ×0.5 (volZ = {report.technical.volumeZScore.toFixed(2)})
-                          </div>
-                        )}
-                        {report.technical.volumeZScore >= 1.2 && (
-                          <div className="text-xs text-green-300 mt-1">
-                            Vol bonus: ×1.25 (volZ = {report.technical.volumeZScore.toFixed(2)})
-                          </div>
-                        )}
-                        {/* Volume Impact Rules Tooltip */}
-                        <div className="text-xs text-gray-400 mt-1 italic">
-                          volZ &lt; -0.5 → ×0.5 penalty | volZ &gt; +1.2 → ×1.25 bonus
-                        </div>
+                        {report.execution.viabilityIndex.toFixed(2)} {report.execution.viabilityLabel && `(${report.execution.viabilityLabel})`}
                       </div>
-                    )}
+                      <div className="text-xs text-gray-400 mt-1">
+                        = base {((report.execution.targets[0].price - report.execution.entry.triggerPrice) / (report.execution.stopLoss.price - report.execution.entry.triggerPrice)).toFixed(1)} × vol {report.technical.volumeZScore < -0.5 ? '0.5' : report.technical.volumeZScore > 0.3 ? '1.25' : '1.0'} × CT {report.currentPrice > report.technical.ema200 && report.executionDirection === 'bearish' ? '0.8' : '1.0'}
+                      </div>
+                      {report.technical.volumeZScore < -0.5 && (
+                        <div className="text-xs text-red-300 mt-1">
+                          Vol penalty: ×0.5 (volZ = {report.technical.volumeZScore.toFixed(2)})
+                        </div>
+                      )}
+                      {report.technical.volumeZScore >= 1.2 && (
+                        <div className="text-xs text-green-300 mt-1">
+                          Vol bonus: ×1.25 (volZ = {report.technical.volumeZScore.toFixed(2)})
+                        </div>
+                      )}
+                      {/* Volume Impact Rules Tooltip */}
+                      <div className="text-xs text-gray-400 mt-1 italic">
+                        volZ &lt; -0.5 → ×0.5 penalty | volZ &gt; +1.2 → ×1.25 bonus
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <p className="text-blue-100 text-sm">{report.execution.entry.note}</p>
                 {report.execution.entry.note.includes('neckline') && (
@@ -1052,11 +1047,11 @@ export default function AnalyzeClient() {
                     const direction = report.executionDirection; // 'bullish', 'bearish', or 'neutral'
                     const directionLabel = direction === 'bullish' ? 'long' : direction === 'bearish' ? 'short' : 'neutral';
                     const volZ = report.technical.volumeZScore;
-                    const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) || 
-                                         (direction === 'bullish' && report.currentPrice < report.technical.ema200);
+                    const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) ||
+                      (direction === 'bullish' && report.currentPrice < report.technical.ema200);
                     const status = report.execution.status;
                     const source = report.patternSource; // 'institutional', 'candidate', or 'candle-only'
-                    
+
                     let verdict = '';
                     if (source === 'institutional') {
                       if (status === 'ready') {
@@ -1064,8 +1059,8 @@ export default function AnalyzeClient() {
                         verdict += `Entry trigger: $${report.execution.entry.triggerPrice} with ${volZ >= 0 ? 'adequate' : 'low'} volume confirmation.`;
                       } else if (status === 'candidate') {
                         verdict = `Institutional ${directionLabel} setup (pending volume confirmation). `;
-                        const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) || 
-                                             (direction === 'bullish' && report.currentPrice < report.technical.ema200);
+                        const isCounterTrend = (direction === 'bearish' && report.currentPrice > report.technical.ema200) ||
+                          (direction === 'bullish' && report.currentPrice < report.technical.ema200);
                         if (isCounterTrend) {
                           verdict += `Counter-trend trade — confirm ${direction === 'bearish' ? 'breakdown' : 'breakout'} below $${report.execution.entry.triggerPrice} with volZ ≥ 0.`;
                         } else {
@@ -1094,7 +1089,7 @@ export default function AnalyzeClient() {
 
               <div className="mt-4 p-3 rounded-lg bg-teal-500/10 border border-teal-500/30">
                 <p className="text-teal-200 text-xs">
-                  💡 <strong>Confirmation-Based Entry:</strong> This system uses rule-based triggers instead of "entry at current price." 
+                  💡 <strong>Confirmation-Based Entry:</strong> This system uses rule-based triggers instead of "entry at current price."
                   Wait for confirmation (breakout/breakdown) before entering. All % moves and R:R calculated from trigger price.
                 </p>
               </div>
@@ -1105,7 +1100,7 @@ export default function AnalyzeClient() {
           {/* Technical Indicators */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">📈 Technical Indicators</h3>
-            
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div className="p-4 rounded-lg bg-white/5">
                 <div className="text-blue-200 text-sm mb-1">EMA 9</div>
@@ -1152,7 +1147,7 @@ export default function AnalyzeClient() {
                     const isLongBias = report.riskManagement.direction === 'long';
                     const priceBelow200 = report.currentPrice < report.technical.ema200;
                     const priceAbove200 = report.currentPrice > report.technical.ema200;
-                    
+
                     if (isShortBias && priceAbove200) return ' • Counter-trend short setup';
                     if (isLongBias && priceBelow200) return ' • Counter-trend long setup';
                     return '';
@@ -1179,17 +1174,17 @@ export default function AnalyzeClient() {
                 </div>
               )}
             </div>
-            
+
             {/* EMA Compression Insight */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-3">
               <p className="text-blue-200 text-sm">
                 <strong>📊 EMA Proximity:</strong> The 9, 20, and 50 EMAs span {report.technical.emaCompression.toFixed(1)}%
-                {report.technical.emaCompression < 2 ? " — compressed, expect expansion (breakout or chop)." : 
-                 report.technical.emaCompression < 5 ? " — moderate spread, trend forming." : 
-                 " — wide spread, consistent with trending environment."}
+                {report.technical.emaCompression < 2 ? " — compressed, expect expansion (breakout or chop)." :
+                  report.technical.emaCompression < 5 ? " — moderate spread, trend forming." :
+                    " — wide spread, consistent with trending environment."}
               </p>
             </div>
-            
+
             {/* Trend vs Bias Clarity */}
             {(() => {
               const isShortBias = report.riskManagement.direction === 'short';
@@ -1201,46 +1196,46 @@ export default function AnalyzeClient() {
               const priceAbove200 = report.technical.ema9 > report.technical.ema200;
               const priceBelow200 = report.technical.ema9 < report.technical.ema200;
               const trendNeutral = report.technical.trend === "neutral";
-              
+
               // Countertrend setup (short in uptrend or long in downtrend)
               if ((isShortBias && priceAbove200) || (isLongBias && priceBelow200)) {
                 return (
                   <div className="p-3 rounded-lg bg-yellow-500/20 border border-yellow-500/50">
                     <p className="text-yellow-200 text-sm">
                       ⚠️ <strong>Countertrend Setup:</strong> This is a {report.riskManagement.direction} setup against the longer-term{' '}
-                      {priceAbove200 ? 'uptrend' : 'downtrend'} (price {priceAbove200 ? 'above' : 'below'} 200 EMA). 
+                      {priceAbove200 ? 'uptrend' : 'downtrend'} (price {priceAbove200 ? 'above' : 'below'} 200 EMA).
                       Countertrend trades have lower probability. Use tighter stops and smaller position sizes.
                     </p>
                   </div>
                 );
               }
-              
+
               // Conflicting trend classification (e.g., "neutral trend" but clear directional bias)
               if (trendNeutral && isShortBias && priceBelow20 && priceBelow50) {
                 return (
                   <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
                     <p className="text-blue-200 text-sm">
-                      📊 <strong>Trend Classification:</strong> Short bias despite neutral trend score — price below 20/50 EMA cluster signals near-term weakness. 
+                      📊 <strong>Trend Classification:</strong> Short bias despite neutral trend score — price below 20/50 EMA cluster signals near-term weakness.
                       The 200 EMA context creates the "neutral" label, but the setup favors downside based on recent price action.
                     </p>
                   </div>
                 );
               }
-              
+
               if (trendNeutral && isLongBias && priceAbove20 && priceAbove50) {
                 return (
                   <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
                     <p className="text-blue-200 text-sm">
-                      📊 <strong>Trend Classification:</strong> Long bias despite neutral trend score — price above 20/50 EMA cluster signals near-term strength. 
+                      📊 <strong>Trend Classification:</strong> Long bias despite neutral trend score — price above 20/50 EMA cluster signals near-term strength.
                       The 200 EMA context creates the "neutral" label, but the setup favors upside based on recent price action.
                     </p>
                   </div>
                 );
               }
-              
+
               return null;
             })()}
-            
+
             {/* Earnings Proximity */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
               <p className="text-blue-200 text-sm">
@@ -1253,7 +1248,7 @@ export default function AnalyzeClient() {
           {/* Score Breakdown */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-xl font-bold text-white mb-4">⭐ Score Breakdown</h3>
-            
+
             {/* Score Explanation Card */}
             <div className="mb-4 p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30">
               <p className="text-blue-100 text-sm mb-3">
@@ -1269,7 +1264,7 @@ export default function AnalyzeClient() {
                       const isLongBias = report.riskManagement.direction === 'long';
                       const priceBelow200 = report.currentPrice < report.technical.ema200;
                       const priceAbove200 = report.currentPrice > report.technical.ema200;
-                      
+
                       if (isShortBias && priceAbove200) return ' (Counter-trend short)';
                       if (isLongBias && priceBelow200) return ' (Counter-trend long)';
                       return '';
@@ -1287,7 +1282,7 @@ export default function AnalyzeClient() {
                       const isLongBias = report.riskManagement.direction === 'long';
                       const priceBelow200 = report.currentPrice < report.technical.ema200;
                       const priceAbove200 = report.currentPrice > report.technical.ema200;
-                      
+
                       if (isShortBias && priceAbove200) return ' (Counter-trend short)';
                       if (isLongBias && priceBelow200) return ' (Counter-trend long)';
                       return '';
@@ -1300,11 +1295,11 @@ export default function AnalyzeClient() {
               <div className="mt-3 p-2 rounded-lg bg-blue-500/5 border border-blue-500/20">
                 <p className="text-blue-200 text-xs">
                   <strong>Composite {report.score.overall} = Σ(weighted factors × weights)</strong>
-                  {report.execution.status === 'candidate' && report.score.overall < 65 ? 
-                    ` • candidate cap 65 applied (base score was higher)` : 
-                    report.execution.status === 'candidate' ? 
-                    ` • candidate cap 65 (current: ${report.score.overall})` : 
-                    ''}
+                  {report.execution.status === 'candidate' && report.score.overall < 65 ?
+                    ` • candidate cap 65 applied (base score was higher)` :
+                    report.execution.status === 'candidate' ?
+                      ` • candidate cap 65 (current: ${report.score.overall})` :
+                      ''}
                 </p>
               </div>
               <p className="text-blue-300 text-xs mt-3 italic">
@@ -1316,16 +1311,16 @@ export default function AnalyzeClient() {
             {Math.abs(report.score.breakdown.pattern - report.pattern.confidence) > 5 && (
               <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
                 <p className="text-purple-200 text-sm">
-                  <strong>Pattern Score Adjusted:</strong> Original confidence {report.pattern.confidence}%, 
-                  adjusted to {report.score.breakdown.pattern}/100 due to 
+                  <strong>Pattern Score Adjusted:</strong> Original confidence {report.pattern.confidence}%,
+                  adjusted to {report.score.breakdown.pattern}/100 due to
                   {report.technical.volumeZScore < 0 ? " low volume" : " volume confirmation"}
                   {report.technical.trend === "neutral" ? " and neutral trend" : ""}.
-                  {(report.pattern.name.includes("Engulfing") || report.pattern.name.includes("Breakout")) && 
+                  {(report.pattern.name.includes("Engulfing") || report.pattern.name.includes("Breakout")) &&
                     " (These patterns require strong volume confirmation)"}
                 </p>
               </div>
             )}
-            
+
             <div className="space-y-3">
               {Object.entries(report.score.breakdown).map(([key, value]) => (
                 <div key={key}>
@@ -1334,7 +1329,7 @@ export default function AnalyzeClient() {
                     <span className="text-white font-semibold">{value}/100</span>
                   </div>
                   <div className="w-full bg-white/10 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-teal-500 to-blue-500 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${value}%` }}
                     ></div>
@@ -1348,7 +1343,7 @@ export default function AnalyzeClient() {
           {report.squeezeAnalysis && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">📊 Squeeze Analysis</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {/* Combined Score */}
                 <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
@@ -1356,13 +1351,12 @@ export default function AnalyzeClient() {
                   <div className="text-3xl font-bold text-white mb-1">
                     {report.squeezeAnalysis.combined.score}<span className="text-lg text-purple-300">/100</span>
                   </div>
-                  <div className={`text-sm font-semibold uppercase ${
-                    report.squeezeAnalysis.combined.potential === 'extreme' ? 'text-red-400' :
-                    report.squeezeAnalysis.combined.potential === 'high' ? 'text-orange-400' :
-                    report.squeezeAnalysis.combined.potential === 'moderate' ? 'text-yellow-400' :
-                    report.squeezeAnalysis.combined.potential === 'low' ? 'text-blue-400' :
-                    'text-gray-400'
-                  }`}>
+                  <div className={`text-sm font-semibold uppercase ${report.squeezeAnalysis.combined.potential === 'extreme' ? 'text-red-400' :
+                      report.squeezeAnalysis.combined.potential === 'high' ? 'text-orange-400' :
+                        report.squeezeAnalysis.combined.potential === 'moderate' ? 'text-yellow-400' :
+                          report.squeezeAnalysis.combined.potential === 'low' ? 'text-blue-400' :
+                            'text-gray-400'
+                    }`}>
                     {report.squeezeAnalysis.combined.potential}
                   </div>
                   {report.squeezeAnalysis.combined.alignment && (
@@ -1373,12 +1367,11 @@ export default function AnalyzeClient() {
                 {/* Short Float Squeeze */}
                 <div className="p-4 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30">
                   <div className="text-red-200 text-sm mb-2">Short Float Squeeze</div>
-                  <div className={`text-sm font-semibold uppercase mb-2 ${
-                    report.squeezeAnalysis.shortSqueeze.potential === 'high' ? 'text-red-400' :
-                    report.squeezeAnalysis.shortSqueeze.potential === 'moderate' ? 'text-orange-400' :
-                    report.squeezeAnalysis.shortSqueeze.potential === 'low' ? 'text-yellow-400' :
-                    'text-gray-400'
-                  }`}>
+                  <div className={`text-sm font-semibold uppercase mb-2 ${report.squeezeAnalysis.shortSqueeze.potential === 'high' ? 'text-red-400' :
+                      report.squeezeAnalysis.shortSqueeze.potential === 'moderate' ? 'text-orange-400' :
+                        report.squeezeAnalysis.shortSqueeze.potential === 'low' ? 'text-yellow-400' :
+                          'text-gray-400'
+                    }`}>
                     {report.squeezeAnalysis.shortSqueeze.potential}
                   </div>
                   {report.squeezeAnalysis.shortSqueeze.shortFloat !== null && (
@@ -1392,14 +1385,13 @@ export default function AnalyzeClient() {
                 {/* TTM Squeeze */}
                 <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
                   <div className="text-blue-200 text-sm mb-2">TTM Squeeze</div>
-                  <div className={`text-lg font-bold mb-1 ${
-                    report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'text-red-400' :
-                    report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? 'text-yellow-400' :
-                    'text-gray-400'
-                  }`}>
-                    {report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? '🔥 FIRE' : 
-                     report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? '⚡ ON' : 
-                     '⭕ OFF'}
+                  <div className={`text-lg font-bold mb-1 ${report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? 'text-red-400' :
+                      report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? 'text-yellow-400' :
+                        'text-gray-400'
+                    }`}>
+                    {report.squeezeAnalysis.ttmSqueeze.state === 'FIRE' ? '🔥 FIRE' :
+                      report.squeezeAnalysis.ttmSqueeze.state === 'ON' ? '⚡ ON' :
+                        '⭕ OFF'}
                   </div>
                   <div className="text-xs text-blue-200">Duration: {report.squeezeAnalysis.ttmSqueeze.duration} bars</div>
                   <div className="text-xs text-blue-200 capitalize">Momentum: {report.squeezeAnalysis.ttmSqueeze.momentumDirection}</div>
@@ -1416,40 +1408,37 @@ export default function AnalyzeClient() {
           {report.optionsInsight && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">📊 Options Flow & Smart Money Sentiment</h3>
-              
+
               {/* Main Message */}
-              <div className={`p-4 rounded-lg mb-4 border ${
-                report.optionsInsight.sentiment === 'bullish' && report.optionsInsight.confidence === 'high' ? 'bg-green-500/20 border-green-500/30' :
-                report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/10 border-green-500/20' :
-                report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? 'bg-red-500/20 border-red-500/30' :
-                report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/10 border-red-500/20' :
-                report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/10 border-yellow-500/20' :
-                'bg-white/5 border-white/10'
-              }`}>
+              <div className={`p-4 rounded-lg mb-4 border ${report.optionsInsight.sentiment === 'bullish' && report.optionsInsight.confidence === 'high' ? 'bg-green-500/20 border-green-500/30' :
+                  report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/10 border-green-500/20' :
+                    report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? 'bg-red-500/20 border-red-500/30' :
+                      report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/10 border-red-500/20' :
+                        report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/10 border-yellow-500/20' :
+                          'bg-white/5 border-white/10'
+                }`}>
                 <div className="flex items-start gap-3">
                   <div className="text-3xl">
                     {report.optionsInsight.sentiment === 'bullish' && report.optionsInsight.confidence === 'high' ? '🚀' :
-                     report.optionsInsight.sentiment === 'bullish' ? '📈' :
-                     report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? '🔻' :
-                     report.optionsInsight.sentiment === 'bearish' ? '📉' :
-                     report.optionsInsight.sentiment === 'mixed' ? '⚠️' :
-                     '➖'}
+                      report.optionsInsight.sentiment === 'bullish' ? '📈' :
+                        report.optionsInsight.sentiment === 'bearish' && report.optionsInsight.confidence === 'high' ? '🔻' :
+                          report.optionsInsight.sentiment === 'bearish' ? '📉' :
+                            report.optionsInsight.sentiment === 'mixed' ? '⚠️' :
+                              '➖'}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                        report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/30 text-green-200' :
-                        report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/30 text-red-200' :
-                        report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/30 text-yellow-200' :
-                        'bg-white/20 text-white'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${report.optionsInsight.sentiment === 'bullish' ? 'bg-green-500/30 text-green-200' :
+                          report.optionsInsight.sentiment === 'bearish' ? 'bg-red-500/30 text-red-200' :
+                            report.optionsInsight.sentiment === 'mixed' ? 'bg-yellow-500/30 text-yellow-200' :
+                              'bg-white/20 text-white'
+                        }`}>
                         {report.optionsInsight.sentiment}
                       </span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        report.optionsInsight.confidence === 'high' ? 'bg-white/20 text-blue-200' :
-                        report.optionsInsight.confidence === 'medium' ? 'bg-white/10 text-blue-300' :
-                        'bg-white/5 text-gray-300'
-                      }`}>
+                      <span className={`text-xs px-2 py-1 rounded ${report.optionsInsight.confidence === 'high' ? 'bg-white/20 text-blue-200' :
+                          report.optionsInsight.confidence === 'medium' ? 'bg-white/10 text-blue-300' :
+                            'bg-white/5 text-gray-300'
+                        }`}>
                         {report.optionsInsight.confidence} confidence
                       </span>
                     </div>
@@ -1459,16 +1448,16 @@ export default function AnalyzeClient() {
               </div>
 
               {/* Data Type Indicator for Basic Accounts */}
-              {report.optionsInsight.topCallStrikes.length > 0 && 
-               report.optionsInsight.topCallStrikes.every(s => s.volume === 0 && s.oi === 0) && (
-                <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <div className="text-sm text-blue-200">
-                    <span className="font-semibold">📊 Basic Account Mode:</span> Live volume and open interest data not available with your current plan. 
-                    Analysis is based on available option contracts (contract count) rather than actual trading volume. 
-                    The sentiment is still valid but with lower confidence compared to live data.
+              {report.optionsInsight.topCallStrikes.length > 0 &&
+                report.optionsInsight.topCallStrikes.every(s => s.volume === 0 && s.oi === 0) && (
+                  <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div className="text-sm text-blue-200">
+                      <span className="font-semibold">📊 Basic Account Mode:</span> Live volume and open interest data not available with your current plan.
+                      Analysis is based on available option contracts (contract count) rather than actual trading volume.
+                      The sentiment is still valid but with lower confidence compared to live data.
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Call/Put Activity Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -1499,10 +1488,10 @@ export default function AnalyzeClient() {
                   </div>
                   <div className="text-xs text-blue-300 mt-1">
                     {report.optionsInsight.callPutRatio > 2 ? 'Heavily call-skewed' :
-                     report.optionsInsight.callPutRatio > 1.5 ? 'Moderately bullish' :
-                     report.optionsInsight.callPutRatio > 0.7 ? 'Balanced' :
-                     report.optionsInsight.callPutRatio > 0.5 ? 'Moderately bearish' :
-                     'Heavily put-skewed'}
+                      report.optionsInsight.callPutRatio > 1.5 ? 'Moderately bullish' :
+                        report.optionsInsight.callPutRatio > 0.7 ? 'Balanced' :
+                          report.optionsInsight.callPutRatio > 0.5 ? 'Moderately bearish' :
+                            'Heavily put-skewed'}
                   </div>
                 </div>
               </div>
@@ -1515,8 +1504,8 @@ export default function AnalyzeClient() {
                     <span className="text-white text-lg font-semibold uppercase">{report.optionsInsight.ivTrend}</span>
                     <span className="text-xs text-blue-300">
                       {report.optionsInsight.ivTrend === 'rising' ? '(Increased uncertainty)' :
-                       report.optionsInsight.ivTrend === 'falling' ? '(Calmer markets)' :
-                       '(Stable volatility)'}
+                        report.optionsInsight.ivTrend === 'falling' ? '(Calmer markets)' :
+                          '(Stable volatility)'}
                     </span>
                   </div>
                 </div>
@@ -1532,9 +1521,9 @@ export default function AnalyzeClient() {
               {/* Top Strikes */}
               {(report.optionsInsight.topCallStrikes.length > 0 || report.optionsInsight.topPutStrikes.length > 0) && (() => {
                 // Check if we have volume data
-                const hasVolumeData = report.optionsInsight.topCallStrikes.some(s => s.volume > 0) || 
-                                     report.optionsInsight.topPutStrikes.some(s => s.volume > 0);
-                
+                const hasVolumeData = report.optionsInsight.topCallStrikes.some(s => s.volume > 0) ||
+                  report.optionsInsight.topPutStrikes.some(s => s.volume > 0);
+
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {report.optionsInsight.topCallStrikes.length > 0 && (
@@ -1588,7 +1577,7 @@ export default function AnalyzeClient() {
           {report.fundamentals && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">💼 Comprehensive Fundamental Analysis</h3>
-              
+
               {/* Company & Industry Context */}
               {report.fundamentals.profile && (
                 <div className="mb-4 p-4 rounded-lg bg-white/5 border border-white/10 text-sm text-blue-100">
@@ -1600,7 +1589,7 @@ export default function AnalyzeClient() {
                       <div><span className="text-blue-300">Industry:</span> {report.fundamentals.profile.industry}</div>
                     )}
                     {report.fundamentals.profile.marketCap && (
-                      <div><span className="text-blue-300">Mkt Cap:</span> ${ (report.fundamentals.profile.marketCap/1e9).toFixed(1) }B</div>
+                      <div><span className="text-blue-300">Mkt Cap:</span> ${(report.fundamentals.profile.marketCap / 1e9).toFixed(1)}B</div>
                     )}
                   </div>
                 </div>
@@ -1613,13 +1602,12 @@ export default function AnalyzeClient() {
                   <div className="text-3xl font-bold text-white mb-1">
                     {report.fundamentals.qualityScore}<span className="text-lg text-green-300">/100</span>
                   </div>
-                  <div className={`text-sm font-semibold uppercase ${
-                    report.fundamentals.quality.grade === 'excellent' ? 'text-green-400' :
-                    report.fundamentals.quality.grade === 'good' ? 'text-blue-400' :
-                    report.fundamentals.quality.grade === 'fair' ? 'text-yellow-400' :
-                    report.fundamentals.quality.grade === 'poor' ? 'text-red-400' :
-                    'text-gray-400'
-                  }`}>
+                  <div className={`text-sm font-semibold uppercase ${report.fundamentals.quality.grade === 'excellent' ? 'text-green-400' :
+                      report.fundamentals.quality.grade === 'good' ? 'text-blue-400' :
+                        report.fundamentals.quality.grade === 'fair' ? 'text-yellow-400' :
+                          report.fundamentals.quality.grade === 'poor' ? 'text-red-400' :
+                            'text-gray-400'
+                    }`}>
                     {report.fundamentals.quality.grade}
                   </div>
                 </div>
@@ -1629,12 +1617,11 @@ export default function AnalyzeClient() {
                   <div className="text-3xl font-bold text-white mb-1">
                     {report.fundamentals.viabilityScore}<span className="text-lg text-blue-300">/100</span>
                   </div>
-                  <div className={`text-sm font-semibold uppercase ${
-                    report.fundamentals.viability.valuation === 'undervalued' ? 'text-green-400' :
-                    report.fundamentals.viability.valuation === 'fairly valued' ? 'text-blue-400' :
-                    report.fundamentals.viability.valuation === 'overvalued' ? 'text-red-400' :
-                    'text-gray-400'
-                  }`}>
+                  <div className={`text-sm font-semibold uppercase ${report.fundamentals.viability.valuation === 'undervalued' ? 'text-green-400' :
+                      report.fundamentals.viability.valuation === 'fairly valued' ? 'text-blue-400' :
+                        report.fundamentals.viability.valuation === 'overvalued' ? 'text-red-400' :
+                          'text-gray-400'
+                    }`}>
                     {report.fundamentals.viability.valuation}
                   </div>
                 </div>
@@ -1644,12 +1631,11 @@ export default function AnalyzeClient() {
                   <div className="text-3xl font-bold text-white mb-1">
                     {report.fundamentals.riskScore}<span className="text-lg text-red-300">/100</span>
                   </div>
-                  <div className={`text-sm font-semibold uppercase ${
-                    report.fundamentals.risk.level === 'low' ? 'text-green-400' :
-                    report.fundamentals.risk.level === 'moderate' ? 'text-yellow-400' :
-                    report.fundamentals.risk.level === 'high' ? 'text-orange-400' :
-                    'text-red-400'
-                  }`}>
+                  <div className={`text-sm font-semibold uppercase ${report.fundamentals.risk.level === 'low' ? 'text-green-400' :
+                      report.fundamentals.risk.level === 'moderate' ? 'text-yellow-400' :
+                        report.fundamentals.risk.level === 'high' ? 'text-orange-400' :
+                          'text-red-400'
+                    }`}>
                     {report.fundamentals.risk.level} risk
                   </div>
                 </div>
@@ -1756,9 +1742,8 @@ export default function AnalyzeClient() {
                   {report.fundamentals.risk.insiderSentiment !== 'neutral' && (
                     <div className="p-3 rounded-lg bg-white/5">
                       <div className="text-blue-200 text-xs mb-1">Insider Sentiment</div>
-                      <div className={`font-semibold text-xs uppercase ${
-                        report.fundamentals.risk.insiderSentiment === 'bullish' ? 'text-green-400' : 'text-red-400'
-                      }`}>
+                      <div className={`font-semibold text-xs uppercase ${report.fundamentals.risk.insiderSentiment === 'bullish' ? 'text-green-400' : 'text-red-400'
+                        }`}>
                         {report.fundamentals.risk.insiderSentiment}
                       </div>
                     </div>
@@ -1782,16 +1767,15 @@ export default function AnalyzeClient() {
           {report.news && report.news.length > 0 && (
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-xl font-bold text-white mb-4">📰 Recent News</h3>
-              
+
               {report.newsSummary && (
                 <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-purple-200 text-sm font-semibold">Overall Sentiment</div>
-                    <div className={`text-lg font-bold uppercase ${
-                      report.newsSummary.overallSentiment === 'bullish' ? 'text-green-400' :
-                      report.newsSummary.overallSentiment === 'bearish' ? 'text-red-400' :
-                      'text-gray-400'
-                    }`}>
+                    <div className={`text-lg font-bold uppercase ${report.newsSummary.overallSentiment === 'bullish' ? 'text-green-400' :
+                        report.newsSummary.overallSentiment === 'bearish' ? 'text-red-400' :
+                          'text-gray-400'
+                      }`}>
                       {report.newsSummary.overallSentiment}
                     </div>
                   </div>
@@ -1812,20 +1796,19 @@ export default function AnalyzeClient() {
                 {report.news.map((article, idx) => (
                   <div key={article.id} className="p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                     <div className="flex items-start justify-between mb-2">
-                      <a 
-                        href={article.article_url} 
-                        target="_blank" 
+                      <a
+                        href={article.article_url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-white font-semibold hover:text-teal-300 transition-colors flex-1"
                       >
                         {article.title}
                       </a>
                       {article.sentiment && (
-                        <span className={`ml-3 px-2 py-1 rounded-full text-xs font-semibold ${
-                          article.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
-                          article.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
+                        <span className={`ml-3 px-2 py-1 rounded-full text-xs font-semibold ${article.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
+                            article.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
+                              'bg-gray-500/20 text-gray-400'
+                          }`}>
                           {article.sentiment}
                         </span>
                       )}
@@ -1846,7 +1829,7 @@ export default function AnalyzeClient() {
           {/* Comprehensive AI Analysis & Mentor Notes */}
           <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
             <h3 className="text-xl font-bold text-white mb-4">🤖 Comprehensive AI Analysis</h3>
-            
+
             <div className="mb-6">
               <h4 className="text-lg font-semibold text-teal-300 mb-2">📖 Executive Summary</h4>
               <p className="text-blue-100 leading-relaxed">
@@ -1860,11 +1843,11 @@ export default function AnalyzeClient() {
                 {report.analysis.mentorNotes}
                 {((report.riskManagement.direction === 'short' && report.technical.ema9 > report.technical.ema200) ||
                   (report.riskManagement.direction === 'long' && report.technical.ema9 < report.technical.ema200)) && (
-                  <p className="mt-3 text-yellow-200 text-sm">
-                    ⚠️ Countertrend Setup: This trade goes against the long-term trend (price {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA). 
-                    Confirmation of {report.riskManagement.direction === 'long' ? 'breakout' : 'breakdown'} is essential before full sizing.
-                  </p>
-                )}
+                    <p className="mt-3 text-yellow-200 text-sm">
+                      ⚠️ Countertrend Setup: This trade goes against the long-term trend (price {report.technical.ema9 > report.technical.ema200 ? 'above' : 'below'} 200 EMA).
+                      Confirmation of {report.riskManagement.direction === 'long' ? 'breakout' : 'breakdown'} is essential before full sizing.
+                    </p>
+                  )}
               </div>
             </div>
 
@@ -1942,7 +1925,7 @@ export default function AnalyzeClient() {
                 )}
               </button>
             </div>
-            
+
             {/* Success/Error Messages */}
             {saveSuccess && (
               <div className="mt-4 p-3 bg-green-500/20 border border-green-500/50 rounded-lg">
@@ -1974,7 +1957,7 @@ export default function AnalyzeClient() {
       )}
 
       {/* Pattern Explanation Help Modal */}
-      <PatternExplanationHelpModal 
+      <PatternExplanationHelpModal
         isOpen={patternHelpOpen}
         onClose={() => setPatternHelpOpen(false)}
       />

@@ -495,21 +495,19 @@ function aggregateEnhancedResults(
     return createEmptySummary();
   }
   
-  // Ensure chronological ordering and pick latest consistently
-  results.sort((a, b) => new Date(a.signalDate).getTime() - new Date(b.signalDate).getTime());
   const totalSignals = results.length;
   const hasMinSamples = totalSignals >= 10;
   
-  // Multi-horizon win rates (suppress if < 10 samples)
-  // Win rates returned as decimals (0-1) to avoid >100% later
-  const winRate5d = hasMinSamples ? 
+  // Multi-horizon win rates - ALWAYS calculate (even for small samples)
+  // Win rates returned as decimals (0-1)
+  const winRate5d = totalSignals > 0 ? 
     (results.filter(r => r.outcome5d.startsWith('hit_')).length / totalSignals) : 0;
-  const winRate10d = hasMinSamples ? 
+  const winRate10d = totalSignals > 0 ? 
     (results.filter(r => r.outcome10d.startsWith('hit_')).length / totalSignals) : 0;
-  const winRate20d = hasMinSamples ? 
+  const winRate20d = totalSignals > 0 ? 
     (results.filter(r => r.outcome20d.startsWith('hit_')).length / totalSignals) : 0;
   
-  // Average P&L (exclude incomplete 'still_open')
+  // Average P&L - ALWAYS calculate (exclude incomplete 'still_open')
   const closed5 = results.filter(r => r.outcome5d !== 'still_open');
   const closed10 = results.filter(r => r.outcome10d !== 'still_open');
   const closed20 = results.filter(r => r.outcome20d !== 'still_open');
