@@ -834,7 +834,8 @@ export async function POST(request: Request) {
           squeezeAnalysis, // Pass squeeze analysis to LLM
           fundamentalsData, // Pass fundamentals to LLM
           newsSummary, // Pass news summary to LLM
-          optionsInsight // Pass options insight to LLM
+          optionsInsight, // Pass options insight to LLM
+          mainScore // Pass the ACTUAL displayed score (mainScore) to prevent AI hallucination
         );
         console.log(`[Analyze] Generated AI analysis with fundamentals, news, and options context`);
         

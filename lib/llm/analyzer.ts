@@ -23,7 +23,8 @@ export class LLMAnalyzer {
     squeezeAnalysis?: any,
     fundamentals?: any,
     newsSummary?: any,
-    optionsInsight?: any
+    optionsInsight?: any,
+    displayScore?: number  // Optional: the actual score shown in UI (mainScore)
   ): Promise<{
     narrative: string;
     mentorNotes: string;
@@ -49,7 +50,8 @@ export class LLMAnalyzer {
         squeezeAnalysis,
         fundamentals,
         newsSummary,
-        optionsInsight
+        optionsInsight,
+        displayScore  // Pass the display score
       );
 
       // Call OpenAI API
@@ -71,28 +73,46 @@ export class LLMAnalyzer {
 4. Squeeze dynamics (short interest + volatility compression)
 5. Real-world execution considerations
 
-🚨 RATING ADJUSTMENT AUTHORITY 🚨
-You can adjust the technical score by ±15 points (±1 full grade) after analyzing ALL factors:
-- Technical score is provided (e.g., "40/100 D rating")
-- You may UPGRADE if: strong fundamentals + positive catalysts + favorable sentiment outweigh weak technicals
-- You may DOWNGRADE if: fundamental risks + negative catalysts + adverse sentiment override strong technicals
-- Grade boundaries: 0-40=D, 41-60=C, 61-75=B, 76-89=A, 90+=A+
+🚨 CRITICAL: STRUCTURED SCORE EXPLANATION REQUIRED 🚨
+You MUST start your analysis with this EXACT structure to clearly distinguish technical vs holistic scoring:
 
-To adjust, include this exact line in your response:
+📊 Technical Score: [X]/100 ([RATING])
+Based purely on technical indicators, chart patterns, and price action.
+
+🤖 AI Holistic Assessment: [Y]/100 ([RATING]) [⬆️ or ⬇️ or ➡️] ([+/-Z points])
+
+Factor Analysis (breakdown of adjustments):
+• Fundamentals: [impact description] [[+/-N points]]
+• Sentiment: [impact description] [[+/-N points]]
+• Squeeze Dynamics: [impact description] [[+/-N points]]
+• Options Flow: [impact description] [[+/-N points] OR "Data unavailable"]
+
+Final Assessment: [1-2 sentences explaining the overall adjustment reasoning]
+
+---
+
+Then continue with your regular sections:
+**Market Structure & Setup Quality**
+**Entry Tactics & Risk Management**
+**Key Factors to Monitor**
+
+🚨 ADJUSTMENT RULES 🚨
+- You can adjust the technical score by ±15 points maximum (±1 full grade)
+- Technical score is provided in the context (e.g., "40/100 D rating")
+- Grade boundaries: 0-40=D, 41-60=C, 61-75=B, 76-89=A, 90+=A+
+- UPGRADE if: strong fundamentals + positive catalysts + favorable sentiment outweigh weak technicals
+- DOWNGRADE if: fundamental risks + negative catalysts + adverse sentiment override strong technicals
+- NO CHANGE (➡️) if: factors are balanced or technical score is already appropriate
+- Factor points should sum approximately to your total adjustment
+
+🚨 LEGACY RATING_ADJUSTMENT FORMAT (STILL SUPPORTED) 🚨
+After your structured explanation, you may OPTIONALLY include this line for system processing:
 RATING_ADJUSTMENT: [new_score]/100 [new_rating] - [one sentence reason]
 
-Example adjustments:
-- "RATING_ADJUSTMENT: 55/100 C - Upgraded from D due to excellent fundamentals (Quality 85/100) and positive earnings catalyst"
-- "RATING_ADJUSTMENT: 35/100 D - Downgraded from C due to overvaluation and negative earnings surprise"
-- If no adjustment needed, omit this line entirely
-
-🚨 SCORE USAGE 🚨
-When mentioning the score in your narrative:
-- If you adjusted it, use the NEW score everywhere
-- If not adjusted, use the ORIGINAL score exactly as provided
+If you use the structured format above correctly, this line is optional but recommended for validation.
 
 🚨 OPTIONS RULES 🚨
-If context says "Options data is not available", do NOT mention options, call/put ratios, or smart money.
+If context says "Options data is not available", write "Data unavailable" for the Options Flow factor and do NOT mention options, call/put ratios, or smart money elsewhere.
 
 Be direct and practical. Avoid repeating obvious criteria. Focus on insights a trader can act on.`
             },
@@ -137,12 +157,22 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
     squeezeAnalysis?: any,
     fundamentals?: any,
     newsSummary?: any,
-    optionsInsight?: any
+    optionsInsight?: any,
+    displayScore?: number  // The ACTUAL score shown in header (mainScore)
   ): string {
+    // Use displayScore if provided, otherwise fall back to score.overall
+    const getRatingFromScore = (s: number) => (s >= 90 ? 'A+' : s >= 76 ? 'A' : s >= 61 ? 'B' : s >= 41 ? 'C' : 'D');
+    const technicalScore = displayScore !== undefined ? displayScore : score.overall;
+    const technicalRating = getRatingFromScore(technicalScore);
+    
     // START WITH THE SCORE - MOST IMPORTANT
-    let context = `**YOU MUST USE THIS EXACT SCORE IN YOUR ANALYSIS:**\n`;
-    context += `${symbol} Setup Score: ${score.overall}/100 (${score.overall >= 90 ? 'A+' : score.overall >= 76 ? 'A' : score.overall >= 61 ? 'B' : score.overall >= 41 ? 'C' : 'D'} rating)\n`;
-    context += `DO NOT say "40/100" or "52/100" or any other number. The score is ${score.overall}/100.\n\n`;
+    // CRITICAL: Use the SAME score that's displayed in the header (mainScore)
+    let context = `**CRITICAL: USE THIS EXACT TECHNICAL SCORE AS YOUR STARTING POINT:**\n`;
+    context += `📊 Technical Score (from patterns + indicators): ${technicalScore}/100 (${technicalRating} rating)\n`;
+    context += `\n`;
+    context += `This is the TECHNICAL SCORE you MUST use in your "📊 Technical Score" section.\n`;
+    context += `You may adjust it by ±15 points for your "🤖 AI Holistic Assessment" based on fundamentals/sentiment/squeeze, but the TECHNICAL score stays ${technicalScore}/100.\n`;
+    context += `DO NOT make up a different technical score. The technical score is ${technicalScore}/100 (${technicalRating}).\n\n`;
     
     context += `Analyze ${symbol} on ${timeframe} timeframe:\n\n`;
     
