@@ -369,22 +369,7 @@ export function runTechnicalAnalysis(
   const volatilityAssessment = assessVolatility(bars);
   
   // =====================
-  // Projections & Signals
-  // =====================
-  
-  const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment);
-  const signalStrength = calculateSignalStrength(bars, momentumAssessment, trendAssessment, volatilityAssessment);
-  const recommendation = generateStrategyRecommendation(
-    bars, 
-    momentumAssessment, 
-    trendAssessment, 
-    volatilityAssessment, 
-    signalStrength,
-    supportResistance
-  );
-  
-  // =====================
-  // Structure Analysis (Pullback vs Reversal)
+  // Structure Analysis (Pullback vs Reversal) - Calculate FIRST
   // =====================
   
   const structureAnalysis = analyzeStructure(
@@ -394,6 +379,36 @@ export function runTechnicalAnalysis(
     volatilityAssessment,
     nearTermSupport,
     nearTermResistance
+  );
+  
+  // =====================
+  // Projections & Signals
+  // =====================
+  
+  const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment);
+  const signalStrength = calculateSignalStrength(bars, momentumAssessment, trendAssessment, volatilityAssessment);
+  
+  // Generate recommendation with structure context and oscillator data
+  const recommendation = generateStrategyRecommendation(
+    bars, 
+    momentumAssessment, 
+    trendAssessment, 
+    volatilityAssessment, 
+    signalStrength,
+    supportResistance,
+    // NEW: Pass structure context for strategy alignment
+    {
+      classification: structureAnalysis.classification,
+      priorTrendDirection: structureAnalysis.priorTrendDirection,
+      dominantBias: structureAnalysis.dominantBias
+    },
+    // NEW: Pass oscillator values for overbought/oversold and squeeze detection
+    {
+      stochK: stochasticK,
+      mfi: mfi,
+      historicalVolatility: historicalVolatility,
+      bollingerBandwidth: bollingerBandwidth
+    }
   );
   
   // =====================

@@ -961,7 +961,74 @@ export function scanRecentPatternsWithContext(
     }
   }
   
-  return uniqueResults.slice(0, 5); // Return top 5
+  // ============================================
+  // CONFLICT RESOLUTION: Remove contradictory patterns on the same bar
+  // When both bullish and bearish patterns exist on the same bar index,
+  // keep only the one that matches the confirmed outcome or has higher confidence
+  // ============================================
+  const conflictResolved: PatternWithContext[] = [];
+  const patternsByBar = new Map<number, PatternWithContext[]>();
+  
+  // Group patterns by bar index
+  for (const p of uniqueResults) {
+    const existing = patternsByBar.get(p.barIndex) || [];
+    existing.push(p);
+    patternsByBar.set(p.barIndex, existing);
+  }
+  
+  // For each bar, resolve conflicts
+  for (const [barIndex, patterns] of patternsByBar) {
+    if (patterns.length === 1) {
+      conflictResolved.push(patterns[0]);
+      continue;
+    }
+    
+    // Separate by type
+    const bullish = patterns.filter(p => p.pattern.type === 'bullish');
+    const bearish = patterns.filter(p => p.pattern.type === 'bearish');
+    const neutral = patterns.filter(p => p.pattern.type === 'neutral');
+    
+    // If both bullish and bearish exist on same bar, there's a conflict
+    if (bullish.length > 0 && bearish.length > 0) {
+      // Priority 1: Prefer CONFIRMED patterns over others
+      const confirmedBullish = bullish.filter(p => p.outcome === 'confirmed');
+      const confirmedBearish = bearish.filter(p => p.outcome === 'confirmed');
+      
+      if (confirmedBullish.length > 0 && confirmedBearish.length === 0) {
+        // Bullish confirmed, bearish not - keep bullish, mark bearish as failed
+        conflictResolved.push(...confirmedBullish);
+      } else if (confirmedBearish.length > 0 && confirmedBullish.length === 0) {
+        // Bearish confirmed, bullish not - keep bearish
+        conflictResolved.push(...confirmedBearish);
+      } else if (confirmedBullish.length > 0 && confirmedBearish.length > 0) {
+        // Both confirmed? Rare edge case - keep highest confidence
+        const all = [...confirmedBullish, ...confirmedBearish];
+        conflictResolved.push(all.sort((a, b) => b.pattern.confidence - a.pattern.confidence)[0]);
+      } else {
+        // Neither confirmed - keep only the highest confidence pattern
+        const all = [...bullish, ...bearish];
+        const best = all.sort((a, b) => b.pattern.confidence - a.pattern.confidence)[0];
+        conflictResolved.push(best);
+      }
+    } else {
+      // No conflict between bullish/bearish - keep all (might be same type duplicates)
+      // Keep highest confidence of each type
+      if (bullish.length > 0) {
+        conflictResolved.push(bullish.sort((a, b) => b.pattern.confidence - a.pattern.confidence)[0]);
+      }
+      if (bearish.length > 0) {
+        conflictResolved.push(bearish.sort((a, b) => b.pattern.confidence - a.pattern.confidence)[0]);
+      }
+    }
+    
+    // Always include neutral patterns (Doji, etc.) - they don't conflict
+    conflictResolved.push(...neutral);
+  }
+  
+  // Sort by bar index (most recent first) then by confidence
+  return conflictResolved
+    .sort((a, b) => a.barIndex - b.barIndex || b.pattern.confidence - a.pattern.confidence)
+    .slice(0, 5);
 }
 
 /**

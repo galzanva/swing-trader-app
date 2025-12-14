@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { TechnicalAnalysisReport } from "@/lib/technical-analysis";
 
 interface ExtendedReport extends TechnicalAnalysisReport {
@@ -147,11 +148,66 @@ function IndicatorRow({ label, value, signal, valueColor }: {
 }
 
 export default function TechnicalAnalysisClient() {
+  const router = useRouter();
   const [symbol, setSymbol] = useState("");
   const [timeframe, setTimeframe] = useState("1day");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [report, setReport] = useState<ExtendedReport | null>(null);
+  
+  // Save report state
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  
+  // Handle save report
+  const handleSaveReport = async () => {
+    if (!report) return;
+    
+    setIsSaving(true);
+    setSaveError("");
+    setSaveSuccess(false);
+    
+    try {
+      const response = await fetch("/api/reports/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "technical-analysis",
+          title: `${report.symbol} Technical Analysis`,
+          description: `${report.signalStrength.direction.toUpperCase()} signal (${report.signalStrength.grade}) - ${report.recommendation.strategy}`,
+          parameters: {
+            symbol: report.symbol,
+            timeframe: report.timeframe,
+            analyzedAt: report.timestamp,
+          },
+          reportData: report,
+          tags: [
+            "technical-analysis",
+            report.symbol,
+            report.signalStrength.direction,
+            report.recommendation.direction,
+            report.timeframe,
+          ],
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save report");
+      }
+      
+      setSaveSuccess(true);
+      
+      // Reset success message after 3 seconds
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setSaveError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!symbol.trim()) {
@@ -290,25 +346,60 @@ export default function TechnicalAnalysisClient() {
                 </div>
               </div>
               
-              {/* Right: Metrics */}
-              <div className="flex items-center gap-8">
-                <div className="text-center">
-                  <div className="text-sm text-slate-400 mb-1">Signal Grade</div>
-                  <GradeBadge grade={report.signalStrength.grade} />
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-slate-400 mb-1">Strength</div>
-                  <div className="text-3xl font-bold text-white">{report.signalStrength.overall}</div>
-                  <div className="text-sm text-slate-500">/ 100</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-slate-400 mb-1">Confidence</div>
-                  <div className={`text-xl font-semibold ${
-                    report.aiSummary?.confidenceLevel === 'high' ? 'text-emerald-400' :
-                    report.aiSummary?.confidenceLevel === 'medium' ? 'text-yellow-400' : 'text-red-400'
-                  }`}>
-                    {report.aiSummary?.confidenceLevel?.toUpperCase() || 'N/A'}
+              {/* Right: Metrics + Save Button */}
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-8">
+                  <div className="text-center">
+                    <div className="text-sm text-slate-400 mb-1">Signal Grade</div>
+                    <GradeBadge grade={report.signalStrength.grade} />
                   </div>
+                  <div className="text-center">
+                    <div className="text-sm text-slate-400 mb-1">Strength</div>
+                    <div className="text-3xl font-bold text-white">{report.signalStrength.overall}</div>
+                    <div className="text-sm text-slate-500">/ 100</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-slate-400 mb-1">Confidence</div>
+                    <div className={`text-xl font-semibold ${
+                      report.aiSummary?.confidenceLevel === 'high' ? 'text-emerald-400' :
+                      report.aiSummary?.confidenceLevel === 'medium' ? 'text-yellow-400' : 'text-red-400'
+                    }`}>
+                      {report.aiSummary?.confidenceLevel?.toUpperCase() || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Save Button */}
+                <div className="border-l border-white/20 pl-6">
+                  <button
+                    onClick={handleSaveReport}
+                    disabled={isSaving}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold transition-all ${
+                      saveSuccess 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-white/40'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {isSaving ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        Saving...
+                      </>
+                    ) : saveSuccess ? (
+                      <>
+                        <span>✓</span>
+                        Saved!
+                      </>
+                    ) : (
+                      <>
+                        <span>💾</span>
+                        Save Report
+                      </>
+                    )}
+                  </button>
+                  {saveError && (
+                    <p className="text-xs text-red-400 mt-1">{saveError}</p>
+                  )}
                 </div>
               </div>
             </div>

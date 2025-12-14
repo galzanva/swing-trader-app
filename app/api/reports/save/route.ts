@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     // Validate type
-    const validTypes = ["deep-analysis", "strategy-analysis", "backtest"];
+    const validTypes = ["deep-analysis", "strategy-analysis", "backtest", "technical-analysis"];
     if (!validTypes.includes(type)) {
       return NextResponse.json(
         { error: `Invalid type. Must be one of: ${validTypes.join(", ")}` },

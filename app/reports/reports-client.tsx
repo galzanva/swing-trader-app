@@ -104,6 +104,8 @@ export default function ReportsClient() {
         return '🎯';
       case 'backtest':
         return '📊';
+      case 'technical-analysis':
+        return '📈';
       default:
         return '📄';
     }
@@ -117,6 +119,8 @@ export default function ReportsClient() {
         return 'Strategy Analysis';
       case 'backtest':
         return 'Backtest';
+      case 'technical-analysis':
+        return 'Technical Analysis';
       default:
         return type;
     }
@@ -162,6 +166,7 @@ export default function ReportsClient() {
               <option value="">All Types</option>
               <option value="deep-analysis">Deep Analysis</option>
               <option value="strategy-analysis">Strategy Analysis</option>
+              <option value="technical-analysis">Technical Analysis</option>
               <option value="backtest">Backtest</option>
             </select>
           </div>

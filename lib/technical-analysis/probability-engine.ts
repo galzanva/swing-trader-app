@@ -1368,6 +1368,7 @@ export function calculateSignalStrength(
 
 /**
  * Generate strategy recommendations based on technical analysis
+ * Now with structure-aware logic, volatility-aware stops, and squeeze handling
  */
 export function generateStrategyRecommendation(
   bars: OHLCV[],
@@ -1378,13 +1379,26 @@ export function generateStrategyRecommendation(
   supportResistance: {
     support: { price: number; touches: number; strength: number }[];
     resistance: { price: number; touches: number; strength: number }[];
+  },
+  // NEW: Structure analysis context
+  structureContext?: {
+    classification: 'likely-pullback' | 'trend-reversal-risk' | 'mixed';
+    priorTrendDirection: 'up' | 'down' | 'sideways';
+    dominantBias: 'pullback' | 'reversal' | 'neutral';
+  },
+  // NEW: Additional indicators for overbought/oversold and squeeze detection
+  oscillators?: {
+    stochK?: number;
+    mfi?: number;
+    historicalVolatility?: number;
+    bollingerBandwidth?: number;
   }
 ): StrategyRecommendation {
   const currentPrice = bars[bars.length - 1].close;
   const atr = volatility.current;
+  const atrPercent = (atr / currentPrice) * 100;
   
   // Find RELEVANT key levels (within 3x ATR of current price)
-  // This prevents using distant historical levels as entry/exit points
   const maxDistanceForRelevance = atr * 3;
   
   const relevantSupports = supportResistance.support.filter(
@@ -1398,16 +1412,53 @@ export function generateStrategyRecommendation(
   const nearestRelevantSupport = relevantSupports[0]?.price || currentPrice - atr * 1.5;
   const nearestRelevantResistance = relevantResistances[0]?.price || currentPrice + atr * 1.5;
   
-  // For reference, also get the absolute nearest levels (for wait scenarios)
-  const absoluteNearestSupport = supportResistance.support[0]?.price || currentPrice - atr * 2;
-  const absoluteNearestResistance = supportResistance.resistance[0]?.price || currentPrice + atr * 2;
+  // ==========================================
+  // SQUEEZE DETECTION (HV > 150% or BB Width > 150%)
+  // ==========================================
+  const isInSqueeze = (oscillators?.historicalVolatility ?? 0) > 150 || 
+                      (oscillators?.bollingerBandwidth ?? 0) > 150;
   
-  // Determine strategy and direction
+  // ==========================================
+  // OVERBOUGHT/OVERSOLD DETECTION
+  // ==========================================
+  const isOverbought = (oscillators?.stochK ?? 50) > 80 || (oscillators?.mfi ?? 50) > 85;
+  const isOversold = (oscillators?.stochK ?? 50) < 20 || (oscillators?.mfi ?? 50) < 15;
+  
+  // ==========================================
+  // VOLATILITY-AWARE STOP MULTIPLIER
+  // ==========================================
+  // ATR ≤ 10%: 1.5x ATR stops
+  // ATR 10-20%: 2x ATR stops
+  // ATR > 20%: Structure-based stops (use support/resistance)
+  let stopMultiplier: number;
+  let useStructureBasedStops = false;
+  
+  if (atrPercent <= 10) {
+    stopMultiplier = 1.5;
+  } else if (atrPercent <= 20) {
+    stopMultiplier = 2.0;
+  } else {
+    stopMultiplier = 2.5; // Will also use structure-based logic
+    useStructureBasedStops = true;
+  }
+  
+  // In squeeze conditions: tighter stops (1x ATR)
+  if (isInSqueeze) {
+    stopMultiplier = 1.0;
+  }
+  
+  // ==========================================
+  // STRATEGY-STRUCTURE ALIGNMENT
+  // ==========================================
   let strategy: string;
   let direction: 'long' | 'short' | 'wait';
   let confidence: number;
   
-  // Stronger criteria for directional trades
+  const structure = structureContext?.classification || 'mixed';
+  const priorTrend = structureContext?.priorTrendDirection || 'sideways';
+  const dominantBias = structureContext?.dominantBias || 'neutral';
+  
+  // Base criteria
   const strongBullish = signalStrength.direction === 'bullish' && 
                         signalStrength.overall >= 55 && 
                         (momentum.strength === 'strong' || momentum.strength === 'moderate');
@@ -1415,84 +1466,182 @@ export function generateStrategyRecommendation(
                         signalStrength.overall >= 55 && 
                         (momentum.strength === 'strong' || momentum.strength === 'moderate');
   
+  // Weak setup - always wait
   if (signalStrength.grade === 'F' || signalStrength.grade === 'D' || signalStrength.overall < 40) {
     strategy = 'No Trade - Weak Setup';
     direction = 'wait';
     confidence = signalStrength.overall;
-  } else if (strongBullish) {
-    if (trend.emaAlignment === 'bullish' && momentum.strength === 'strong') {
-      strategy = 'Trend Following Long';
-      confidence = Math.min(85, signalStrength.overall + 10);
-    } else if (volatility.regime === 'low' || volatility.regime === 'contracting') {
+  }
+  // ===== TREND REVERSAL RISK STRUCTURE =====
+  // Use BREAKOUT entries, not pullbacks
+  else if (structure === 'trend-reversal-risk') {
+    if (priorTrend === 'down' && (strongBullish || dominantBias === 'reversal')) {
+      // Bullish reversal of downtrend - BREAKOUT LONG above resistance
       strategy = 'Breakout Long';
+      direction = 'long';
       confidence = signalStrength.overall;
-    } else {
-      strategy = 'Pullback Long';
-      confidence = Math.max(40, signalStrength.overall - 10);
-    }
-    direction = 'long';
-  } else if (strongBearish) {
-    if (trend.emaAlignment === 'bearish' && momentum.strength === 'strong') {
-      strategy = 'Trend Following Short';
-      confidence = Math.min(85, signalStrength.overall + 10);
-    } else if (volatility.regime === 'low' || volatility.regime === 'contracting') {
+    } else if (priorTrend === 'up' && (strongBearish || dominantBias === 'reversal')) {
+      // Bearish reversal of uptrend - BREAKDOWN SHORT below support
       strategy = 'Breakdown Short';
+      direction = 'short';
       confidence = signalStrength.overall;
-    } else {
-      strategy = 'Rally Short';
+    } else if (strongBullish) {
+      // Bullish momentum but mixed structure
+      strategy = 'Breakout Long';
+      direction = 'long';
       confidence = Math.max(40, signalStrength.overall - 10);
+    } else if (strongBearish) {
+      // Bearish momentum but mixed structure
+      strategy = 'Breakdown Short';
+      direction = 'short';
+      confidence = Math.max(40, signalStrength.overall - 10);
+    } else {
+      // Mixed signals in reversal structure - wait
+      strategy = 'No Clear Edge - Reversal Unconfirmed';
+      direction = 'wait';
+      confidence = Math.min(35, signalStrength.overall);
     }
-    direction = 'short';
-  } else {
-    // Neutral/mixed signals - recommend waiting
-    strategy = 'No Clear Edge - Wait for Confirmation';
-    direction = 'wait';
-    confidence = Math.min(40, signalStrength.overall);
+  }
+  // ===== LIKELY PULLBACK STRUCTURE =====
+  // Use PULLBACK entries with trend
+  else if (structure === 'likely-pullback') {
+    if (priorTrend === 'up' && (strongBullish || momentum.direction === 'bullish')) {
+      // Pullback in uptrend - buy the dip
+      if (trend.emaAlignment === 'bullish' && momentum.strength === 'strong') {
+        strategy = 'Trend Following Long';
+        confidence = Math.min(85, signalStrength.overall + 10);
+      } else {
+        strategy = 'Pullback Long';
+        confidence = Math.max(45, signalStrength.overall - 5);
+      }
+      direction = 'long';
+    } else if (priorTrend === 'down' && (strongBearish || momentum.direction === 'bearish')) {
+      // Rally in downtrend - short the rip
+      if (trend.emaAlignment === 'bearish' && momentum.strength === 'strong') {
+        strategy = 'Trend Following Short';
+        confidence = Math.min(85, signalStrength.overall + 10);
+      } else {
+        strategy = 'Rally Short';
+        confidence = Math.max(45, signalStrength.overall - 5);
+      }
+      direction = 'short';
+    } else if (strongBullish) {
+      strategy = 'Pullback Long';
+      direction = 'long';
+      confidence = Math.max(40, signalStrength.overall - 10);
+    } else if (strongBearish) {
+      strategy = 'Rally Short';
+      direction = 'short';
+      confidence = Math.max(40, signalStrength.overall - 10);
+    } else {
+      strategy = 'No Clear Edge - Wait for Confirmation';
+      direction = 'wait';
+      confidence = Math.min(40, signalStrength.overall);
+    }
+  }
+  // ===== MIXED/UNCLEAR STRUCTURE =====
+  // More cautious approach
+  else {
+    if (strongBullish && trend.emaAlignment === 'bullish') {
+      strategy = 'Trend Following Long';
+      direction = 'long';
+      confidence = Math.max(45, signalStrength.overall - 5);
+    } else if (strongBearish && trend.emaAlignment === 'bearish') {
+      strategy = 'Trend Following Short';
+      direction = 'short';
+      confidence = Math.max(45, signalStrength.overall - 5);
+    } else if (strongBullish) {
+      strategy = 'Breakout Long';
+      direction = 'long';
+      confidence = Math.max(40, signalStrength.overall - 10);
+    } else if (strongBearish) {
+      strategy = 'Breakdown Short';
+      direction = 'short';
+      confidence = Math.max(40, signalStrength.overall - 10);
+    } else {
+      strategy = 'No Clear Edge - Wait for Confirmation';
+      direction = 'wait';
+      confidence = Math.min(40, signalStrength.overall);
+    }
   }
   
-  // Entry calculation - USE REALISTIC LEVELS RELATIVE TO CURRENT PRICE
+  // ==========================================
+  // OVERBOUGHT/OVERSOLD CONFIDENCE ADJUSTMENT
+  // ==========================================
+  // Downgrade confidence by 10% if overbought for longs or oversold for shorts
+  if (direction === 'long' && isOverbought) {
+    confidence = Math.max(30, confidence - 10);
+  } else if (direction === 'short' && isOversold) {
+    confidence = Math.max(30, confidence - 10);
+  }
+  
+  // ==========================================
+  // SQUEEZE STRATEGY OVERRIDE
+  // ==========================================
+  // In squeezes: prefer breakout/market entries with tighter stops
+  if (isInSqueeze && direction !== 'wait') {
+    if (direction === 'long') {
+      strategy = strategy.includes('Pullback') ? 'Breakout Long' : strategy;
+    } else if (direction === 'short') {
+      strategy = strategy.includes('Rally') ? 'Breakdown Short' : strategy;
+    }
+  }
+  
+  // ==========================================
+  // ENTRY CALCULATION - STRUCTURE-AWARE
+  // ==========================================
   let entryType: 'market' | 'limit' | 'breakout' | 'pullback';
   let entryPrice: number;
   const conditions: string[] = [];
   
   if (direction === 'long') {
-    if (strategy.includes('Breakout')) {
-      entryType = 'breakout';
-      // Use relevant resistance or ATR-based level
-      const breakoutLevel = nearestRelevantResistance;
-      entryPrice = Number((breakoutLevel + atr * 0.05).toFixed(2));
-      conditions.push(`Break above $${breakoutLevel.toFixed(2)}`);
-      conditions.push('Requires volume confirmation (Z-score > 1)');
+    if (strategy.includes('Breakout') || strategy.includes('Trend Following')) {
+      // In squeeze or trend-reversal: use breakout/market entries
+      if (isInSqueeze || strategy.includes('Trend Following')) {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market on momentum confirmation');
+        if (isInSqueeze) conditions.push('⚡ Squeeze breakout - expect volatility expansion');
+      } else {
+        entryType = 'breakout';
+        const breakoutLevel = nearestRelevantResistance;
+        entryPrice = Number((breakoutLevel + atr * 0.05).toFixed(2));
+        conditions.push(`Break above $${breakoutLevel.toFixed(2)}`);
+        conditions.push('Requires volume confirmation (Z-score > 1)');
+      }
     } else if (strategy.includes('Pullback')) {
       entryType = 'pullback';
-      // Pullback entry should be 0.5-1.5 ATR below current price, NOT at distant support
       const pullbackLevel = currentPrice - atr * 0.75;
       entryPrice = Number(pullbackLevel.toFixed(2));
       conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
       conditions.push('Enter on bullish reversal candle');
     } else {
-      // Trend Following - market entry
       entryType = 'market';
       entryPrice = currentPrice;
       conditions.push('Enter at market with momentum confirmation');
     }
   } else if (direction === 'short') {
-    if (strategy.includes('Breakdown')) {
-      entryType = 'breakout';
-      // Use relevant support or ATR-based level
-      const breakdownLevel = nearestRelevantSupport;
-      entryPrice = Number((breakdownLevel - atr * 0.05).toFixed(2));
-      conditions.push(`Break below $${breakdownLevel.toFixed(2)}`);
-      conditions.push('Requires volume confirmation (Z-score > 1)');
+    if (strategy.includes('Breakdown') || strategy.includes('Trend Following')) {
+      // In squeeze or trend-reversal: use breakdown/market entries
+      if (isInSqueeze || strategy.includes('Trend Following')) {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market on momentum confirmation');
+        if (isInSqueeze) conditions.push('⚡ Squeeze breakdown - expect volatility expansion');
+      } else {
+        entryType = 'breakout';
+        const breakdownLevel = nearestRelevantSupport;
+        entryPrice = Number((breakdownLevel - atr * 0.05).toFixed(2));
+        conditions.push(`Break below $${breakdownLevel.toFixed(2)}`);
+        conditions.push('Requires volume confirmation (Z-score > 1)');
+      }
     } else if (strategy.includes('Rally')) {
       entryType = 'pullback';
-      // Rally entry should be 0.5-1.5 ATR above current price, NOT at distant resistance
       const rallyLevel = currentPrice + atr * 0.75;
       entryPrice = Number(rallyLevel.toFixed(2));
       conditions.push(`Wait for rally to $${rallyLevel.toFixed(2)} zone`);
       conditions.push('Enter on bearish reversal candle');
     } else {
-      // Trend Following - market entry
       entryType = 'market';
       entryPrice = currentPrice;
       conditions.push('Enter at market with momentum confirmation');
@@ -1500,92 +1649,117 @@ export function generateStrategyRecommendation(
   } else {
     // Wait scenario - show what would trigger a trade
     entryType = 'breakout';
-    entryPrice = currentPrice; // Placeholder
+    entryPrice = currentPrice;
     conditions.push(`LONG: Break above $${nearestRelevantResistance.toFixed(2)} with volume`);
     conditions.push(`SHORT: Break below $${nearestRelevantSupport.toFixed(2)} with volume`);
   }
   
-  // Stop loss calculation - use ATR-based stops for realistic risk management
+  // ==========================================
+  // STOP LOSS - VOLATILITY-AWARE CALCULATION
+  // ==========================================
   let stopPrice: number;
   let stopReason: string;
   
   if (direction === 'long') {
-    // Stop 1.5x ATR below entry price
-    stopPrice = entryPrice - atr * 1.5;
+    // Use volatility-aware stop multiplier
+    stopPrice = entryPrice - atr * stopMultiplier;
     
-    // If there's a relevant support level nearby, use it as a reference
-    if (relevantSupports.length > 0 && nearestRelevantSupport < entryPrice) {
-      // Place stop just below the relevant support level
+    // For high volatility (ATR > 20%): also check structure-based stops
+    if (useStructureBasedStops && relevantSupports.length > 0) {
       const supportBasedStop = nearestRelevantSupport - atr * 0.2;
-      // Use the tighter of the two stops (but not too tight)
-      if (supportBasedStop > entryPrice - atr * 2 && supportBasedStop < stopPrice) {
+      // Use structure stop if it provides better risk:reward
+      if (supportBasedStop > entryPrice - atr * 3 && supportBasedStop > stopPrice) {
         stopPrice = supportBasedStop;
+        stopReason = `Below support $${nearestRelevantSupport.toFixed(2)}`;
+      } else {
+        stopReason = `${stopMultiplier}x ATR (${atrPercent.toFixed(1)}% volatility)`;
       }
+    } else {
+      stopReason = `${stopMultiplier}x ATR below entry`;
     }
     
-    stopReason = `${atr.toFixed(2)} ATR below entry`;
+    // In squeeze: ensure minimum 2:1 R:R on T1
+    if (isInSqueeze) {
+      stopReason = `1x ATR (squeeze mode)`;
+    }
   } else if (direction === 'short') {
-    // Stop 1.5x ATR above entry price
-    stopPrice = entryPrice + atr * 1.5;
+    // Use volatility-aware stop multiplier
+    stopPrice = entryPrice + atr * stopMultiplier;
     
-    // If there's a relevant resistance level nearby, use it as a reference
-    if (relevantResistances.length > 0 && nearestRelevantResistance > entryPrice) {
-      // Place stop just above the relevant resistance level
+    // For high volatility: also check structure-based stops
+    if (useStructureBasedStops && relevantResistances.length > 0) {
       const resistanceBasedStop = nearestRelevantResistance + atr * 0.2;
-      // Use the tighter of the two stops (but not too tight)
-      if (resistanceBasedStop < entryPrice + atr * 2 && resistanceBasedStop > stopPrice) {
+      if (resistanceBasedStop < entryPrice + atr * 3 && resistanceBasedStop < stopPrice) {
         stopPrice = resistanceBasedStop;
+        stopReason = `Above resistance $${nearestRelevantResistance.toFixed(2)}`;
+      } else {
+        stopReason = `${stopMultiplier}x ATR (${atrPercent.toFixed(1)}% volatility)`;
       }
+    } else {
+      stopReason = `${stopMultiplier}x ATR above entry`;
     }
     
-    stopReason = `${atr.toFixed(2)} ATR above entry`;
+    if (isInSqueeze) {
+      stopReason = `1x ATR (squeeze mode)`;
+    }
   } else {
-    // Wait scenario - show relevant support level for reference
     stopPrice = nearestRelevantSupport;
     stopReason = 'No trade - reference level only';
   }
   
   const riskPercent = Math.abs((entryPrice - stopPrice) / entryPrice) * 100;
   
-  // Target calculations - only for directional trades
+  // ==========================================
+  // TARGET CALCULATIONS - SQUEEZE-AWARE
+  // ==========================================
   let targets: StrategyRecommendation['targets'];
+  
+  // In squeeze: minimum 2:1 R:R on T1
+  const t1Multiplier = isInSqueeze ? 2.0 : 1.5;
+  const t2Multiplier = isInSqueeze ? 3.5 : 2.5;
+  const t3Multiplier = isInSqueeze ? 5.0 : 4.0;
+  
+  // Adjust probabilities for squeeze (higher momentum = higher probability of hitting targets)
+  const t1Prob = isInSqueeze ? 70 : 65;
+  const t2Prob = isInSqueeze ? 50 : 45;
+  const t3Prob = isInSqueeze ? 30 : 25;
   
   if (direction === 'long') {
     const riskAmount = entryPrice - stopPrice;
     targets = {
       t1: {
-        price: Number((entryPrice + riskAmount * 1.5).toFixed(2)),
-        rr: 1.5,
-        probability: 65
+        price: Number((entryPrice + riskAmount * t1Multiplier).toFixed(2)),
+        rr: t1Multiplier,
+        probability: t1Prob
       },
       t2: {
-        price: Number((entryPrice + riskAmount * 2.5).toFixed(2)),
-        rr: 2.5,
-        probability: 45
+        price: Number((entryPrice + riskAmount * t2Multiplier).toFixed(2)),
+        rr: t2Multiplier,
+        probability: t2Prob
       },
       t3: {
-        price: Number((entryPrice + riskAmount * 4).toFixed(2)),
-        rr: 4,
-        probability: 25
+        price: Number((entryPrice + riskAmount * t3Multiplier).toFixed(2)),
+        rr: t3Multiplier,
+        probability: t3Prob
       }
     };
   } else if (direction === 'short') {
     const riskAmount = stopPrice - entryPrice;
     targets = {
       t1: {
-        price: Number((entryPrice - riskAmount * 1.5).toFixed(2)),
-        rr: 1.5,
-        probability: 65
+        price: Number((entryPrice - riskAmount * t1Multiplier).toFixed(2)),
+        rr: t1Multiplier,
+        probability: t1Prob
       },
       t2: {
-        price: Number((entryPrice - riskAmount * 2.5).toFixed(2)),
-        rr: 2.5,
-        probability: 45
+        price: Number((entryPrice - riskAmount * t2Multiplier).toFixed(2)),
+        rr: t2Multiplier,
+        probability: t2Prob
       },
       t3: {
-        price: Number((entryPrice - riskAmount * 4).toFixed(2)),
-        rr: 4,
-        probability: 25
+        price: Number((entryPrice - riskAmount * t3Multiplier).toFixed(2)),
+        rr: t3Multiplier,
+        probability: t3Prob
       }
     };
   } else {
@@ -1619,12 +1793,34 @@ export function generateStrategyRecommendation(
     invalidation = 'Wait for clear directional breakout before taking a position';
   }
   
-  // Notes
+  // Notes - now structure and volatility aware
   const notes: string[] = [];
   notes.push(`Signal: ${signalStrength.grade} (${signalStrength.overall}/100)`);
+  notes.push(`Structure: ${structure} (${dominantBias} bias)`);
   notes.push(`Momentum: ${momentum.direction} (${momentum.strength})`);
-  notes.push(`Trend: ${trend.emaAlignment} EMAs`);
-  notes.push(`Volatility: ${volatility.regime}`);
+  notes.push(`Volatility: ${volatility.regime} (ATR: ${atrPercent.toFixed(1)}%)`);
+  
+  // Structure-specific notes
+  if (structure === 'trend-reversal-risk') {
+    notes.push(`⚡ Reversal setup - use breakout entries`);
+  } else if (structure === 'likely-pullback') {
+    notes.push(`📈 Pullback in ${priorTrend}trend - trade with trend`);
+  }
+  
+  // Volatility regime notes
+  if (isInSqueeze) {
+    notes.push(`🔥 SQUEEZE: HV/BB high - expect volatility expansion`);
+    notes.push(`Tight 1x ATR stops, min 2:1 R:R required`);
+  } else if (atrPercent > 20) {
+    notes.push(`⚠️ High volatility - structure-based stops used`);
+  }
+  
+  // Overbought/Oversold warnings
+  if (isOverbought && direction === 'long') {
+    notes.push(`⚠️ Overbought conditions - confidence reduced`);
+  } else if (isOversold && direction === 'short') {
+    notes.push(`⚠️ Oversold conditions - confidence reduced`);
+  }
   
   if (direction === 'wait') {
     notes.push(`Trading range: $${nearestRelevantSupport.toFixed(2)} - $${nearestRelevantResistance.toFixed(2)}`);

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AnalysisReportDisplay from '../../components/analysis-report-display';
 import StrategyAnalysisReportDisplay from '../../components/strategy-analysis-report-display';
+import TechnicalAnalysisReportDisplay from '../../components/technical-analysis-report-display';
 import type { AnalysisReport } from '../../api/analyze/route';
 
 interface SavedReport {
@@ -431,6 +432,8 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         <AnalysisReportDisplay report={report.reportData as AnalysisReport} />
       ) : report.type === 'strategy-analysis' ? (
         <StrategyAnalysisReportDisplay report={report.reportData} />
+      ) : report.type === 'technical-analysis' ? (
+        <TechnicalAnalysisReportDisplay report={report.reportData} />
       ) : (
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
           <h3 className="text-lg font-bold text-white mb-4">Report Data</h3>
