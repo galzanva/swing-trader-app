@@ -41,12 +41,14 @@ import {
   calculatePriceProjections,
   calculateSignalStrength,
   generateStrategyRecommendation,
+  analyzeStructure,
   MomentumAssessment,
   TrendAssessment,
   VolatilityAssessment,
   PriceProjection,
   SignalStrength,
-  StrategyRecommendation
+  StrategyRecommendation,
+  StructureAnalysis
 } from './probability-engine';
 
 /**
@@ -182,6 +184,9 @@ export interface TechnicalAnalysisReport {
     trend: TrendAssessment;
     volatility: VolatilityAssessment;
   };
+  
+  // Structure Analysis (pullback vs reversal)
+  structureAnalysis: StructureAnalysis;
   
   // Projections
   projections: PriceProjection;
@@ -379,6 +384,19 @@ export function runTechnicalAnalysis(
   );
   
   // =====================
+  // Structure Analysis (Pullback vs Reversal)
+  // =====================
+  
+  const structureAnalysis = analyzeStructure(
+    bars,
+    momentumAssessment,
+    trendAssessment,
+    volatilityAssessment,
+    nearTermSupport,
+    nearTermResistance
+  );
+  
+  // =====================
   // Compile Report
   // =====================
   
@@ -471,6 +489,8 @@ export function runTechnicalAnalysis(
       volatility: volatilityAssessment
     },
     
+    structureAnalysis,
+    
     projections,
     signalStrength,
     recommendation
@@ -481,7 +501,7 @@ export function runTechnicalAnalysis(
  * Generate AI summary prompt for the technical analysis
  */
 export function generateAISummaryPrompt(report: TechnicalAnalysisReport): string {
-  const { indicators, assessments, projections, signalStrength, recommendation, levels, squeeze } = report;
+  const { indicators, assessments, projections, signalStrength, recommendation, levels, squeeze, structureAnalysis } = report;
   const isWait = recommendation.direction === 'wait';
   
   return `You are a professional technical analyst. Analyze this PURELY TECHNICAL data and provide a concise, CONSISTENT, actionable summary.
@@ -542,6 +562,15 @@ Direction: ${assessments.momentum.direction}
 Key Factors: ${assessments.momentum.keyFactors.join(', ')}
 ${assessments.momentum.divergences.length > 0 ? `⚠️ Divergences: ${assessments.momentum.divergences.map(d => d.description).join('; ')}` : ''}
 
+=== PRICE ACTION & STRUCTURE ===
+Classification: ${structureAnalysis.classification.toUpperCase().replace('-', ' ')}
+Confidence: ${structureAnalysis.confidence}%
+Prior Trend: ${structureAnalysis.priorTrendDirection}
+Structure Intact: ${structureAnalysis.structureIntact ? 'YES' : 'NO'}
+Pullback Signals: ${structureAnalysis.pullbackSignals.length > 0 ? structureAnalysis.pullbackSignals.join('; ') : 'None'}
+Reversal Signals: ${structureAnalysis.reversalSignals.length > 0 ? structureAnalysis.reversalSignals.join('; ') : 'None'}
+Summary: ${structureAnalysis.summary}
+
 === PRICE PROJECTIONS ===
 Most Probable: ${projections.mostProbable.direction.toUpperCase()} to $${projections.mostProbable.priceRange.low.toFixed(2)}-$${projections.mostProbable.priceRange.high.toFixed(2)} (${projections.mostProbable.probability}% probability, ${projections.mostProbable.timeframe})
 
@@ -570,8 +599,9 @@ CRITICAL RULES:
 1. Your summary MUST be CONSISTENT with the recommendation direction (${recommendation.direction.toUpperCase()})
 2. ${isWait ? 'Do NOT suggest any specific entry points - the recommendation is to WAIT' : 'Entry/stop/target prices must MATCH the data above exactly'}
 3. Do NOT contradict the ADX reading (${indicators.trend.adx.toFixed(1)}) - ${indicators.trend.adx < 20 ? 'this indicates weak/no trend' : indicators.trend.adx < 40 ? 'this indicates moderate trend' : 'this indicates strong trend'}
-4. Focus ONLY on technical factors - no fundamentals, no news
-5. Use ACTUAL numbers from the data provided
-6. Probability estimates should be expressed as ranges (e.g., "~60-65%"), not precise values`;
+4. Use the STRUCTURE ANALYSIS (${structureAnalysis.classification}) to contextualize: ${structureAnalysis.classification === 'likely-pullback' ? 'frame as healthy correction in ongoing trend' : structureAnalysis.classification === 'trend-reversal-risk' ? 'warn about potential trend change' : 'acknowledge mixed signals'}
+5. Focus ONLY on technical factors - no fundamentals, no news
+6. Use ACTUAL numbers from the data provided
+7. Probability estimates should be expressed as ranges (e.g., "~60-65%"), not precise values`;
 }
 

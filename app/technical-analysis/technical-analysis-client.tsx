@@ -665,7 +665,196 @@ export default function TechnicalAnalysisClient() {
             )}
           </div>
 
-          {/* ==================== SECTION 5: Price Projections ==================== */}
+          {/* ==================== SECTION 5: Price Action & Structure ==================== */}
+          {report.structureAnalysis && (
+            <div className={`backdrop-blur-lg rounded-2xl p-6 border ${
+              report.structureAnalysis.classification === 'likely-pullback' 
+                ? 'bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 border-emerald-500/30' 
+                : report.structureAnalysis.classification === 'trend-reversal-risk'
+                ? 'bg-gradient-to-br from-red-900/20 to-orange-900/10 border-red-500/30'
+                : 'bg-white/10 border-white/20'
+            }`}>
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <span className="text-xl">📐</span> Price Action & Structure
+              </h3>
+              
+              {/* Classification Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className={`px-4 py-2 rounded-xl font-bold text-lg ${
+                    report.structureAnalysis.classification === 'likely-pullback' 
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                      : report.structureAnalysis.classification === 'trend-reversal-risk'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                  }`}>
+                    {report.structureAnalysis.classification === 'likely-pullback' 
+                      ? '✓ Likely Pullback' 
+                      : report.structureAnalysis.classification === 'trend-reversal-risk'
+                      ? '⚠️ Trend Reversal Risk'
+                      : '◐ Mixed / No Clear Edge'}
+                  </div>
+                  <div className="text-sm text-slate-400">
+                    Prior Trend: <span className="font-medium text-white capitalize">{report.structureAnalysis.priorTrendDirection}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-white">{report.structureAnalysis.confidence}%</div>
+                  <div className="text-xs text-slate-400">Confidence</div>
+                </div>
+              </div>
+              
+              {/* Summary */}
+              <div className="p-4 rounded-xl bg-white/5 mb-6">
+                <p className="text-base text-slate-200 leading-relaxed">{report.structureAnalysis.summary}</p>
+              </div>
+              
+              {/* Signals Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Pullback Signals */}
+                <div className="bg-emerald-900/10 rounded-xl p-4 border border-emerald-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-emerald-400 text-lg">✓</span>
+                    <h4 className="text-sm font-semibold text-emerald-400">Pullback Confirmation Signals</h4>
+                  </div>
+                  <ul className="space-y-2">
+                    {report.structureAnalysis.pullbackSignals.length > 0 ? (
+                      report.structureAnalysis.pullbackSignals.map((signal, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                          <span className="text-emerald-500 mt-0.5">•</span>
+                          <span>{signal}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500 italic">No pullback signals detected</li>
+                    )}
+                  </ul>
+                </div>
+                
+                {/* Reversal Signals */}
+                <div className="bg-red-900/10 rounded-xl p-4 border border-red-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-red-400 text-lg">⚠</span>
+                    <h4 className="text-sm font-semibold text-red-400">Trend Reversal Signals</h4>
+                  </div>
+                  <ul className="space-y-2">
+                    {report.structureAnalysis.reversalSignals.length > 0 ? (
+                      report.structureAnalysis.reversalSignals.map((signal, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                          <span className="text-red-500 mt-0.5">•</span>
+                          <span>{signal}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500 italic">No reversal signals detected</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+              
+              {/* Detected Candlestick Patterns with Outcome */}
+              {report.structureAnalysis.detectedPatterns && report.structureAnalysis.detectedPatterns.length > 0 && (
+                <div className="mt-6 pt-4 border-t border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🕯️</span>
+                    <h4 className="text-sm font-semibold text-slate-300">Detected Candlestick Patterns</h4>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {report.structureAnalysis.detectedPatterns.map((pattern, i) => {
+                      // Determine styling based on outcome
+                      const isFailed = pattern.outcome === 'failed';
+                      const isConfirmed = pattern.outcome === 'confirmed';
+                      
+                      // Failed patterns flip the color interpretation
+                      let bgColor, borderColor, textColor, iconColor;
+                      if (isFailed) {
+                        // Failed pattern = opposite interpretation
+                        bgColor = pattern.type === 'bearish' 
+                          ? 'bg-emerald-900/20' // Failed bearish = bullish
+                          : 'bg-red-900/20'; // Failed bullish = bearish
+                        borderColor = pattern.type === 'bearish'
+                          ? 'border-emerald-500/30'
+                          : 'border-red-500/30';
+                        textColor = pattern.type === 'bearish'
+                          ? 'text-emerald-300'
+                          : 'text-red-300';
+                        iconColor = 'text-slate-400';
+                      } else {
+                        bgColor = pattern.type === 'bullish' 
+                          ? 'bg-emerald-900/20'
+                          : pattern.type === 'bearish'
+                          ? 'bg-red-900/20'
+                          : 'bg-slate-700/30';
+                        borderColor = pattern.type === 'bullish'
+                          ? 'border-emerald-500/30'
+                          : pattern.type === 'bearish'
+                          ? 'border-red-500/30'
+                          : 'border-slate-500/30';
+                        textColor = pattern.type === 'bullish'
+                          ? 'text-emerald-300'
+                          : pattern.type === 'bearish'
+                          ? 'text-red-300'
+                          : 'text-slate-300';
+                        iconColor = pattern.type === 'bullish' 
+                          ? 'text-emerald-400' 
+                          : pattern.type === 'bearish' 
+                          ? 'text-red-400' 
+                          : 'text-slate-400';
+                      }
+                      
+                      return (
+                        <div 
+                          key={i} 
+                          className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${bgColor} border ${borderColor} ${textColor}`}
+                        >
+                          <span className={`text-xs font-bold ${iconColor}`}>
+                            {isFailed ? '✗' : isConfirmed ? '✓' : pattern.type === 'bullish' ? '▲' : pattern.type === 'bearish' ? '▼' : '◆'}
+                          </span>
+                          <div>
+                            <div className="font-medium flex items-center gap-1">
+                              {isFailed && <span className="text-xs text-slate-400 line-through">{pattern.name}</span>}
+                              {isFailed && <span className="text-xs">FAILED</span>}
+                              {!isFailed && pattern.name}
+                              {isConfirmed && <span className="text-xs ml-1 opacity-70">✓</span>}
+                            </div>
+                            <div className="text-xs opacity-70">
+                              {pattern.location} • {pattern.outcome !== 'active' ? pattern.outcomeDescription : `${pattern.confidence}%`}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              
+              {/* Structure Status */}
+              <div className="mt-4 flex items-center gap-4 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${report.structureAnalysis.structureIntact ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                  <span className="text-sm text-slate-400">
+                    Structure: <span className={`font-medium ${report.structureAnalysis.structureIntact ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {report.structureAnalysis.structureIntact ? 'Intact' : 'Broken'}
+                    </span>
+                  </span>
+                </div>
+                <div className="text-sm text-slate-500">|</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">
+                    Dominant Bias: <span className={`font-medium ${
+                      report.structureAnalysis.dominantBias === 'pullback' ? 'text-emerald-400' :
+                      report.structureAnalysis.dominantBias === 'reversal' ? 'text-red-400' : 'text-yellow-400'
+                    }`}>
+                      {report.structureAnalysis.dominantBias === 'pullback' ? 'Pullback' :
+                       report.structureAnalysis.dominantBias === 'reversal' ? 'Reversal' : 'Neutral'}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== SECTION 6: Price Projections ==================== */}
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <span className="text-xl">🎯</span> Price Projections
