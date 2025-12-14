@@ -534,44 +534,72 @@ export default function TechnicalAnalysisClient() {
               <span className="text-xl">📍</span> Key Levels
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Support */}
-              <div>
-                <h4 className="text-base font-medium text-emerald-400 mb-3">Support Levels</h4>
-                <div className="space-y-2">
-                  {report.levels.supportResistance.support.length > 0 ? (
-                    report.levels.supportResistance.support.slice(0, 4).map((level, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-emerald-900/20 border border-emerald-500/20">
-                        <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
-                        <span className="text-sm text-slate-400">{level.touches} touches • {level.strength}% strength</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-slate-500 italic p-3">No strong support levels identified</div>
-                  )}
-                </div>
+            {/* Near-Term Trading Levels (Primary) */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <h4 className="text-base font-semibold text-cyan-400">⚡ Near-Term Trading Levels</h4>
+                <span className="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">within 3x ATR</span>
               </div>
               
-              {/* Resistance */}
-              <div>
-                <h4 className="text-base font-medium text-red-400 mb-3">Resistance Levels</h4>
-                <div className="space-y-2">
-                  {report.levels.supportResistance.resistance.length > 0 ? (
-                    report.levels.supportResistance.resistance.slice(0, 4).map((level, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-red-900/20 border border-red-500/20">
-                        <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
-                        <span className="text-sm text-slate-400">{level.touches} touches • {level.strength}% strength</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-slate-500 italic p-3">No strong resistance levels identified</div>
-                  )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Near-Term Support */}
+                <div className="bg-emerald-900/10 rounded-xl p-4 border border-emerald-500/20">
+                  <div className="text-sm text-emerald-400 font-medium mb-2">Support</div>
+                  <div className="space-y-2">
+                    {report.levels.nearTerm?.support && report.levels.nearTerm.support.length > 0 ? (
+                      report.levels.nearTerm.support.slice(0, 3).map((level, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
+                          <span className="text-xs text-slate-400">{level.touches} touches</span>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        {/* Show ATR-based levels when no near-term swing supports */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.support1?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr).toFixed(2)}</span>
+                          <span className="text-xs text-slate-500">1x ATR</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.support2?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
+                          <span className="text-xs text-slate-500">1.5x ATR</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Near-Term Resistance */}
+                <div className="bg-red-900/10 rounded-xl p-4 border border-red-500/20">
+                  <div className="text-sm text-red-400 font-medium mb-2">Resistance</div>
+                  <div className="space-y-2">
+                    {report.levels.nearTerm?.resistance && report.levels.nearTerm.resistance.length > 0 ? (
+                      report.levels.nearTerm.resistance.slice(0, 3).map((level, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
+                          <span className="text-xs text-slate-400">{level.touches} touches</span>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        {/* Show ATR-based levels when no near-term swing resistances */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.resistance1?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr).toFixed(2)}</span>
+                          <span className="text-xs text-slate-500">1x ATR</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.resistance2?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
+                          <span className="text-xs text-slate-500">1.5x ATR</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
             
             {/* Pivot Points */}
-            <div className="mt-6 pt-6 border-t border-white/10">
+            <div className="mb-6 pb-6 border-b border-white/10">
               <h4 className="text-base font-medium text-slate-300 mb-3">Pivot Points</h4>
               <div className="grid grid-cols-7 gap-2">
                 {[
@@ -590,6 +618,51 @@ export default function TechnicalAnalysisClient() {
                 ))}
               </div>
             </div>
+            
+            {/* Historical Reference Levels (Secondary) */}
+            {((report.levels.historical?.support && report.levels.historical.support.length > 0) || 
+              (report.levels.historical?.resistance && report.levels.historical.resistance.length > 0)) && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <h4 className="text-base font-medium text-slate-500">📚 Historical Reference Levels</h4>
+                  <span className="text-xs text-slate-600 bg-slate-800/30 px-2 py-0.5 rounded">distant - reference only</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-70">
+                  {/* Historical Support */}
+                  <div className="rounded-lg p-3 bg-slate-800/30">
+                    <div className="text-xs text-slate-500 mb-2">Major Historical Support</div>
+                    <div className="flex flex-wrap gap-2">
+                      {report.levels.historical?.support && report.levels.historical.support.length > 0 ? (
+                        report.levels.historical.support.slice(0, 4).map((level, i) => (
+                          <span key={i} className="text-sm font-mono text-slate-400 bg-slate-700/30 px-2 py-1 rounded">
+                            ${level.price.toFixed(2)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-600 italic">None</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Historical Resistance */}
+                  <div className="rounded-lg p-3 bg-slate-800/30">
+                    <div className="text-xs text-slate-500 mb-2">Major Historical Resistance</div>
+                    <div className="flex flex-wrap gap-2">
+                      {report.levels.historical?.resistance && report.levels.historical.resistance.length > 0 ? (
+                        report.levels.historical.resistance.slice(0, 4).map((level, i) => (
+                          <span key={i} className="text-sm font-mono text-slate-400 bg-slate-700/30 px-2 py-1 rounded">
+                            ${level.price.toFixed(2)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-600 italic">None</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ==================== SECTION 5: Price Projections ==================== */}

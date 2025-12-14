@@ -148,6 +148,23 @@ export interface TechnicalAnalysisReport {
       support: { price: number; touches: number; strength: number }[];
       resistance: { price: number; touches: number; strength: number }[];
     };
+    // Categorized levels for display
+    nearTerm: {
+      support: { price: number; touches: number; strength: number }[];
+      resistance: { price: number; touches: number; strength: number }[];
+    };
+    historical: {
+      support: { price: number; touches: number; strength: number }[];
+      resistance: { price: number; touches: number; strength: number }[];
+    };
+    atrBased: {
+      support1: number;
+      support2: number;
+      support3: number;
+      resistance1: number;
+      resistance2: number;
+      resistance3: number;
+    };
   };
   
   // Squeeze Detection
@@ -306,6 +323,32 @@ export function runTechnicalAnalysis(
   const fibonacci = calculateFibonacciLevels(bars);
   const supportResistance = findSwingLevels(bars);
   
+  // Categorize support/resistance into near-term (actionable) vs historical (reference)
+  const maxNearTermDistance = atr * 3; // Levels within 3x ATR are considered near-term
+  
+  const nearTermSupport = supportResistance.support.filter(
+    s => currentPrice - s.price <= maxNearTermDistance && s.price < currentPrice
+  );
+  const nearTermResistance = supportResistance.resistance.filter(
+    r => r.price - currentPrice <= maxNearTermDistance && r.price > currentPrice
+  );
+  const historicalSupport = supportResistance.support.filter(
+    s => currentPrice - s.price > maxNearTermDistance
+  );
+  const historicalResistance = supportResistance.resistance.filter(
+    r => r.price - currentPrice > maxNearTermDistance
+  );
+  
+  // Add ATR-based dynamic levels for trading
+  const atrBasedLevels = {
+    support1: Number((currentPrice - atr).toFixed(2)),
+    support2: Number((currentPrice - atr * 1.5).toFixed(2)),
+    support3: Number((currentPrice - atr * 2).toFixed(2)),
+    resistance1: Number((currentPrice + atr).toFixed(2)),
+    resistance2: Number((currentPrice + atr * 1.5).toFixed(2)),
+    resistance3: Number((currentPrice + atr * 2).toFixed(2))
+  };
+  
   // =====================
   // Squeeze Detection
   // =====================
@@ -407,7 +450,17 @@ export function runTechnicalAnalysis(
     levels: {
       pivotPoints,
       fibonacci,
-      supportResistance
+      supportResistance,
+      // Categorized levels for clearer display
+      nearTerm: {
+        support: nearTermSupport,
+        resistance: nearTermResistance
+      },
+      historical: {
+        support: historicalSupport,
+        resistance: historicalResistance
+      },
+      atrBased: atrBasedLevels
     },
     
     squeeze,

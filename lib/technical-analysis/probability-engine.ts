@@ -620,9 +620,24 @@ export function generateStrategyRecommendation(
   const currentPrice = bars[bars.length - 1].close;
   const atr = volatility.current;
   
-  // Get key levels
-  const nearestSupport = supportResistance.support[0]?.price || currentPrice - atr * 2;
-  const nearestResistance = supportResistance.resistance[0]?.price || currentPrice + atr * 2;
+  // Find RELEVANT key levels (within 3x ATR of current price)
+  // This prevents using distant historical levels as entry/exit points
+  const maxDistanceForRelevance = atr * 3;
+  
+  const relevantSupports = supportResistance.support.filter(
+    s => currentPrice - s.price <= maxDistanceForRelevance && s.price < currentPrice
+  );
+  const relevantResistances = supportResistance.resistance.filter(
+    r => r.price - currentPrice <= maxDistanceForRelevance && r.price > currentPrice
+  );
+  
+  // Use relevant levels or ATR-based defaults
+  const nearestRelevantSupport = relevantSupports[0]?.price || currentPrice - atr * 1.5;
+  const nearestRelevantResistance = relevantResistances[0]?.price || currentPrice + atr * 1.5;
+  
+  // For reference, also get the absolute nearest levels (for wait scenarios)
+  const absoluteNearestSupport = supportResistance.support[0]?.price || currentPrice - atr * 2;
+  const absoluteNearestResistance = supportResistance.resistance[0]?.price || currentPrice + atr * 2;
   
   // Determine strategy and direction
   let strategy: string;
@@ -672,7 +687,7 @@ export function generateStrategyRecommendation(
     confidence = Math.min(40, signalStrength.overall);
   }
   
-  // Entry calculation
+  // Entry calculation - USE REALISTIC LEVELS RELATIVE TO CURRENT PRICE
   let entryType: 'market' | 'limit' | 'breakout' | 'pullback';
   let entryPrice: number;
   const conditions: string[] = [];
@@ -680,73 +695,91 @@ export function generateStrategyRecommendation(
   if (direction === 'long') {
     if (strategy.includes('Breakout')) {
       entryType = 'breakout';
-      entryPrice = Number((nearestResistance + atr * 0.05).toFixed(2));
-      conditions.push(`Break above resistance at $${nearestResistance.toFixed(2)}`);
+      // Use relevant resistance or ATR-based level
+      const breakoutLevel = nearestRelevantResistance;
+      entryPrice = Number((breakoutLevel + atr * 0.05).toFixed(2));
+      conditions.push(`Break above $${breakoutLevel.toFixed(2)}`);
       conditions.push('Requires volume confirmation (Z-score > 1)');
     } else if (strategy.includes('Pullback')) {
       entryType = 'pullback';
-      entryPrice = Number((nearestSupport + atr * 0.1).toFixed(2));
-      conditions.push(`Wait for pullback to $${nearestSupport.toFixed(2)} zone`);
+      // Pullback entry should be 0.5-1.5 ATR below current price, NOT at distant support
+      const pullbackLevel = currentPrice - atr * 0.75;
+      entryPrice = Number(pullbackLevel.toFixed(2));
+      conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
       conditions.push('Enter on bullish reversal candle');
     } else {
+      // Trend Following - market entry
       entryType = 'market';
       entryPrice = currentPrice;
-      conditions.push('Enter at market with tight stop');
+      conditions.push('Enter at market with momentum confirmation');
     }
   } else if (direction === 'short') {
     if (strategy.includes('Breakdown')) {
       entryType = 'breakout';
-      entryPrice = Number((nearestSupport - atr * 0.05).toFixed(2));
-      conditions.push(`Break below support at $${nearestSupport.toFixed(2)}`);
+      // Use relevant support or ATR-based level
+      const breakdownLevel = nearestRelevantSupport;
+      entryPrice = Number((breakdownLevel - atr * 0.05).toFixed(2));
+      conditions.push(`Break below $${breakdownLevel.toFixed(2)}`);
       conditions.push('Requires volume confirmation (Z-score > 1)');
     } else if (strategy.includes('Rally')) {
       entryType = 'pullback';
-      entryPrice = Number((nearestResistance - atr * 0.1).toFixed(2));
-      conditions.push(`Wait for rally to $${nearestResistance.toFixed(2)} zone`);
+      // Rally entry should be 0.5-1.5 ATR above current price, NOT at distant resistance
+      const rallyLevel = currentPrice + atr * 0.75;
+      entryPrice = Number(rallyLevel.toFixed(2));
+      conditions.push(`Wait for rally to $${rallyLevel.toFixed(2)} zone`);
       conditions.push('Enter on bearish reversal candle');
     } else {
+      // Trend Following - market entry
       entryType = 'market';
       entryPrice = currentPrice;
-      conditions.push('Enter at market with tight stop');
+      conditions.push('Enter at market with momentum confirmation');
     }
   } else {
     // Wait scenario - show what would trigger a trade
     entryType = 'breakout';
     entryPrice = currentPrice; // Placeholder
-    conditions.push(`LONG: Break above $${nearestResistance.toFixed(2)} with volume`);
-    conditions.push(`SHORT: Break below $${nearestSupport.toFixed(2)} with volume`);
+    conditions.push(`LONG: Break above $${nearestRelevantResistance.toFixed(2)} with volume`);
+    conditions.push(`SHORT: Break below $${nearestRelevantSupport.toFixed(2)} with volume`);
   }
   
-  // Stop loss calculation
+  // Stop loss calculation - use ATR-based stops for realistic risk management
   let stopPrice: number;
   let stopReason: string;
   
   if (direction === 'long') {
-    // Stop below entry by 1.5x ATR or below nearest support
-    stopPrice = Math.max(
-      entryPrice - atr * 1.5,
-      nearestSupport - atr * 0.2
-    );
-    // Ensure stop is below entry
-    if (stopPrice >= entryPrice) {
-      stopPrice = entryPrice - atr * 1.5;
+    // Stop 1.5x ATR below entry price
+    stopPrice = entryPrice - atr * 1.5;
+    
+    // If there's a relevant support level nearby, use it as a reference
+    if (relevantSupports.length > 0 && nearestRelevantSupport < entryPrice) {
+      // Place stop just below the relevant support level
+      const supportBasedStop = nearestRelevantSupport - atr * 0.2;
+      // Use the tighter of the two stops (but not too tight)
+      if (supportBasedStop > entryPrice - atr * 2 && supportBasedStop < stopPrice) {
+        stopPrice = supportBasedStop;
+      }
     }
-    stopReason = `Below support with ATR buffer`;
+    
+    stopReason = `${atr.toFixed(2)} ATR below entry`;
   } else if (direction === 'short') {
-    // Stop above entry by 1.5x ATR or above nearest resistance
-    stopPrice = Math.min(
-      entryPrice + atr * 1.5,
-      nearestResistance + atr * 0.2
-    );
-    // Ensure stop is above entry
-    if (stopPrice <= entryPrice) {
-      stopPrice = entryPrice + atr * 1.5;
+    // Stop 1.5x ATR above entry price
+    stopPrice = entryPrice + atr * 1.5;
+    
+    // If there's a relevant resistance level nearby, use it as a reference
+    if (relevantResistances.length > 0 && nearestRelevantResistance > entryPrice) {
+      // Place stop just above the relevant resistance level
+      const resistanceBasedStop = nearestRelevantResistance + atr * 0.2;
+      // Use the tighter of the two stops (but not too tight)
+      if (resistanceBasedStop < entryPrice + atr * 2 && resistanceBasedStop > stopPrice) {
+        stopPrice = resistanceBasedStop;
+      }
     }
-    stopReason = `Above resistance with ATR buffer`;
+    
+    stopReason = `${atr.toFixed(2)} ATR above entry`;
   } else {
-    // Wait scenario - no real stop
-    stopPrice = nearestSupport;
-    stopReason = 'No trade - showing nearest support level';
+    // Wait scenario - show relevant support level for reference
+    stopPrice = nearestRelevantSupport;
+    stopReason = 'No trade - reference level only';
   }
   
   const riskPercent = Math.abs((entryPrice - stopPrice) / entryPrice) * 100;
@@ -793,21 +826,20 @@ export function generateStrategyRecommendation(
       }
     };
   } else {
-    // Wait scenario - show potential breakout targets for reference
-    const breakoutRange = nearestResistance - nearestSupport;
+    // Wait scenario - show relevant key levels for reference
     targets = {
       t1: {
-        price: Number(nearestResistance.toFixed(2)),
+        price: Number(nearestRelevantResistance.toFixed(2)),
         rr: 0,
         probability: 0
       },
       t2: {
-        price: Number((nearestResistance + breakoutRange * 0.5).toFixed(2)),
+        price: Number((nearestRelevantResistance + atr).toFixed(2)),
         rr: 0,
         probability: 0
       },
       t3: {
-        price: Number(nearestSupport.toFixed(2)),
+        price: Number(nearestRelevantSupport.toFixed(2)),
         rr: 0,
         probability: 0
       }
@@ -832,7 +864,7 @@ export function generateStrategyRecommendation(
   notes.push(`Volatility: ${volatility.regime}`);
   
   if (direction === 'wait') {
-    notes.push(`Range: $${nearestSupport.toFixed(2)} - $${nearestResistance.toFixed(2)}`);
+    notes.push(`Trading range: $${nearestRelevantSupport.toFixed(2)} - $${nearestRelevantResistance.toFixed(2)}`);
     notes.push('Wait for breakout with volume confirmation');
   }
   
