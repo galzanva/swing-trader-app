@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AnalysisReportDisplay from '../../components/analysis-report-display';
 import StrategyAnalysisReportDisplay from '../../components/strategy-analysis-report-display';
 import TechnicalAnalysisReportDisplay from '../../components/technical-analysis-report-display';
 import type { AnalysisReport } from '../../api/analyze/route';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface SavedReport {
   id: string;
@@ -40,6 +42,11 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  
+  // Ref for the report content to capture
+  const reportContentRef = useRef<HTMLDivElement>(null);
   
   // Fetch report
   useEffect(() => {
@@ -165,6 +172,97 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     link.download = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!report || !reportContentRef.current) return;
+    
+    setIsDownloading(true);
+    setShowDownloadMenu(false);
+    
+    try {
+      const element = reportContentRef.current;
+      
+      // Capture the element as canvas with higher quality
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0f172a', // Dark background to match the UI
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      
+      // Calculate PDF dimensions
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      // Download the PDF
+      const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+    } catch (err: any) {
+      console.error('Error generating PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    if (!report || !reportContentRef.current) return;
+    
+    setIsDownloading(true);
+    setShowDownloadMenu(false);
+    
+    try {
+      const element = reportContentRef.current;
+      
+      // Capture the element as canvas with higher quality
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0f172a', // Dark background
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+      
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.png`;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png', 1.0);
+    } catch (err: any) {
+      console.error('Error generating image:', err);
+      alert('Failed to generate image. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleTogglePin = async () => {
@@ -331,15 +429,73 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
               )}
             </button>
 
+            {/* Export JSON Button */}
             <button
               onClick={handleExport}
               className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg transition-all border border-purple-500/30 flex items-center gap-2"
+              title="Export as JSON"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden sm:inline">JSON</span>
             </button>
+            
+            {/* Download PDF/Image Button with Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                disabled={isDownloading}
+                className="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 disabled:bg-gray-600/20 text-indigo-300 disabled:text-gray-400 rounded-lg transition-all border border-indigo-500/30 disabled:border-gray-500/30 flex items-center gap-2 disabled:cursor-not-allowed"
+                title="Download as PDF or Image"
+              >
+                {isDownloading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="hidden sm:inline">Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span className="hidden sm:inline">Download</span>
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+              
+              {/* Dropdown Menu */}
+              {showDownloadMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <button
+                    onClick={handleDownloadPDF}
+                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
+                  >
+                    <span className="text-red-400">📄</span>
+                    <div>
+                      <div className="font-medium">Download PDF</div>
+                      <div className="text-xs text-slate-400">Multi-page document</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={handleDownloadImage}
+                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-3 transition-colors border-t border-white/5"
+                  >
+                    <span className="text-blue-400">🖼️</span>
+                    <div>
+                      <div className="font-medium">Download Image</div>
+                      <div className="text-xs text-slate-400">High-res PNG</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -392,9 +548,11 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         </div>
       )}
 
-      {/* Metadata */}
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 mb-6">
-        <h3 className="text-lg font-bold text-white mb-4">Report Details</h3>
+      {/* Report Content - Wrapped for PDF/Image export */}
+      <div ref={reportContentRef}>
+        {/* Metadata */}
+        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 mb-6">
+          <h3 className="text-lg font-bold text-white mb-4">Report Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <div className="text-blue-300 mb-1">Created</div>
@@ -427,27 +585,36 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         </div>
       </div>
 
-      {/* Report Data - Render based on type */}
-      {report.type === 'deep-analysis' ? (
-        <AnalysisReportDisplay report={report.reportData as AnalysisReport} />
-      ) : report.type === 'strategy-analysis' ? (
-        <StrategyAnalysisReportDisplay report={report.reportData} />
-      ) : report.type === 'technical-analysis' ? (
-        <TechnicalAnalysisReportDisplay report={report.reportData} />
-      ) : (
-        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-          <h3 className="text-lg font-bold text-white mb-4">Report Data</h3>
-          <div className="bg-slate-900/50 rounded-lg p-4 overflow-auto max-h-[600px]">
-            <pre className="text-sm text-blue-200 whitespace-pre-wrap">
-              {JSON.stringify(report.reportData, null, 2)}
-            </pre>
+        {/* Report Data - Render based on type */}
+        {report.type === 'deep-analysis' ? (
+          <AnalysisReportDisplay report={report.reportData as AnalysisReport} />
+        ) : report.type === 'strategy-analysis' ? (
+          <StrategyAnalysisReportDisplay report={report.reportData} />
+        ) : report.type === 'technical-analysis' ? (
+          <TechnicalAnalysisReportDisplay report={report.reportData} />
+        ) : (
+          <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+            <h3 className="text-lg font-bold text-white mb-4">Report Data</h3>
+            <div className="bg-slate-900/50 rounded-lg p-4 overflow-auto max-h-[600px]">
+              <pre className="text-sm text-blue-200 whitespace-pre-wrap">
+                {JSON.stringify(report.reportData, null, 2)}
+              </pre>
+            </div>
+            <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-blue-200 text-sm">
+                <strong>Note:</strong> Full UI rendering for {report.type} reports coming soon.
+              </p>
+            </div>
           </div>
-          <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-blue-200 text-sm">
-              <strong>Note:</strong> Full UI rendering for {report.type} reports coming soon.
-            </p>
-          </div>
-        </div>
+        )}
+      </div>
+
+      {/* Click outside to close download menu */}
+      {showDownloadMenu && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowDownloadMenu(false)}
+        />
       )}
     </div>
   );

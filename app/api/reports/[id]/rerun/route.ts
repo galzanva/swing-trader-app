@@ -115,6 +115,36 @@ export async function POST(
           lastUpdated: new Date().toISOString(),
         };
       }
+    } else if (originalReport.type === "technical-analysis") {
+      // Call technical analysis endpoint
+      const response = await fetch(
+        `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/technical-analysis`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: request.headers.get("cookie") || "",
+          },
+          body: JSON.stringify({
+            symbol: parameters.symbol,
+            timeframe: parameters.timeframe || "1day",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `Analysis failed: ${response.statusText}`);
+      }
+
+      newReportData = await response.json();
+      
+      // Technical analysis doesn't use caching the same way, but we can store metadata
+      newCachedData = {
+        lastUpdated: new Date().toISOString(),
+        symbol: parameters.symbol,
+        timeframe: parameters.timeframe || "1day",
+      };
     } else {
       return NextResponse.json(
         { error: "Unsupported report type for rerun" },
@@ -122,15 +152,32 @@ export async function POST(
       );
     }
 
+    // Prepare update data
+    const updateData: any = {
+      reportData: newReportData,
+      cachedData: newCachedData,
+      lastRerunAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // For technical analysis, update description with latest signal info
+    if (originalReport.type === "technical-analysis" && newReportData.signalStrength) {
+      updateData.description = `${newReportData.signalStrength.direction?.toUpperCase() || 'N/A'} signal (${newReportData.signalStrength.grade || 'N/A'}) - ${newReportData.recommendation?.strategy || 'N/A'}`;
+      
+      // Update tags with latest info
+      updateData.tags = [
+        "technical-analysis",
+        parameters.symbol,
+        newReportData.signalStrength.direction || "neutral",
+        newReportData.recommendation?.direction || "wait",
+        parameters.timeframe || "1day",
+      ];
+    }
+
     // Update the report with new data
     const updatedReport = await prisma.savedReport.update({
       where: { id: originalReport.id },
-      data: {
-        reportData: newReportData,
-        cachedData: newCachedData,
-        lastRerunAt: new Date(),
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
     console.log(`[RerunReport] Reran report ${originalReport.id} for user ${user.email}`);
