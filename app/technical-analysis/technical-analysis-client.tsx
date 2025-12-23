@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TechnicalAnalysisReport } from "@/lib/technical-analysis";
 
 interface ExtendedReport extends TechnicalAnalysisReport {
@@ -149,6 +149,7 @@ function IndicatorRow({ label, value, signal, valueColor }: {
 
 export default function TechnicalAnalysisClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [symbol, setSymbol] = useState("");
   const [timeframe, setTimeframe] = useState("1day");
   const [isLoading, setIsLoading] = useState(false);
@@ -159,6 +160,18 @@ export default function TechnicalAnalysisClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Auto-fill symbol from URL parameter and trigger analysis
+  useEffect(() => {
+    const urlSymbol = searchParams.get('symbol');
+    if (urlSymbol) {
+      setSymbol(urlSymbol.toUpperCase());
+      // Auto-trigger analysis after a short delay to allow state to update
+      setTimeout(() => {
+        handleAnalyzeWithSymbol(urlSymbol.toUpperCase());
+      }, 100);
+    }
+  }, [searchParams]);
   
   // Handle save report
   const handleSaveReport = async () => {
@@ -209,8 +222,8 @@ export default function TechnicalAnalysisClient() {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!symbol.trim()) {
+  const handleAnalyzeWithSymbol = async (symbolToAnalyze: string) => {
+    if (!symbolToAnalyze.trim()) {
       setError("Please enter a ticker symbol");
       return;
     }
@@ -223,7 +236,7 @@ export default function TechnicalAnalysisClient() {
       const response = await fetch("/api/technical-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol: symbol.toUpperCase(), timeframe })
+        body: JSON.stringify({ symbol: symbolToAnalyze.toUpperCase(), timeframe })
       });
 
       const data = await response.json();
@@ -238,6 +251,10 @@ export default function TechnicalAnalysisClient() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAnalyze = async () => {
+    await handleAnalyzeWithSymbol(symbol);
   };
 
   return (

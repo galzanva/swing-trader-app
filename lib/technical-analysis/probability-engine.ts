@@ -689,11 +689,30 @@ export function analyzeStructure(
     }
   }
   
+  // ═══════════════════════════════════════════════════════════════
+  // LANGUAGE DISCIPLINE: Pullback wording must reflect momentum state
+  // "Healthy" ONLY allowed when momentum confirms (score > 0)
+  // ═══════════════════════════════════════════════════════════════
+  
+  const hasWarning = !!warningPattern;
+  // Check if momentum is bearish from the assessment
+  const isBearishMomentumContext = momentum.direction === 'bearish' || momentum.score < -10;
+  
   if (classification === 'likely-pullback') {
     if (priorTrendDirection === 'up') {
-      summary = `Healthy pullback in uptrend. Structure intact with higher lows holding.${patternContext}`;
+      if (hasWarning || isBearishMomentumContext) {
+        // Cautious language when warnings OR bearish momentum
+        summary = `Pullback in uptrend - under pressure. Momentum deterioration warrants caution.${patternContext}`;
+      } else {
+        // Only use "healthy" when momentum is not bearish and no warnings
+        summary = `Healthy pullback in uptrend. Structure intact with higher lows holding.${patternContext}`;
+      }
     } else if (priorTrendDirection === 'down') {
-      summary = `Normal bounce in downtrend. Lower highs intact, resistance likely to hold.${patternContext}`;
+      if (hasWarning || momentum.direction === 'bullish') {
+        summary = `Bounce in downtrend - testing resistance. Watch for reversal signals.${patternContext}`;
+      } else {
+        summary = `Normal bounce in downtrend. Lower highs intact, resistance likely to hold.${patternContext}`;
+      }
     } else {
       summary = `Correction within range. Price action suggests the recent trend is intact.${patternContext}`;
     }
@@ -900,20 +919,22 @@ export function assessMomentum(bars: OHLCV[]): MomentumAssessment {
   const divergences: { indicator: string; type: 'bullish' | 'bearish' | 'none'; description: string }[] = [];
   
   // RSI contribution (-25 to +25)
+  // FIXED: Oversold is NOT bullish - it indicates weakness. Don't conflate reversal potential with current state.
   if (currentRSI > 70) {
-    score -= 15;
-    keyFactors.push(`RSI overbought (${currentRSI.toFixed(1)})`);
-  } else if (currentRSI > 60) {
+    score -= 10; // Overbought = potential weakness, but still in uptrend
+    keyFactors.push(`RSI overbought (${currentRSI.toFixed(1)}) - caution`);
+  } else if (currentRSI > 55) {
     score += 15;
     keyFactors.push(`RSI bullish (${currentRSI.toFixed(1)})`);
-  } else if (currentRSI < 30) {
-    score += 15; // Oversold can be bullish for reversal
-    keyFactors.push(`RSI oversold (${currentRSI.toFixed(1)})`);
-  } else if (currentRSI < 40) {
+  } else if (currentRSI >= 45) {
+    // Neutral zone - no contribution
+    keyFactors.push(`RSI neutral (${currentRSI.toFixed(1)})`);
+  } else if (currentRSI >= 30) {
     score -= 15;
     keyFactors.push(`RSI bearish (${currentRSI.toFixed(1)})`);
   } else {
-    keyFactors.push(`RSI neutral (${currentRSI.toFixed(1)})`);
+    score -= 20; // Deeply oversold = extreme bearish, NOT bullish
+    keyFactors.push(`RSI oversold (${currentRSI.toFixed(1)}) - extreme weakness`);
   }
   
   // MACD contribution (-30 to +30)
@@ -932,18 +953,19 @@ export function assessMomentum(bars: OHLCV[]): MomentumAssessment {
   }
   
   // Stochastic contribution (-20 to +20)
+  // FIXED: Oversold is NOT bullish - it indicates current bearish momentum
   if (currentStochK > 80) {
-    score -= 10;
+    score -= 5; // Overbought - minor caution, still bullish
     keyFactors.push(`Stochastic overbought (${currentStochK.toFixed(1)})`);
   } else if (currentStochK > 50) {
     score += 15;
     keyFactors.push(`Stochastic bullish (${currentStochK.toFixed(1)})`);
-  } else if (currentStochK < 20) {
-    score += 10;
-    keyFactors.push(`Stochastic oversold (${currentStochK.toFixed(1)})`);
-  } else {
+  } else if (currentStochK >= 20) {
     score -= 15;
     keyFactors.push(`Stochastic bearish (${currentStochK.toFixed(1)})`);
+  } else {
+    score -= 20; // Deeply oversold = extreme bearish momentum, NOT bullish
+    keyFactors.push(`Stochastic oversold (${currentStochK.toFixed(1)}) - extreme`);
   }
   
   // ADX/DMI contribution (-25 to +25)
@@ -1154,6 +1176,11 @@ export function assessVolatility(bars: OHLCV[]): VolatilityAssessment {
 
 /**
  * Calculate price projections based on technical analysis
+ * 
+ * FIXED: 
+ * - Probabilities rounded to 5s (no false precision)
+ * - Time horizons shortened for weak trends
+ * - Aggressive targets suppressed when momentum is weak
  */
 export function calculatePriceProjections(
   bars: OHLCV[],
@@ -1163,6 +1190,12 @@ export function calculatePriceProjections(
 ): PriceProjection {
   const currentPrice = bars[bars.length - 1].close;
   const atr = volatility.current;
+  const adxData = calculateADX(bars);
+  const adx = adxData.adx[adxData.adx.length - 1] || 0;
+  
+  // Check if we have a weak trend (reduce confidence and shorten horizons)
+  const isWeakTrend = trend.primary.strength < 40 || trend.emaAlignment === 'mixed';
+  const isNeutralMomentum = momentum.strength === 'weak' || momentum.strength === 'none';
   
   // Base probability adjustments based on momentum and trend
   let bullishBias = 50;
@@ -1177,25 +1210,74 @@ export function calculatePriceProjections(
   bullishBias = Math.max(10, Math.min(90, bullishBias));
   const bearishBias = 100 - bullishBias;
   
-  // Calculate targets based on ATR multiples and probability decay
+  // FIXED: Round probabilities to 5s - no false precision
+  const roundTo5 = (n: number) => Math.round(n / 5) * 5;
+  
+  // ═══════════════════════════════════════════════════════════════
+  // RULE 4️⃣: PROJECTION DISCIPLINE
+  // High-vol / weak-trend regimes → constrained probabilities & horizons
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Check if momentum is bearish/bullish and if volatility is high
+  const isBearishMomentum = momentum.score < -10;
+  const isBullishMomentum = momentum.score > 10;
+  const isHighVol = volatility.regime === 'high' || volatility.regime === 'expanding';
+  
+  // Shorten time horizons for weak trends
+  // ADX/structure handled upstream via trendAssessment; here we just compress timing
+  const conservativeDays = isWeakTrend ? 3 : 4;
+  const moderateDays = isWeakTrend ? 5 : 8;
+  // Aggressive days shortened further for weak trends - these are speculative extensions
+  const aggressiveDays = isWeakTrend ? 6 : 15;
+  
+  // Base probability caps
+  let upsideProbCap = isWeakTrend ? 65 : 85;
+  let downsideProbCap = isWeakTrend ? 65 : 85;
+  
+  // Weak trend + bearish momentum = very constrained upside
+  if (isWeakTrend && isBearishMomentum) {
+    upsideProbCap = 55;
+  }
+  // Weak trend + bullish momentum = very constrained downside
+  if (isWeakTrend && isBullishMomentum) {
+    downsideProbCap = 55;
+  }
+  
+  // High volatility or weak trend → overall tighter caps
+  if (isHighVol || isWeakTrend) {
+    upsideProbCap = Math.min(upsideProbCap, 70);   // Never > 70% in these regimes
+    downsideProbCap = Math.min(downsideProbCap, 80);
+  }
+  
+  // ADX < 35 = mixed/moderate trend → never allow 80–85% style scenarios
+  if (adx < 35) {
+    upsideProbCap = Math.min(upsideProbCap, 70);
+    downsideProbCap = Math.min(downsideProbCap, 80);
+  }
+  
+  // Floor for probabilities - never show < 35% for downside in mixed/weak regimes
+  const probFloor = (isWeakTrend || isHighVol || adx < 35) ? 35 : 25;
+  
+  // Calculate targets based on ATR multiples with regime-aware probability caps
   const upside = {
     conservative: {
       price: Number((currentPrice + atr * 1).toFixed(2)),
       percent: Number(((atr * 1) / currentPrice * 100).toFixed(2)),
-      probability: Math.min(85, bullishBias + 15),
-      days: Math.ceil(3 + Math.random() * 2)
+      probability: roundTo5(Math.min(upsideProbCap, bullishBias + 5)),
+      days: conservativeDays
     },
     moderate: {
-      price: Number((currentPrice + atr * 2).toFixed(2)),
-      percent: Number(((atr * 2) / currentPrice * 100).toFixed(2)),
-      probability: Math.min(70, bullishBias + 5),
-      days: Math.ceil(7 + Math.random() * 5)
+      price: Number((currentPrice + atr * 1.5).toFixed(2)),
+      percent: Number(((atr * 1.5) / currentPrice * 100).toFixed(2)),
+      probability: roundTo5(Math.min(upsideProbCap - 10, bullishBias)),
+      days: moderateDays
     },
     aggressive: {
-      price: Number((currentPrice + atr * 3).toFixed(2)),
-      percent: Number(((atr * 3) / currentPrice * 100).toFixed(2)),
-      probability: Math.max(20, bullishBias - 15),
-      days: Math.ceil(14 + Math.random() * 7)
+      price: Number((currentPrice + atr * 2.5).toFixed(2)),
+      percent: Number(((atr * 2.5) / currentPrice * 100).toFixed(2)),
+      // Aggressive = heavily suppressed in weak regimes
+      probability: roundTo5(Math.max(probFloor, Math.min(upsideProbCap - 30, bullishBias - 20))),
+      days: aggressiveDays
     }
   };
   
@@ -1203,38 +1285,50 @@ export function calculatePriceProjections(
     conservative: {
       price: Number((currentPrice - atr * 1).toFixed(2)),
       percent: Number(((atr * 1) / currentPrice * 100).toFixed(2)),
-      probability: Math.min(85, bearishBias + 15),
-      days: Math.ceil(3 + Math.random() * 2)
+      probability: roundTo5(Math.min(downsideProbCap, bearishBias + 5)),
+      days: conservativeDays
     },
     moderate: {
-      price: Number((currentPrice - atr * 2).toFixed(2)),
-      percent: Number(((atr * 2) / currentPrice * 100).toFixed(2)),
-      probability: Math.min(70, bearishBias + 5),
-      days: Math.ceil(7 + Math.random() * 5)
+      price: Number((currentPrice - atr * 1.5).toFixed(2)),
+      percent: Number(((atr * 1.5) / currentPrice * 100).toFixed(2)),
+      probability: roundTo5(Math.min(downsideProbCap - 10, bearishBias)),
+      days: moderateDays
     },
     aggressive: {
-      price: Number((currentPrice - atr * 3).toFixed(2)),
-      percent: Number(((atr * 3) / currentPrice * 100).toFixed(2)),
-      probability: Math.max(20, bearishBias - 15),
-      days: Math.ceil(14 + Math.random() * 7)
+      price: Number((currentPrice - atr * 2.5).toFixed(2)),
+      percent: Number(((atr * 2.5) / currentPrice * 100).toFixed(2)),
+      probability: roundTo5(Math.max(probFloor, Math.min(downsideProbCap - 30, bearishBias - 20))),
+      days: aggressiveDays
     }
   };
   
   // Most probable scenario
   let mostProbable: PriceProjection['mostProbable'];
-  if (bullishBias >= 60) {
+  
+  // FIXED: For weak trends or neutral momentum, default to sideways
+  if (isWeakTrend || isNeutralMomentum) {
+    mostProbable = {
+      direction: 'sideways',
+      priceRange: { 
+        low: currentPrice - atr * 0.75, 
+        high: currentPrice + atr * 0.75 
+      },
+      probability: roundTo5(Math.min(65, 55)), // Lower confidence, capped
+      timeframe: '3-5 days' // Shorter horizon
+    };
+  } else if (bullishBias >= 60) {
     mostProbable = {
       direction: 'up',
       priceRange: { low: currentPrice, high: upside.moderate.price },
-      probability: bullishBias,
-      timeframe: `${upside.moderate.days}-${upside.moderate.days + 5} days`
+      probability: roundTo5(Math.min(upsideProbCap, bullishBias)),
+      timeframe: `${moderateDays}-${moderateDays + 3} days`
     };
   } else if (bearishBias >= 60) {
     mostProbable = {
       direction: 'down',
       priceRange: { low: downside.moderate.price, high: currentPrice },
-      probability: bearishBias,
-      timeframe: `${downside.moderate.days}-${downside.moderate.days + 5} days`
+      probability: roundTo5(Math.min(downsideProbCap, bearishBias)),
+      timeframe: `${moderateDays}-${moderateDays + 3} days`
     };
   } else {
     mostProbable = {
@@ -1243,8 +1337,8 @@ export function calculatePriceProjections(
         low: currentPrice - atr * 0.75, 
         high: currentPrice + atr * 0.75 
       },
-      probability: 60,
-      timeframe: '5-10 days'
+      probability: roundTo5(55),
+      timeframe: '5-8 days'
     };
   }
   
@@ -1258,44 +1352,193 @@ export function calculatePriceProjections(
 
 /**
  * Calculate overall signal strength
+ * 
+ * FIXED: Now accepts ADX and volume flow data to properly weight signals
+ * - Trend score scales with ADX (not just EMA alignment)
+ * - Volume score incorporates OBV trend and CMF
  */
 export function calculateSignalStrength(
   bars: OHLCV[],
   momentum: MomentumAssessment,
   trend: TrendAssessment,
-  volatility: VolatilityAssessment
+  volatility: VolatilityAssessment,
+  adxData?: { adx: number; plusDI: number; minusDI: number },
+  volumeFlow?: { obvTrend: 'rising' | 'falling' | 'flat'; cmf: number }
 ): SignalStrength {
-  // Trend score (0-100)
-  let trendScore = 50;
-  if (trend.emaAlignment === 'bullish') trendScore += 25;
-  else if (trend.emaAlignment === 'bearish') trendScore += 25; // Strong bearish is still a signal
-  else trendScore -= 10;
+  // Calculate ADX if not provided
+  let adx = 20, plusDI = 20, minusDI = 20;
+  if (adxData) {
+    adx = adxData.adx;
+    plusDI = adxData.plusDI;
+    minusDI = adxData.minusDI;
+  } else {
+    const adxResult = calculateADX(bars);
+    adx = adxResult.adx[adxResult.adx.length - 1] || 20;
+    plusDI = adxResult.plusDI[adxResult.plusDI.length - 1] || 20;
+    minusDI = adxResult.minusDI[adxResult.minusDI.length - 1] || 20;
+  }
   
-  if (trend.primary.direction !== 'sideways') trendScore += 15;
-  if (trend.shortTerm.direction === trend.intermediate.direction) trendScore += 10;
-  trendScore = Math.min(100, Math.max(0, trendScore));
+  // ═══════════════════════════════════════════════════════════════
+  // RULE 2️⃣: MOMENTUM SCORE = FINAL AUTHORITY (calculate FIRST)
+  // This is the single source of truth for momentum
+  // ═══════════════════════════════════════════════════════════════
   
-  const trendSignal = trend.emaAlignment === 'bullish' ? 'Bullish alignment' :
-                      trend.emaAlignment === 'bearish' ? 'Bearish alignment' : 'Mixed signals';
-  
-  // Momentum score (0-100)
   let momentumScore = 50 + momentum.score * 0.5;
   momentumScore = Math.min(100, Math.max(0, momentumScore));
-  const momentumSignal = momentum.direction === 'bullish' ? `Bullish (${momentum.strength})` :
-                         momentum.direction === 'bearish' ? `Bearish (${momentum.strength})` : 'Neutral';
   
-  // Volume score (simplified - based on recent volume)
+  // Momentum signal must match score, not individual oscillators
+  let momentumSignal: string;
+  if (momentumScore >= 60) {
+    momentumSignal = `Bullish (${momentum.strength})`;
+  } else if (momentumScore <= 40) {
+    momentumSignal = `Bearish (${momentum.strength})`;
+  } else {
+    momentumSignal = momentum.strength === 'none' ? 'Neutral' : `Neutral (${momentum.strength})`;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // RULE 1️⃣: TREND SCORE (capped by ADX + momentum)
+  // Trend is driven by EMA alignment but CAPPED by ADX + momentum
+  // ═══════════════════════════════════════════════════════════════
+  
+  let trendScore = 50;
+  
+  // EMA alignment bonus (capped contribution)
+  if (trend.emaAlignment === 'bullish') trendScore += 15;
+  else if (trend.emaAlignment === 'bearish') trendScore += 15;
+  else trendScore -= 10;
+  
+  // Direction bonus
+  if (trend.primary.direction !== 'sideways') trendScore += 10;
+  if (trend.shortTerm.direction === trend.intermediate.direction) trendScore += 5;
+  
+  // ADX CAPS TREND SCORE
+  // ADX < 20 → max 55–60 (range/weak, further capped by momentum below)
+  // ADX 20-30 → max ~70–72 (developing trend, never "80+")
+  // ADX > 30 → max 85 (confirmed/strong)
+  let trendCap = 85;
+  if (adx < 20) {
+    trendCap = 60;
+    trendScore -= 10; // Additional penalty for no trend
+    
+    // STRICTER RULE: ADX < 20 + bearish momentum = max 55
+    // This ensures AMAT (ADX 18, momentum 27) aligns with APLD (ADX 17, momentum 30)
+    if (momentumScore < 35) {
+      trendCap = 55;
+    }
+  } else if (adx < 30) {
+    trendCap = 72;
+  }
+  
+  // Momentum < 40 penalizes trend (uses pre-calculated momentumScore)
+  if (momentumScore < 40) {
+    trendScore -= 7;
+  }
+  
+  // Distribution pressure penalizes trend
+  const hasDistributionPressure = volumeFlow && 
+    (volumeFlow.obvTrend === 'falling' && volumeFlow.cmf < 0);
+  if (hasDistributionPressure) {
+    trendScore -= 5;
+  }
+  
+  trendScore = Math.min(trendCap, Math.max(0, trendScore));
+  
+  // LANGUAGE RULE: Trend signal must match ADX context
+  let trendSignal: string;
+  if (adx < 20) {
+    trendSignal = 'Mixed signals'; // Never call it bullish/bearish with weak ADX
+  } else if (adx < 25) {
+    // "developing", "under pressure", "range-bound" only
+    trendSignal = trend.emaAlignment === 'bullish' ? 'Bullish (developing)' :
+                  trend.emaAlignment === 'bearish' ? 'Bearish (developing)' : 'Range-bound';
+  } else {
+    // ADX >= 25: Can use "alignment" language
+    trendSignal = trend.emaAlignment === 'bullish' ? 'Bullish alignment' :
+                  trend.emaAlignment === 'bearish' ? 'Bearish alignment' : 'Mixed signals';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // RULE 2️⃣ (continued): Momentum MUST NOT dominate trend
+  // Momentum score is not allowed to exceed trendScore - keeps structure/regime primary
+  // ═══════════════════════════════════════════════════════════════
+  if (momentumScore > trendScore) {
+    momentumScore = trendScore;
+  }
+
+  // Recompute momentumSignal after clamping
+  if (momentumScore >= 60) {
+    momentumSignal = `Bullish (${momentum.strength})`;
+  } else if (momentumScore <= 40) {
+    momentumSignal = `Bearish (${momentum.strength})`;
+  } else {
+    momentumSignal = momentum.strength === 'none' ? 'Neutral' : `Neutral (${momentum.strength})`;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // RULE 3️⃣: VOLUME AS CONVICTION MULTIPLIER
+  // Volume never flips bias — it modifies confidence
+  // "Accumulation" REQUIRES rising OBV + positive CMF (strict rule)
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Volume score - INCORPORATES OBV AND CMF
   const volumes = bars.slice(-20).map(b => b.volume);
   const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
   const recentVol = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
   const volRatio = recentVol / avgVol;
   
+  // Base volume score from activity level
   let volumeScore = 50;
-  if (volRatio > 1.5) volumeScore = 80;
-  else if (volRatio > 1.2) volumeScore = 65;
-  else if (volRatio < 0.7) volumeScore = 35;
-  const volumeSignal = volRatio > 1.2 ? 'Above average volume' : 
-                       volRatio < 0.8 ? 'Below average volume' : 'Normal volume';
+  if (volRatio > 1.5) volumeScore = 60; // High activity, but not "accumulation" yet
+  else if (volRatio > 1.2) volumeScore = 55;
+  else if (volRatio < 0.7) volumeScore = 40;
+  
+  // OBV and CMF determine conviction direction
+  if (volumeFlow) {
+    // TRUE ACCUMULATION: Rising OBV + Positive CMF (both required)
+    const isAccumulation = volumeFlow.obvTrend === 'rising' && volumeFlow.cmf > 0.05;
+    // TRUE DISTRIBUTION: Falling OBV + Negative CMF (both required)  
+    const isDistribution = volumeFlow.obvTrend === 'falling' && volumeFlow.cmf < -0.05;
+    // MIXED: High volume but conflicting OBV/CMF
+    const isMixed = (volRatio > 1.2) && !isAccumulation && !isDistribution;
+    
+    if (isAccumulation) {
+      volumeScore += 20; // Strong conviction boost
+    } else if (isDistribution) {
+      volumeScore -= 20; // Strong conviction penalty
+    } else if (volumeFlow.obvTrend === 'falling') {
+      volumeScore -= 10; // Falling OBV alone = caution
+    } else if (volumeFlow.cmf < -0.05) {
+      volumeScore -= 10; // Negative CMF alone = caution
+    } else if (volumeFlow.cmf > 0.10) {
+      // If we're here, OBV is not falling (rising or flat)
+      volumeScore += 5; // Positive CMF without falling OBV = slight positive
+    }
+  }
+  
+  volumeScore = Math.min(100, Math.max(0, volumeScore));
+  
+  // Volume signal label - STRICT LANGUAGE RULES
+  let volumeSignal: string;
+  const isConfirmedAccum = volumeFlow && volumeFlow.obvTrend === 'rising' && volumeFlow.cmf > 0.05;
+  const isConfirmedDist = volumeFlow && volumeFlow.obvTrend === 'falling' && volumeFlow.cmf < -0.05;
+  
+  if (isConfirmedDist) {
+    volumeSignal = 'Distribution pressure';
+  } else if (isConfirmedAccum) {
+    volumeSignal = volRatio > 1.2 ? 'High volume + accumulation' : 'Accumulation';
+  } else if (volumeFlow && volumeFlow.obvTrend === 'falling') {
+    volumeSignal = 'OBV divergence (caution)';
+  } else if (volRatio > 1.5) {
+    // High volume but OBV flat/CMF modest = "elevated activity", NOT accumulation
+    volumeSignal = 'Elevated activity';
+  } else if (volRatio > 1.2) {
+    volumeSignal = 'Above average volume';
+  } else if (volRatio < 0.8) {
+    volumeSignal = 'Below average volume';
+  } else {
+    volumeSignal = 'Normal volume';
+  }
   
   // Volatility score
   let volatilityScore = 50;
@@ -1304,16 +1547,48 @@ export function calculateSignalStrength(
   else if (volatility.regime === 'high') volatilityScore = 40;
   const volatilitySignal = `${volatility.regime.charAt(0).toUpperCase() + volatility.regime.slice(1)} volatility`;
   
-  // Pattern score (simplified - based on recent price action)
+  // ═══════════════════════════════════════════════════════════════
+  // PATTERN SCORE - Must respect momentum hierarchy
+  // Bullish patterns can't override bearish momentum
+  // ═══════════════════════════════════════════════════════════════
+  
   const recentBars = bars.slice(-5);
   const bullishCandles = recentBars.filter(b => b.close > b.open).length;
+  
+  // Base pattern score from candle direction
   let patternScore = 50;
-  if (bullishCandles >= 4) patternScore = 75;
-  else if (bullishCandles >= 3) patternScore = 60;
+  if (bullishCandles >= 4) patternScore = 65; // Reduced from 75
+  else if (bullishCandles >= 3) patternScore = 55; // Reduced from 60
   else if (bullishCandles <= 1) patternScore = 40;
-  else if (bullishCandles === 0) patternScore = 25;
-  const patternSignal = bullishCandles >= 3 ? 'Bullish price action' :
-                        bullishCandles <= 2 ? 'Bearish price action' : 'Mixed price action';
+  else if (bullishCandles === 0) patternScore = 30;
+  
+  // RULE: Pattern score CANNOT be bullish when momentum is bearish
+  // This prevents "60 Bullish price action" when momentum = 30 bearish
+  if (momentumScore < 40 && patternScore > 50) {
+    patternScore = 50; // Cap at neutral when momentum is bearish
+  }
+  
+  // RULE: Pattern score CANNOT be bearish when momentum is bullish
+  if (momentumScore > 60 && patternScore < 50) {
+    patternScore = 50; // Floor at neutral when momentum is bullish
+  }
+  
+  // RULE: ADX < 20 = no strong pattern claims (range-bound)
+  if (adx < 20 && Math.abs(patternScore - 50) > 10) {
+    patternScore = patternScore > 50 ? 55 : 45; // Compress toward neutral
+  }
+  
+  // Pattern signal label - must match score and regime
+  let patternSignal: string;
+  if (patternScore >= 60) {
+    patternSignal = 'Bullish price action';
+  } else if (patternScore <= 40) {
+    patternSignal = 'Bearish price action';
+  } else {
+    // 41-59 = mixed/neutral
+    patternSignal = momentumScore < 40 ? 'Bearish pressure' :
+                    momentumScore > 60 ? 'Bullish attempts' : 'Mixed price action';
+  }
   
   // Weights
   const weights = {
@@ -1333,13 +1608,26 @@ export function calculateSignalStrength(
     patternScore * weights.pattern
   );
   
-  // Determine direction
+  // Determine direction - REQUIRES STRONG ALIGNMENT
+  // If momentum is weak or trend is mixed, default to neutral
+  // This prevents "bullish" labels when signals are conflicting
   let direction: 'bullish' | 'bearish' | 'neutral';
-  if (momentum.direction === 'bullish' && trend.emaAlignment !== 'bearish') {
-    direction = 'bullish';
-  } else if (momentum.direction === 'bearish' && trend.emaAlignment !== 'bullish') {
-    direction = 'bearish';
+  
+  // Must have at least moderate momentum strength AND aligned trend to be directional
+  const hasStrongMomentum = momentum.strength === 'strong' || momentum.strength === 'moderate';
+  const hasTrendAlignment = trend.emaAlignment !== 'mixed';
+  
+  if (hasStrongMomentum && hasTrendAlignment) {
+    if (momentum.direction === 'bullish' && trend.emaAlignment === 'bullish') {
+      direction = 'bullish';
+    } else if (momentum.direction === 'bearish' && trend.emaAlignment === 'bearish') {
+      direction = 'bearish';
+    } else {
+      // Conflicting momentum and trend = neutral
+      direction = 'neutral';
+    }
   } else {
+    // Weak momentum OR mixed trend = neutral (no clear edge)
     direction = 'neutral';
   }
   
@@ -1421,7 +1709,8 @@ export function generateStrategyRecommendation(
   // ==========================================
   // OVERBOUGHT/OVERSOLD DETECTION
   // ==========================================
-  const isOverbought = (oscillators?.stochK ?? 50) > 80 || (oscillators?.mfi ?? 50) > 85;
+  // Slightly more conservative: treat Stoch > 70 as overbought for execution rules
+  const isOverbought = (oscillators?.stochK ?? 50) > 70 || (oscillators?.mfi ?? 50) > 85;
   const isOversold = (oscillators?.stochK ?? 50) < 20 || (oscillators?.mfi ?? 50) < 15;
   
   // ==========================================
@@ -1507,10 +1796,33 @@ export function generateStrategyRecommendation(
   else if (structure === 'likely-pullback') {
     if (priorTrend === 'up' && (strongBullish || momentum.direction === 'bullish')) {
       // Pullback in uptrend - buy the dip
-      if (trend.emaAlignment === 'bullish' && momentum.strength === 'strong') {
+      // Only allow full "Trend Following Long" when:
+      // - Bullish EMA alignment
+      // - Strong momentum
+      // - NOT overbought
+      // - No volume/pattern caution
+      const patternSignalText = signalStrength.breakdown.pattern.signal.toLowerCase();
+      const hasPatternCaution =
+        patternSignalText.includes('bearish') ||
+        patternSignalText.includes('pressure') ||
+        patternSignalText.includes('reversal');
+      const volumeSignalText = signalStrength.breakdown.volume.signal.toLowerCase();
+      const hasVolumeCaution =
+        volumeSignalText.includes('distribution') ||
+        volumeSignalText.includes('divergence') ||
+        volumeSignalText.includes('caution');
+
+      if (
+        trend.emaAlignment === 'bullish' &&
+        momentum.strength === 'strong' &&
+        !isOverbought &&
+        !hasVolumeCaution &&
+        !hasPatternCaution
+      ) {
         strategy = 'Trend Following Long';
         confidence = Math.min(85, signalStrength.overall + 10);
       } else {
+        // Default to more conservative pullback/breakout-conditional long
         strategy = 'Pullback Long';
         confidence = Math.max(45, signalStrength.overall - 5);
       }
@@ -1564,6 +1876,24 @@ export function generateStrategyRecommendation(
       confidence = Math.min(40, signalStrength.overall);
     }
   }
+
+  // ==========================================
+  // VOLUME / REVERSAL CAUTION → CONFIDENCE CAP
+  // ==========================================
+  // OBV divergence / distribution or reversal-risk structure
+  // must automatically prevent HIGH-confidence labels
+  const volumeSignalText = signalStrength.breakdown.volume.signal.toLowerCase();
+  const hasVolumeCaution =
+    volumeSignalText.includes('distribution') ||
+    volumeSignalText.includes('divergence') ||
+    volumeSignalText.includes('caution');
+
+  const isReversalStructure = structure === 'trend-reversal-risk';
+
+  if (hasVolumeCaution || isReversalStructure) {
+    // Cap numerical confidence at <= 60 (i.e., MEDIUM at best)
+    confidence = Math.min(confidence, 60);
+  }
   
   // ==========================================
   // OVERBOUGHT/OVERSOLD CONFIDENCE ADJUSTMENT
@@ -1593,11 +1923,21 @@ export function generateStrategyRecommendation(
   let entryType: 'market' | 'limit' | 'breakout' | 'pullback';
   let entryPrice: number;
   const conditions: string[] = [];
+  const atResistance = Math.abs(nearestRelevantResistance - currentPrice) <= atr * 1.0;
   
   if (direction === 'long') {
     if (strategy.includes('Breakout') || strategy.includes('Trend Following')) {
-      // In squeeze or trend-reversal: use breakout/market entries
-      if (isInSqueeze || strategy.includes('Trend Following')) {
+      // In squeeze or trend-reversal: use breakout/market entries,
+      // BUT prohibit market entries when overbought and at resistance.
+      if (!isInSqueeze && strategy.includes('Trend Following') && isOverbought && atResistance) {
+        // Overbought at/near resistance → require pullback entry
+        entryType = 'pullback';
+        const pullbackLevel = currentPrice - atr * 0.75;
+        entryPrice = Number(pullbackLevel.toFixed(2));
+        conditions.push(`Avoid buying into resistance while overbought`);
+        conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
+        conditions.push('Enter on bullish reversal candle after pullback');
+      } else if (isInSqueeze || strategy.includes('Trend Following')) {
         entryType = 'market';
         entryPrice = currentPrice;
         conditions.push('Enter at market on momentum confirmation');
@@ -1715,9 +2055,10 @@ export function generateStrategyRecommendation(
   let targets: StrategyRecommendation['targets'];
   
   // In squeeze: minimum 2:1 R:R on T1
+  // Outside squeezes, be more conservative on stretch targets
   const t1Multiplier = isInSqueeze ? 2.0 : 1.5;
-  const t2Multiplier = isInSqueeze ? 3.5 : 2.5;
-  const t3Multiplier = isInSqueeze ? 5.0 : 4.0;
+  const t2Multiplier = isInSqueeze ? 3.5 : 2.25;
+  const t3Multiplier = isInSqueeze ? 5.0 : 3.0;
   
   // Adjust probabilities for squeeze (higher momentum = higher probability of hitting targets)
   const t1Prob = isInSqueeze ? 70 : 65;

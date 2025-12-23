@@ -386,7 +386,16 @@ export function runTechnicalAnalysis(
   // =====================
   
   const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment);
-  const signalStrength = calculateSignalStrength(bars, momentumAssessment, trendAssessment, volatilityAssessment);
+  
+  // FIXED: Pass ADX and volume flow data for proper signal weighting
+  const signalStrength = calculateSignalStrength(
+    bars, 
+    momentumAssessment, 
+    trendAssessment, 
+    volatilityAssessment,
+    { adx, plusDI, minusDI },  // ADX data for trend strength scaling
+    { obvTrend, cmf }          // Volume flow for conviction adjustment
+  );
   
   // Generate recommendation with structure context and oscillator data
   const recommendation = generateStrategyRecommendation(
@@ -607,7 +616,15 @@ Provide your response in EXACTLY this JSON format:
   "keyInsights": ["Insight 1", "Insight 2", "Insight 3", "Insight 4"],
   "riskFactors": ["Risk 1", "Risk 2", "Risk 3"],
   "tradingPlan": "${isWait ? 'Describe conditions to watch for a valid trade setup - do NOT suggest immediate entry' : 'Clear trading plan with entry, stop, and targets matching the data above'}",
-  "confidenceLevel": "${isWait ? 'low' : signalStrength.overall >= 70 ? 'high' : signalStrength.overall >= 55 ? 'medium' : 'low'}"
+  "confidenceLevel": "${isWait 
+    ? 'low' 
+    : (indicators.volume.obvTrend === 'falling' 
+        ? (signalStrength.overall >= 55 ? 'medium' : 'low') 
+        : signalStrength.overall >= 70 
+          ? 'high' 
+          : signalStrength.overall >= 55 
+            ? 'medium' 
+            : 'low')}"
 }
 
 CRITICAL RULES:

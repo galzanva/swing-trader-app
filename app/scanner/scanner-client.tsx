@@ -866,9 +866,14 @@ export default function ScannerClient() {
 
 // Result Card Component
 function ResultCard({ result }: { result: ScanResult }) {
-  const handleAnalyze = () => {
+  const handleStrategyAnalyze = () => {
     // Open strategy analysis in new tab to keep scanner results visible
     window.open(`/strategy-analyze?symbol=${result.ticker}`, '_blank');
+  };
+
+  const handleTechnicalAnalyze = () => {
+    // Open technical analysis in new tab to keep scanner results visible
+    window.open(`/technical-analysis?symbol=${result.ticker}`, '_blank');
   };
 
   return (
@@ -1014,22 +1019,33 @@ function ResultCard({ result }: { result: ScanResult }) {
         </div>
       )}
 
-      {/* Analyze Button with Notice */}
-      <div>
+      {/* Analysis Buttons */}
+      <div className="space-y-2">
         {result.matchedStrategy && (
           <div className="text-xs text-blue-300/70 mb-2 italic">
             ℹ️ Re-evaluates with fresh data - results may differ
           </div>
         )}
-        <button
-          onClick={handleAnalyze}
-          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          <span>Strategy Analysis</span>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={handleStrategyAnalyze}
+            className="py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>Strategy</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+          <button
+            onClick={handleTechnicalAnalyze}
+            className="py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>Technical</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
