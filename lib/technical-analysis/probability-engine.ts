@@ -131,6 +131,1106 @@ export interface StructureAnalysis {
   }[];
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MARKET REGIME REASONING ENGINE
+// This system INFERS regimes from raw indicators before assigning scores.
+// The reasoning flow is: Regime → Valid Strategies → Trade Parameters
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * STEP 1: MARKET REGIME INFERENCE
+ * Infer current market state from structure, not scores
+ */
+export interface MarketRegimeInference {
+  regime: 'trending' | 'range-bound' | 'reversal-attempt' | 'unstable';
+  direction: 'bullish' | 'bearish' | 'neutral';
+  strength: 'strong' | 'developing' | 'weak' | 'none';
+  evidence: string[];
+}
+
+/**
+ * STEP 2: RISK REGIME INFERENCE  
+ * Infer risk environment from volatility behavior
+ */
+export interface RiskRegimeInference {
+  regime: 'compressed' | 'normal' | 'expanding' | 'unstable';
+  atrContext: 'low' | 'normal' | 'high' | 'extreme';
+  momentumDispersion: 'aligned' | 'diverging' | 'conflicting';
+  evidence: string[];
+}
+
+/**
+ * STEP 3: BEHAVIORAL CONTEXT INFERENCE
+ * Infer what market participants are doing
+ */
+export interface BehavioralContextInference {
+  context: 'accumulation' | 'distribution' | 'chasing' | 'mean-reversion-risk' | 'neutral';
+  volumeSignature: 'confirming' | 'diverging' | 'exhaustion' | 'neutral';
+  oscillatorState: 'overbought' | 'oversold' | 'neutral' | 'extreme';
+  evidence: string[];
+}
+
+/**
+ * STEP 4: STRATEGY FEASIBILITY
+ * Based on inferred regimes, determine valid strategy families
+ */
+export interface StrategyFeasibility {
+  valid: string[];      // Strategies that satisfy all constraints
+  invalid: string[];    // Strategies explicitly forbidden by regime
+  conditional: string[]; // Strategies allowed with additional confirmation
+  defaultAction: 'trade' | 'wait';
+  reasoning: string[];
+}
+
+/**
+ * Combined regime analysis output
+ */
+export interface RegimeAnalysis {
+  market: MarketRegimeInference;
+  risk: RiskRegimeInference;
+  behavioral: BehavioralContextInference;
+  feasibility: StrategyFeasibility;
+}
+
+// Legacy interface for backwards compatibility
+export interface TradeRegime {
+  // Core regime classification
+  volatilityClass: 'low' | 'normal' | 'high' | 'speculative';
+  structureClass: 'trending' | 'range-bound' | 'transitional';
+  
+  // Allowed strategy types based on regime
+  allowedStrategies: (
+    | 'trend-continuation'      // Low volatility + trending
+    | 'pullback-continuation'   // Normal volatility + trending
+    | 'breakout-expansion'      // Any volatility + transitional
+    | 'speculative-pullback'    // High volatility + trending
+    | 'mean-reversion'          // Any regime + range-bound
+    | 'wait'                    // Conflicts or no edge
+  )[];
+  
+  // Regime constraints
+  maxConfidence: number;       // Cap on confidence based on regime
+  maxTargetMultiple: number;   // Cap on ATR multiples for targets
+  maxHoldingDays: number;      // Max holding period
+  stopMultiplier: number;      // Volatility-adjusted stop multiplier
+  
+  // Flags
+  isSpeculative: boolean;      // If true, position sizing must be reduced
+  requiresConfirmation: boolean; // If true, no market entries allowed
+  
+  // Reasoning
+  constraints: string[];       // List of active regime constraints
+  
+  // NEW: Full regime analysis
+  regimeAnalysis?: RegimeAnalysis;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DETECTED MARKET REGIME - HIGH-LEVEL CLASSIFICATION
+// Maps detailed regime analysis to one of 5 actionable regime types
+// This determines which gates, unlocks, and rules apply to recommendations
+// ═══════════════════════════════════════════════════════════════════════════
+export type DetectedRegimeType = 'TRENDING' | 'RANGE_BOUND' | 'REVERSAL_ATTEMPT' | 'VOLATILITY_EXPANSION' | 'UNCERTAIN';
+
+export interface DetectedRegime {
+  type: DetectedRegimeType;
+  direction: 'bullish' | 'bearish' | 'neutral';
+  confidence: number; // 0-100
+  
+  // Regime-specific rules
+  rules: {
+    useADXGate: boolean;           // Whether ADX gate applies
+    useStochSupression: boolean;   // Whether overbought/oversold suppresses direction
+    allowMeanReversion: boolean;   // Whether mean reversion trades are allowed
+    requireBreakoutConfirmation: boolean; // Require breakout + hold for entry
+    requireStructureBreak: boolean; // Require prior swing high/low break
+    widenStops: boolean;           // Widen stops due to volatility
+    reduceConfidence: boolean;     // Auto-reduce confidence
+  };
+  
+  // Unlock conditions specific to this regime
+  unlockConditions: string[];
+  
+  // Evidence used to determine regime
+  evidence: string[];
+}
+
+/**
+ * DETECT MARKET REGIME
+ * Maps existing regime analysis to one of 5 high-level actionable regimes
+ * and determines which rules/gates apply
+ */
+export function detectMarketRegime(
+  adx: number,
+  emaAlignment: 'bullish' | 'bearish' | 'mixed',
+  priorTrend: 'up' | 'down' | 'sideways',
+  structureClassification: 'likely-pullback' | 'trend-reversal-risk' | 'mixed',
+  volatilityRegime: 'high' | 'normal' | 'low' | 'expanding' | 'contracting',
+  bollingerBandwidth: number,
+  atrPercent: number,
+  squeezeIsActive: boolean,
+  squeezeMomentumDirection: 'bullish' | 'bearish' | 'neutral',
+  stochK: number,
+  rsi: number,
+  cmf: number,
+  obvTrend: 'rising' | 'falling' | 'flat',
+  volumeZScore: number,
+  nearResistance: boolean,
+  nearSupport: boolean,
+  brokeSwingHigh: boolean,
+  brokeSwingLow: boolean
+): DetectedRegime {
+  const evidence: string[] = [];
+  let type: DetectedRegimeType;
+  let direction: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+  let confidence = 50;
+  
+  // ─────────────────────────────────────────────────────────────────
+  // STEP 1: Check for VOLATILITY_EXPANSION first (overrides others)
+  // ─────────────────────────────────────────────────────────────────
+  const isVolatilityExpanding = 
+    volatilityRegime === 'expanding' ||
+    volatilityRegime === 'high' ||
+    atrPercent >= 6 ||
+    bollingerBandwidth > 40;
+    
+  if (isVolatilityExpanding && !squeezeIsActive) {
+    type = 'VOLATILITY_EXPANSION';
+    evidence.push(`Volatility expanding: ATR ${atrPercent.toFixed(1)}%, BB width ${bollingerBandwidth.toFixed(1)}%`);
+    confidence = 60;
+    
+    // Determine direction from stronger indicators
+    if (emaAlignment === 'bullish' && rsi > 50) {
+      direction = 'bullish';
+    } else if (emaAlignment === 'bearish' && rsi < 50) {
+      direction = 'bearish';
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
+  // STEP 2: Check for TRENDING regime
+  // ─────────────────────────────────────────────────────────────────
+  else if (adx >= 25 && emaAlignment !== 'mixed') {
+    type = 'TRENDING';
+    direction = emaAlignment === 'bullish' ? 'bullish' : 'bearish';
+    confidence = Math.min(80, 50 + adx);
+    evidence.push(`Strong trend: ADX ${adx.toFixed(0)}, ${emaAlignment} EMAs`);
+    
+    if (structureClassification === 'likely-pullback') {
+      evidence.push('Structure confirms trend continuation');
+      confidence += 10;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
+  // STEP 3: Check for REVERSAL_ATTEMPT regime
+  // ─────────────────────────────────────────────────────────────────
+  else if (
+    structureClassification === 'trend-reversal-risk' ||
+    (priorTrend === 'down' && brokeSwingHigh) ||
+    (priorTrend === 'up' && brokeSwingLow)
+  ) {
+    type = 'REVERSAL_ATTEMPT';
+    evidence.push(`Reversal attempt: structure=${structureClassification}, prior trend=${priorTrend}`);
+    
+    // Determine attempted direction
+    if (priorTrend === 'down' && (brokeSwingHigh || emaAlignment === 'bullish')) {
+      direction = 'bullish';
+      evidence.push('Attempting bullish reversal of downtrend');
+    } else if (priorTrend === 'up' && (brokeSwingLow || emaAlignment === 'bearish')) {
+      direction = 'bearish';
+      evidence.push('Attempting bearish reversal of uptrend');
+    }
+    
+    // Confidence based on confirmation
+    confidence = 40;
+    if ((direction === 'bullish' && obvTrend === 'rising' && cmf > 0) ||
+        (direction === 'bearish' && obvTrend === 'falling' && cmf < 0)) {
+      confidence += 15;
+      evidence.push('Volume/flow confirms reversal attempt');
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
+  // STEP 4: Check for RANGE_BOUND regime
+  // ─────────────────────────────────────────────────────────────────
+  else if (adx < 25 && emaAlignment === 'mixed') {
+    type = 'RANGE_BOUND';
+    evidence.push(`Range-bound: ADX ${adx.toFixed(0)} < 25, mixed EMAs`);
+    confidence = 55;
+    
+    // In range-bound, direction is based on position within range
+    if (nearResistance && stochK > 70) {
+      direction = 'bearish'; // Favor mean reversion down from resistance
+      evidence.push('Near resistance with overbought oscillators');
+    } else if (nearSupport && stochK < 30) {
+      direction = 'bullish'; // Favor mean reversion up from support
+      evidence.push('Near support with oversold oscillators');
+    }
+    
+    // Squeeze affects range-bound interpretation
+    if (squeezeIsActive) {
+      evidence.push(`Squeeze active (${squeezeMomentumDirection} momentum) - breakout pending`);
+      confidence = 45; // Lower confidence during squeeze
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
+  // STEP 5: Default to UNCERTAIN
+  // ─────────────────────────────────────────────────────────────────
+  else {
+    type = 'UNCERTAIN';
+    evidence.push('Mixed signals - no clear regime');
+    confidence = 35;
+    
+    // List what's unclear
+    if (adx >= 20 && adx < 25) {
+      evidence.push(`ADX ${adx.toFixed(0)} in transition zone (20-25)`);
+    }
+    if (emaAlignment === 'mixed') {
+      evidence.push('EMAs not aligned');
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // DETERMINE REGIME-SPECIFIC RULES
+  // ─────────────────────────────────────────────────────────────────
+  const rules = getRegimeRules(type, direction, stochK, nearResistance, nearSupport, volatilityRegime);
+  
+  // ─────────────────────────────────────────────────────────────────
+  // GENERATE UNLOCK CONDITIONS FOR THIS REGIME
+  // ─────────────────────────────────────────────────────────────────
+  const unlockConditions = getRegimeUnlockConditions(
+    type, direction, adx, stochK, nearResistance, nearSupport, 
+    squeezeIsActive, squeezeMomentumDirection, cmf, obvTrend
+  );
+  
+  return {
+    type,
+    direction,
+    confidence: Math.min(100, Math.max(0, confidence)),
+    rules,
+    unlockConditions,
+    evidence
+  };
+}
+
+/**
+ * Get regime-specific rules that control gating behavior
+ */
+function getRegimeRules(
+  type: DetectedRegimeType,
+  direction: 'bullish' | 'bearish' | 'neutral',
+  stochK: number,
+  nearResistance: boolean,
+  nearSupport: boolean,
+  volatilityRegime: string
+): DetectedRegime['rules'] {
+  switch (type) {
+    case 'TRENDING':
+      return {
+        useADXGate: true,               // ADX gate applies in trending
+        useStochSupression: false,      // Overbought doesn't suppress in strong trends
+        allowMeanReversion: false,      // Don't mean-revert against trend
+        requireBreakoutConfirmation: false,
+        requireStructureBreak: false,
+        widenStops: false,
+        reduceConfidence: false
+      };
+      
+    case 'RANGE_BOUND':
+      return {
+        useADXGate: false,              // ADX gate does NOT apply in range
+        useStochSupression: true,       // Use oscillators for timing
+        allowMeanReversion: true,       // Mean reversion allowed at extremes
+        requireBreakoutConfirmation: true, // Require breakout + hold for directional trades
+        requireStructureBreak: false,
+        widenStops: false,
+        reduceConfidence: true          // Cap confidence until breakout
+      };
+      
+    case 'REVERSAL_ATTEMPT':
+      return {
+        useADXGate: false,              // ADX low is expected in reversals
+        useStochSupression: false,      // Oscillators confirm reversal timing
+        allowMeanReversion: false,
+        requireBreakoutConfirmation: true,
+        requireStructureBreak: true,    // Must break prior swing
+        widenStops: true,               // Wider stops for reversals
+        reduceConfidence: true
+      };
+      
+    case 'VOLATILITY_EXPANSION':
+      return {
+        useADXGate: true,
+        useStochSupression: true,       // More conservative in high vol
+        allowMeanReversion: false,      // Don't mean-revert in vol expansion
+        requireBreakoutConfirmation: true,
+        requireStructureBreak: false,
+        widenStops: true,               // Must widen stops
+        reduceConfidence: true          // Reduce confidence
+      };
+      
+    case 'UNCERTAIN':
+    default:
+      return {
+        useADXGate: true,
+        useStochSupression: true,
+        allowMeanReversion: false,
+        requireBreakoutConfirmation: true,
+        requireStructureBreak: true,
+        widenStops: true,
+        reduceConfidence: true
+      };
+  }
+}
+
+/**
+ * Generate regime-specific unlock conditions
+ */
+function getRegimeUnlockConditions(
+  type: DetectedRegimeType,
+  direction: 'bullish' | 'bearish' | 'neutral',
+  adx: number,
+  stochK: number,
+  nearResistance: boolean,
+  nearSupport: boolean,
+  squeezeIsActive: boolean,
+  squeezeMomentumDirection: string,
+  cmf: number,
+  obvTrend: string
+): string[] {
+  const conditions: string[] = [];
+  
+  switch (type) {
+    case 'TRENDING':
+      if (adx < 30) {
+        conditions.push(`ADX must strengthen above 30 (currently ${adx.toFixed(0)})`);
+      }
+      if (direction === 'bullish') {
+        conditions.push('Maintain higher highs and higher lows structure');
+      } else if (direction === 'bearish') {
+        conditions.push('Maintain lower highs and lower lows structure');
+      }
+      break;
+      
+    case 'RANGE_BOUND':
+      // Range-bound uses breakout/breakdown unlocks, NOT ADX
+      conditions.push('LONG: Breakout above range resistance + close/hold confirmation');
+      conditions.push('SHORT: Breakdown below range support + close/hold confirmation');
+      if (squeezeIsActive) {
+        conditions.push(`Wait for squeeze release (momentum: ${squeezeMomentumDirection})`);
+      }
+      // Mean reversion unlock (optional)
+      if (nearResistance && stochK > 85) {
+        conditions.push('Mean reversion SHORT: Stoch > 85 at resistance + bearish candle');
+      }
+      if (nearSupport && stochK < 15) {
+        conditions.push('Mean reversion LONG: Stoch < 15 at support + bullish candle');
+      }
+      break;
+      
+    case 'REVERSAL_ATTEMPT':
+      conditions.push('Require break of prior swing high/low');
+      if (direction === 'bullish') {
+        conditions.push('Volume confirmation: OBV rising + CMF positive');
+        if (obvTrend !== 'rising' || cmf <= 0) {
+          conditions.push(`Currently: OBV ${obvTrend}, CMF ${cmf.toFixed(3)} - not yet confirmed`);
+        }
+      } else if (direction === 'bearish') {
+        conditions.push('Volume confirmation: OBV falling + CMF negative');
+        if (obvTrend !== 'falling' || cmf >= 0) {
+          conditions.push(`Currently: OBV ${obvTrend}, CMF ${cmf.toFixed(3)} - not yet confirmed`);
+        }
+      }
+      conditions.push('Candlestick pattern must align with structure break at key level');
+      break;
+      
+    case 'VOLATILITY_EXPANSION':
+      conditions.push('Require stronger confirmation (volume z-score > 1.5 OR multi-indicator alignment)');
+      conditions.push('Use wider stops (1.5-2x normal ATR multiple)');
+      conditions.push('Reduce position size proportionally to volatility');
+      break;
+      
+    case 'UNCERTAIN':
+    default:
+      conditions.push('Wait for regime clarity');
+      conditions.push('ADX must rise above 25 for trend confirmation');
+      conditions.push('OR clear range boundaries must form for range trading');
+      conditions.push('OR structure break must occur for reversal setup');
+      break;
+  }
+  
+  return conditions;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VOLUME LABELING - FIXED TO PREVENT OVERSTATEMENT
+// Only label "Accumulation" when genuinely confirmed
+// ═══════════════════════════════════════════════════════════════════════════
+export function getVolumeLabel(
+  cmf: number,
+  cmfPrev: number | undefined,
+  obvTrend: 'rising' | 'falling' | 'flat',
+  volumeZScore: number
+): { label: string; isAccumulation: boolean; isDistribution: boolean } {
+  const cmfRising = cmfPrev !== undefined && cmf > cmfPrev;
+  const cmfPositive = cmf > 0;
+  const obvRising = obvTrend === 'rising';
+  const zScorePositive = volumeZScore > 0.5; // Meaningful positive threshold
+  
+  // TRUE ACCUMULATION: CMF positive AND rising OR OBV strongly rising, AND meaningful volume
+  if ((cmfPositive && cmfRising) || (obvRising && cmfPositive)) {
+    if (zScorePositive) {
+      return { label: 'Accumulation', isAccumulation: true, isDistribution: false };
+    } else {
+      return { label: 'Accumulation (low volume)', isAccumulation: true, isDistribution: false };
+    }
+  }
+  
+  // TRUE DISTRIBUTION: CMF negative AND falling OR OBV falling
+  const cmfFalling = cmfPrev !== undefined && cmf < cmfPrev;
+  const cmfNegative = cmf < 0;
+  const obvFalling = obvTrend === 'falling';
+  
+  if ((cmfNegative && cmfFalling) || (obvFalling && cmfNegative)) {
+    return { label: 'Distribution', isAccumulation: false, isDistribution: true };
+  }
+  
+  // ELEVATED ACTIVITY: High volume but mixed signals
+  if (volumeZScore > 1.0) {
+    return { label: 'Elevated activity', isAccumulation: false, isDistribution: false };
+  }
+  
+  // NORMAL PARTICIPATION: Default
+  return { label: 'Normal participation', isAccumulation: false, isDistribution: false };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANDLESTICK SIGNAL CANCELLATION
+// When bullish and bearish patterns cluster at same level, they cancel out
+// ═══════════════════════════════════════════════════════════════════════════
+export function checkCandlestickCancellation(
+  bullishPatterns: { name: string; barsAgo: number; confidence: number }[],
+  bearishPatterns: { name: string; barsAgo: number; confidence: number }[],
+  lookbackBars: number = 5,
+  regimeType: DetectedRegimeType
+): { 
+  cancelled: boolean; 
+  netBias: 'bullish' | 'bearish' | 'neutral';
+  reason: string;
+} {
+  // Filter patterns within lookback window
+  const recentBullish = bullishPatterns.filter(p => p.barsAgo <= lookbackBars);
+  const recentBearish = bearishPatterns.filter(p => p.barsAgo <= lookbackBars);
+  
+  // No patterns = neutral
+  if (recentBullish.length === 0 && recentBearish.length === 0) {
+    return { cancelled: false, netBias: 'neutral', reason: 'No recent patterns' };
+  }
+  
+  // Calculate weighted scores
+  const bullishScore = recentBullish.reduce((sum, p) => sum + p.confidence * (1 - p.barsAgo / 10), 0);
+  const bearishScore = recentBearish.reduce((sum, p) => sum + p.confidence * (1 - p.barsAgo / 10), 0);
+  
+  // Check for cancellation (both present with similar strength)
+  if (recentBullish.length > 0 && recentBearish.length > 0) {
+    const ratio = Math.min(bullishScore, bearishScore) / Math.max(bullishScore, bearishScore);
+    
+    // If scores are within 40% of each other, signals cancel
+    if (ratio > 0.6) {
+      // Exception: REVERSAL_ATTEMPT regime may use conflicting patterns differently
+      if (regimeType === 'REVERSAL_ATTEMPT') {
+        return { 
+          cancelled: false, 
+          netBias: bullishScore > bearishScore ? 'bullish' : 'bearish',
+          reason: 'Reversal regime: conflicting patterns may indicate transition'
+        };
+      }
+      
+      return { 
+        cancelled: true, 
+        netBias: 'neutral',
+        reason: `Signal cancellation: ${recentBullish.length} bullish vs ${recentBearish.length} bearish patterns`
+      };
+    }
+  }
+  
+  // No cancellation - return dominant bias
+  if (bullishScore > bearishScore * 1.5) {
+    return { cancelled: false, netBias: 'bullish', reason: `Bullish patterns dominant (${bullishScore.toFixed(0)} vs ${bearishScore.toFixed(0)})` };
+  } else if (bearishScore > bullishScore * 1.5) {
+    return { cancelled: false, netBias: 'bearish', reason: `Bearish patterns dominant (${bearishScore.toFixed(0)} vs ${bullishScore.toFixed(0)})` };
+  }
+  
+  return { cancelled: false, netBias: 'neutral', reason: 'Patterns balanced' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 1: INFER MARKET REGIME
+// Treat indicators as evidence, not signals
+// ═══════════════════════════════════════════════════════════════════════════
+export function inferMarketRegime(
+  adx: number,
+  plusDI: number,
+  minusDI: number,
+  emaAlignment: 'bullish' | 'bearish' | 'mixed',
+  priceVs200EMA: number, // % distance from 200 EMA
+  higherHighsLows: boolean,
+  lowerHighsLows: boolean
+): MarketRegimeInference {
+  const evidence: string[] = [];
+  
+  // Infer regime from ADX + structure
+  let regime: MarketRegimeInference['regime'];
+  let strength: MarketRegimeInference['strength'];
+  let direction: MarketRegimeInference['direction'];
+  
+  // ADX tells us trend existence, not direction
+  if (adx >= 30) {
+    regime = 'trending';
+    strength = 'strong';
+    evidence.push(`ADX ${adx.toFixed(0)} indicates strong trend`);
+  } else if (adx >= 20) {
+    regime = 'trending';
+    strength = 'developing';
+    evidence.push(`ADX ${adx.toFixed(0)} indicates developing trend`);
+  } else if (adx >= 15) {
+    // Weak ADX - could be range or transition
+    if (emaAlignment === 'mixed') {
+      regime = 'range-bound';
+      strength = 'weak';
+      evidence.push(`ADX ${adx.toFixed(0)} + mixed EMAs = range-bound`);
+    } else {
+      regime = 'reversal-attempt';
+      strength = 'weak';
+      evidence.push(`ADX ${adx.toFixed(0)} with aligned EMAs = potential transition`);
+    }
+  } else {
+    regime = 'range-bound';
+    strength = 'none';
+    evidence.push(`ADX ${adx.toFixed(0)} indicates no trend`);
+  }
+  
+  // Infer direction from DI and structure
+  if (plusDI > minusDI + 5 && emaAlignment === 'bullish') {
+    direction = 'bullish';
+    evidence.push(`+DI > -DI with bullish EMAs`);
+  } else if (minusDI > plusDI + 5 && emaAlignment === 'bearish') {
+    direction = 'bearish';
+    evidence.push(`-DI > +DI with bearish EMAs`);
+  } else {
+    direction = 'neutral';
+    evidence.push(`DI balanced or EMAs mixed = neutral direction`);
+  }
+  
+  // Check for structure confirmation
+  if (direction === 'bullish' && !higherHighsLows) {
+    regime = 'reversal-attempt';
+    evidence.push(`Bullish indicators but no higher highs/lows = reversal attempt`);
+  }
+  if (direction === 'bearish' && !lowerHighsLows) {
+    regime = 'reversal-attempt';
+    evidence.push(`Bearish indicators but no lower highs/lows = reversal attempt`);
+  }
+  
+  // 200 EMA context
+  if (Math.abs(priceVs200EMA) > 20) {
+    evidence.push(`Price ${priceVs200EMA > 0 ? 'far above' : 'far below'} 200 EMA (${priceVs200EMA.toFixed(0)}%)`);
+    if ((priceVs200EMA > 20 && direction === 'bullish') || (priceVs200EMA < -20 && direction === 'bearish')) {
+      evidence.push(`Extended move - mean reversion risk elevated`);
+    }
+  }
+  
+  return { regime, direction, strength, evidence };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 2: INFER RISK REGIME
+// ═══════════════════════════════════════════════════════════════════════════
+export function inferRiskRegime(
+  atrPercent: number,
+  historicalVolatility: number,
+  bollingerBandwidth: number,
+  bollingerB: number,
+  rsi: number,
+  stochK: number,
+  macdHistogram: number
+): RiskRegimeInference {
+  const evidence: string[] = [];
+  
+  // ATR context
+  let atrContext: RiskRegimeInference['atrContext'];
+  if (atrPercent >= 10) {
+    atrContext = 'extreme';
+    evidence.push(`ATR ${atrPercent.toFixed(1)}% = extreme volatility`);
+  } else if (atrPercent >= 6) {
+    atrContext = 'high';
+    evidence.push(`ATR ${atrPercent.toFixed(1)}% = high volatility`);
+  } else if (atrPercent >= 3) {
+    atrContext = 'normal';
+    evidence.push(`ATR ${atrPercent.toFixed(1)}% = normal volatility`);
+  } else {
+    atrContext = 'low';
+    evidence.push(`ATR ${atrPercent.toFixed(1)}% = low volatility`);
+  }
+  
+  // Risk regime from Bollinger behavior
+  let regime: RiskRegimeInference['regime'];
+  if (bollingerBandwidth < 15 || historicalVolatility < 25) {
+    regime = 'compressed';
+    evidence.push(`BB width ${bollingerBandwidth.toFixed(0)}% = volatility compressed`);
+  } else if (bollingerBandwidth > 40 || historicalVolatility > 60) {
+    regime = 'expanding';
+    evidence.push(`BB width ${bollingerBandwidth.toFixed(0)}% = volatility expanding`);
+  } else if (atrContext === 'extreme') {
+    regime = 'unstable';
+    evidence.push(`Extreme ATR with moderate BB = unstable regime`);
+  } else {
+    regime = 'normal';
+  }
+  
+  // Momentum dispersion (are oscillators agreeing?)
+  let momentumDispersion: RiskRegimeInference['momentumDispersion'];
+  const rsiBullish = rsi > 50;
+  const stochBullish = stochK > 50;
+  const macdBullish = macdHistogram > 0;
+  
+  const bullishCount = [rsiBullish, stochBullish, macdBullish].filter(Boolean).length;
+  
+  if (bullishCount === 3 || bullishCount === 0) {
+    momentumDispersion = 'aligned';
+    evidence.push(`Momentum oscillators aligned (${bullishCount}/3 bullish)`);
+  } else if (bullishCount === 2 || bullishCount === 1) {
+    momentumDispersion = 'diverging';
+    evidence.push(`Momentum oscillators diverging (${bullishCount}/3 bullish)`);
+  } else {
+    momentumDispersion = 'conflicting';
+  }
+  
+  return { regime, atrContext, momentumDispersion, evidence };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 3: INFER BEHAVIORAL CONTEXT
+// ═══════════════════════════════════════════════════════════════════════════
+export function inferBehavioralContext(
+  obvTrend: 'rising' | 'falling' | 'flat',
+  cmf: number,
+  volumeZScore: number,
+  rsi: number,
+  stochK: number,
+  mfi: number,
+  priceVs200EMA: number
+): BehavioralContextInference {
+  const evidence: string[] = [];
+  
+  // Volume signature
+  let volumeSignature: BehavioralContextInference['volumeSignature'];
+  const isAccumulation = obvTrend === 'rising' && cmf > 0.05;
+  const isDistribution = obvTrend === 'falling' && cmf < -0.05;
+  const isExhaustion = volumeZScore > 2.0; // Extreme volume
+  
+  if (isExhaustion) {
+    volumeSignature = 'exhaustion';
+    evidence.push(`Volume Z-score ${volumeZScore.toFixed(1)} = potential exhaustion`);
+  } else if (isAccumulation) {
+    volumeSignature = 'confirming';
+    evidence.push(`Rising OBV + positive CMF = accumulation`);
+  } else if (isDistribution) {
+    volumeSignature = 'diverging';
+    evidence.push(`Falling OBV + negative CMF = distribution`);
+  } else {
+    volumeSignature = 'neutral';
+  }
+  
+  // Oscillator state
+  let oscillatorState: BehavioralContextInference['oscillatorState'];
+  const avgOscillator = (rsi + stochK + mfi) / 3;
+  
+  if (stochK > 80 && rsi > 70 && mfi > 80) {
+    oscillatorState = 'extreme';
+    evidence.push(`All oscillators overbought = extreme`);
+  } else if (stochK < 20 && rsi < 30 && mfi < 20) {
+    oscillatorState = 'extreme';
+    evidence.push(`All oscillators oversold = extreme`);
+  } else if (avgOscillator > 65) {
+    oscillatorState = 'overbought';
+    evidence.push(`Oscillators overbought (avg ${avgOscillator.toFixed(0)})`);
+  } else if (avgOscillator < 35) {
+    oscillatorState = 'oversold';
+    evidence.push(`Oscillators oversold (avg ${avgOscillator.toFixed(0)})`);
+  } else {
+    oscillatorState = 'neutral';
+  }
+  
+  // Infer behavioral context
+  let context: BehavioralContextInference['context'];
+  
+  if (isAccumulation && oscillatorState !== 'overbought') {
+    context = 'accumulation';
+    evidence.push(`Accumulation context: volume confirming without overbought`);
+  } else if (isDistribution && oscillatorState !== 'oversold') {
+    context = 'distribution';
+    evidence.push(`Distribution context: volume diverging without oversold`);
+  } else if (oscillatorState === 'extreme' || oscillatorState === 'overbought') {
+    if (priceVs200EMA > 15) {
+      context = 'chasing';
+      evidence.push(`Chasing context: overbought + extended above 200 EMA`);
+    } else {
+      context = 'mean-reversion-risk';
+      evidence.push(`Mean-reversion risk: overbought conditions`);
+    }
+  } else if (oscillatorState === 'oversold' && priceVs200EMA < -15) {
+    context = 'mean-reversion-risk';
+    evidence.push(`Mean-reversion risk: oversold + extended below 200 EMA`);
+  } else {
+    context = 'neutral';
+  }
+  
+  return { context, volumeSignature, oscillatorState, evidence };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 4: DETERMINE STRATEGY FEASIBILITY
+// Based on inferred regimes, determine valid/invalid/conditional strategies
+// ═══════════════════════════════════════════════════════════════════════════
+export function determineStrategyFeasibility(
+  market: MarketRegimeInference,
+  risk: RiskRegimeInference,
+  behavioral: BehavioralContextInference
+): StrategyFeasibility {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  const conditional: string[] = [];
+  const reasoning: string[] = [];
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 1: Weak or range-bound regimes suppress trend-following
+  // ─────────────────────────────────────────────────────────────────
+  if (market.regime === 'range-bound' || market.strength === 'none' || market.strength === 'weak') {
+    invalid.push('trend-continuation');
+    invalid.push('breakout-expansion');
+    reasoning.push(`Range-bound/weak regime: trend-following and breakouts INVALID`);
+    
+    valid.push('mean-reversion');
+    reasoning.push(`Mean-reversion is valid in range-bound regime`);
+    
+    conditional.push('speculative-pullback');
+    reasoning.push(`Speculative pullback conditional on structure confirmation`);
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 2: Overbought/oversold in weak trends → WAIT or mean-reversion
+  // ─────────────────────────────────────────────────────────────────
+  if ((behavioral.oscillatorState === 'overbought' || behavioral.oscillatorState === 'extreme') 
+      && market.strength !== 'strong') {
+    invalid.push('trend-continuation');
+    invalid.push('pullback-continuation'); // Buying into overbought
+    reasoning.push(`Overbought in weak trend: continuation strategies INVALID`);
+    
+    if (behavioral.context === 'chasing') {
+      valid.push('wait');
+      reasoning.push(`Chasing context detected: WAIT is optimal`);
+    } else {
+      conditional.push('mean-reversion');
+      reasoning.push(`Mean-reversion conditional on structure support`);
+    }
+  }
+  
+  if ((behavioral.oscillatorState === 'oversold' || behavioral.oscillatorState === 'extreme')
+      && market.strength !== 'strong') {
+    invalid.push('breakdown-short');
+    reasoning.push(`Oversold in weak trend: shorting INVALID`);
+    
+    conditional.push('mean-reversion');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 3: Unstable risk regime → speculative only or WAIT
+  // ─────────────────────────────────────────────────────────────────
+  if (risk.regime === 'unstable' || risk.atrContext === 'extreme') {
+    invalid.push('trend-continuation');
+    invalid.push('pullback-continuation');
+    reasoning.push(`Unstable/extreme volatility: standard strategies INVALID`);
+    
+    conditional.push('speculative-pullback');
+    valid.push('wait');
+    reasoning.push(`Speculative pullback or WAIT only in unstable regime`);
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 4: Distribution context suppresses longs
+  // ─────────────────────────────────────────────────────────────────
+  if (behavioral.context === 'distribution') {
+    invalid.push('trend-continuation');
+    conditional.push('pullback-continuation');
+    reasoning.push(`Distribution context: long strategies suppressed`);
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 5: Strong trending + aligned momentum → full strategy set
+  // ─────────────────────────────────────────────────────────────────
+  if (market.regime === 'trending' && market.strength === 'strong' 
+      && risk.momentumDispersion === 'aligned'
+      && behavioral.context !== 'distribution'
+      && behavioral.context !== 'chasing') {
+    
+    if (risk.atrContext === 'low' || risk.atrContext === 'normal') {
+      valid.push('trend-continuation');
+      valid.push('pullback-continuation');
+      reasoning.push(`Strong trend + aligned momentum + normal vol: full strategies VALID`);
+    } else {
+      valid.push('pullback-continuation');
+      conditional.push('trend-continuation');
+      reasoning.push(`Strong trend but high vol: pullback valid, continuation conditional`);
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 6: Reversal attempt → breakout only
+  // ─────────────────────────────────────────────────────────────────
+  if (market.regime === 'reversal-attempt') {
+    invalid.push('trend-continuation');
+    conditional.push('breakout-expansion');
+    reasoning.push(`Reversal attempt: only breakout is conditionally valid`);
+    valid.push('wait');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // RULE 7: Compressed volatility → breakout preparation
+  // ─────────────────────────────────────────────────────────────────
+  if (risk.regime === 'compressed') {
+    valid.push('breakout-expansion');
+    reasoning.push(`Compressed volatility: breakout strategy valid`);
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // DETERMINE DEFAULT ACTION
+  // ─────────────────────────────────────────────────────────────────
+  let defaultAction: 'trade' | 'wait';
+  
+  // If no valid strategies OR too many constraints → WAIT
+  if (valid.length === 0 || (valid.length === 1 && valid[0] === 'wait')) {
+    defaultAction = 'wait';
+    if (!valid.includes('wait')) valid.push('wait');
+    reasoning.push(`No satisfiable strategies: default to WAIT`);
+  } else {
+    defaultAction = 'trade';
+  }
+  
+  // If conflicting conditions exist → prefer WAIT
+  if (invalid.length >= 3 && valid.length <= 2) {
+    defaultAction = 'wait';
+    reasoning.push(`Multiple strategy families invalid: WAIT preferred`);
+  }
+  
+  return { valid, invalid, conditional, defaultAction, reasoning };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBINED REGIME ANALYSIS
+// Run all inference steps and return unified analysis
+// ═══════════════════════════════════════════════════════════════════════════
+export function analyzeRegime(
+  adx: number,
+  plusDI: number,
+  minusDI: number,
+  emaAlignment: 'bullish' | 'bearish' | 'mixed',
+  priceVs200EMA: number,
+  higherHighsLows: boolean,
+  lowerHighsLows: boolean,
+  atrPercent: number,
+  historicalVolatility: number,
+  bollingerBandwidth: number,
+  bollingerB: number,
+  rsi: number,
+  stochK: number,
+  mfi: number,
+  macdHistogram: number,
+  obvTrend: 'rising' | 'falling' | 'flat',
+  cmf: number,
+  volumeZScore: number
+): RegimeAnalysis {
+  // Step 1: Market regime
+  const market = inferMarketRegime(
+    adx, plusDI, minusDI, emaAlignment, priceVs200EMA, higherHighsLows, lowerHighsLows
+  );
+  
+  // Step 2: Risk regime
+  const risk = inferRiskRegime(
+    atrPercent, historicalVolatility, bollingerBandwidth, bollingerB, rsi, stochK, macdHistogram
+  );
+  
+  // Step 3: Behavioral context
+  const behavioral = inferBehavioralContext(
+    obvTrend, cmf, volumeZScore, rsi, stochK, mfi, priceVs200EMA
+  );
+  
+  // Step 4: Strategy feasibility
+  const feasibility = determineStrategyFeasibility(market, risk, behavioral);
+  
+  return { market, risk, behavioral, feasibility };
+}
+
+/**
+ * REGIME-FIRST CLASSIFICATION
+ * This function MUST run before any strategy recommendation.
+ * It determines which strategy types are valid and sets constraints.
+ */
+export function classifyTradeRegime(
+  atrPercent: number,           // ATR as % of price
+  historicalVolatility: number, // Historical volatility %
+  adx: number,                  // ADX value
+  emaAlignment: 'bullish' | 'bearish' | 'mixed',
+  structureClassification: 'likely-pullback' | 'trend-reversal-risk' | 'mixed',
+  hasReversalPatterns: boolean, // Active bearish patterns at resistance or bullish at support
+  hasOBVDivergence: boolean     // OBV diverging from price
+): TradeRegime {
+  const constraints: string[] = [];
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 1: VOLATILITY CLASS DETERMINATION
+  // ═══════════════════════════════════════════════════════════════
+  let volatilityClass: 'low' | 'normal' | 'high' | 'speculative';
+  let stopMultiplier: number;
+  let isSpeculative = false;
+  
+  if (atrPercent > 10 || historicalVolatility > 80) {
+    // SPECULATIVE: Standard trend-following assumptions are INVALID
+    volatilityClass = 'speculative';
+    stopMultiplier = 2.5; // Wider stops required
+    isSpeculative = true;
+    constraints.push('⚠️ SPECULATIVE: ATR/HV exceeds safe thresholds');
+    constraints.push('Tight stops, aggressive targets, and high confidence are INVALID');
+    constraints.push('Reduce position size significantly');
+  } else if (atrPercent > 6 || historicalVolatility > 50) {
+    volatilityClass = 'high';
+    stopMultiplier = 2.0;
+    constraints.push('High volatility - wider stops, reduced confidence');
+  } else if (atrPercent < 3 && historicalVolatility < 25) {
+    volatilityClass = 'low';
+    stopMultiplier = 1.25;
+    constraints.push('Low volatility - tighter stops, trend continuation favored');
+  } else {
+    volatilityClass = 'normal';
+    stopMultiplier = 1.5;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 2: STRUCTURE CLASS DETERMINATION
+  // ═══════════════════════════════════════════════════════════════
+  let structureClass: 'trending' | 'range-bound' | 'transitional';
+  
+  if (adx >= 25 && emaAlignment !== 'mixed') {
+    structureClass = 'trending';
+  } else if (adx < 20 || emaAlignment === 'mixed') {
+    structureClass = 'range-bound';
+    constraints.push('ADX < 20 or mixed EMAs - range-bound regime');
+  } else {
+    structureClass = 'transitional';
+    constraints.push('Transitional regime - wait for confirmation');
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 3: DETERMINE ALLOWED STRATEGY TYPES
+  // ═══════════════════════════════════════════════════════════════
+  const allowedStrategies: TradeRegime['allowedStrategies'] = [];
+  
+  if (volatilityClass === 'speculative') {
+    // Speculative regime: only mean-reversion and speculative pullbacks
+    allowedStrategies.push('speculative-pullback');
+    allowedStrategies.push('mean-reversion');
+    allowedStrategies.push('wait');
+    constraints.push('Trend-continuation and standard breakouts PROHIBITED');
+  } else if (structureClass === 'range-bound') {
+    // Range-bound: mean-reversion and breakout expansion only
+    allowedStrategies.push('mean-reversion');
+    allowedStrategies.push('breakout-expansion');
+    allowedStrategies.push('wait');
+    constraints.push('Trend-following strategies PROHIBITED in range');
+  } else if (structureClass === 'trending') {
+    // Trending: full strategy set available
+    if (volatilityClass === 'low') {
+      allowedStrategies.push('trend-continuation');
+    }
+    allowedStrategies.push('pullback-continuation');
+    allowedStrategies.push('breakout-expansion');
+    if (volatilityClass === 'high') {
+      allowedStrategies.push('speculative-pullback');
+    }
+    allowedStrategies.push('wait');
+  } else {
+    // Transitional: breakout or wait
+    allowedStrategies.push('breakout-expansion');
+    allowedStrategies.push('wait');
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 4: SET REGIME CONSTRAINTS (caps on confidence, targets, holding period)
+  // ═══════════════════════════════════════════════════════════════
+  let maxConfidence: number;
+  let maxTargetMultiple: number;
+  let maxHoldingDays: number;
+  let requiresConfirmation = false;
+  
+  // Confidence caps based on regime
+  if (volatilityClass === 'speculative') {
+    maxConfidence = 50;
+    maxTargetMultiple = 1.5;
+    maxHoldingDays = 3;
+    requiresConfirmation = true;
+  } else if (volatilityClass === 'high') {
+    maxConfidence = 60;
+    maxTargetMultiple = 2.0;
+    maxHoldingDays = 5;
+  } else if (structureClass === 'range-bound') {
+    maxConfidence = 55;
+    maxTargetMultiple = 1.5;
+    maxHoldingDays = 5;
+  } else if (structureClass === 'transitional') {
+    maxConfidence = 60;
+    maxTargetMultiple = 2.0;
+    maxHoldingDays = 7;
+    requiresConfirmation = true;
+  } else {
+    // Normal trending
+    maxConfidence = 75;
+    maxTargetMultiple = 3.0;
+    maxHoldingDays = 15;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 5: CONTRADICTION DOWNGRADES
+  // ═══════════════════════════════════════════════════════════════
+  // Reversal patterns or OBV divergence MUST reduce confidence
+  if (hasReversalPatterns) {
+    maxConfidence = Math.min(maxConfidence, 55);
+    requiresConfirmation = true;
+    constraints.push('Reversal patterns detected - confirmation required');
+  }
+  
+  if (hasOBVDivergence) {
+    maxConfidence = Math.min(maxConfidence, 55);
+    constraints.push('OBV divergence - confidence capped, early exits encouraged');
+  }
+  
+  // Both present = WAIT recommended
+  if (hasReversalPatterns && hasOBVDivergence) {
+    maxConfidence = Math.min(maxConfidence, 45);
+    constraints.push('Multiple contradictions - WAIT or reduce position significantly');
+  }
+  
+  return {
+    volatilityClass,
+    structureClass,
+    allowedStrategies,
+    maxConfidence,
+    maxTargetMultiple,
+    maxHoldingDays,
+    stopMultiplier,
+    isSpeculative,
+    requiresConfirmation,
+    constraints
+  };
+}
+
 /**
  * Analyze price action and structure to classify current move
  * as pullback, potential reversal, or mixed/unclear
@@ -179,7 +1279,7 @@ export function analyzeStructure(
   // Determine prior trend direction
   let priorTrendDirection: 'up' | 'down' | 'sideways';
   if (trend.primary.direction === 'uptrend') {
-    priorTrendDirection = 'up';
+    priorTrendDirection = 'up'; 
   } else if (trend.primary.direction === 'downtrend') {
     priorTrendDirection = 'down';
   } else {
@@ -1548,12 +2648,21 @@ export function calculateSignalStrength(
   const volatilitySignal = `${volatility.regime.charAt(0).toUpperCase() + volatility.regime.slice(1)} volatility`;
   
   // ═══════════════════════════════════════════════════════════════
-  // PATTERN SCORE - Must respect momentum hierarchy
+  // PATTERN SCORE - Must respect momentum hierarchy AND price context
   // Bullish patterns can't override bearish momentum
+  // Bullish signals below 200 EMA = "attempts", not "bullish price action"
   // ═══════════════════════════════════════════════════════════════
   
   const recentBars = bars.slice(-5);
   const bullishCandles = recentBars.filter(b => b.close > b.open).length;
+  
+  // CONTEXT RULE: Determine price location relative to 200 EMA
+  const closes = bars.map(b => b.close);
+  const ema200 = calculateEMAValue(closes, Math.min(200, closes.length));
+  const currentPrice = bars[bars.length - 1].close;
+  const priceVsEma200 = ((currentPrice - ema200) / ema200) * 100;
+  const isBelow200EMA = priceVsEma200 < -2; // More than 2% below
+  const isAbove200EMA = priceVsEma200 > 2;  // More than 2% above
   
   // Base pattern score from candle direction
   let patternScore = 50;
@@ -1578,16 +2687,45 @@ export function calculateSignalStrength(
     patternScore = patternScore > 50 ? 55 : 45; // Compress toward neutral
   }
   
-  // Pattern signal label - must match score and regime
+  // CONTEXT RULE: Bullish patterns below 200 EMA are "attempts", not "price action"
+  // Bearish patterns above 200 EMA are "reaction moves", not "price action"
+  if (isBelow200EMA && patternScore > 55) {
+    patternScore = 55; // Cap bullish patterns below 200 EMA
+  }
+  if (isAbove200EMA && patternScore < 45) {
+    patternScore = 45; // Floor bearish patterns above 200 EMA
+  }
+  
+  // Pattern signal label - CONTEXT-AWARE (Critical Rule)
+  // Labels must reflect structural context, not just candle counts
   let patternSignal: string;
   if (patternScore >= 60) {
-    patternSignal = 'Bullish price action';
+    // Only call it "bullish price action" if above 200 EMA and in trending regime
+    if (isAbove200EMA && adx >= 20) {
+      patternSignal = 'Bullish price action';
+    } else if (isBelow200EMA) {
+      patternSignal = 'Bullish attempts (below 200 EMA)';
+    } else {
+      patternSignal = 'Bullish attempts (range)';
+    }
   } else if (patternScore <= 40) {
-    patternSignal = 'Bearish price action';
+    // Only call it "bearish price action" if below 200 EMA and in trending regime
+    if (isBelow200EMA && adx >= 20) {
+      patternSignal = 'Bearish price action';
+    } else if (isAbove200EMA) {
+      patternSignal = 'Bearish reaction (above 200 EMA)';
+    } else {
+      patternSignal = 'Bearish reaction (range)';
+    }
   } else {
-    // 41-59 = mixed/neutral
-    patternSignal = momentumScore < 40 ? 'Bearish pressure' :
-                    momentumScore > 60 ? 'Bullish attempts' : 'Mixed price action';
+    // 41-59 = mixed/neutral - context-dependent labels
+    if (momentumScore < 40) {
+      patternSignal = isAbove200EMA ? 'Counter-trend pressure' : 'Bearish pressure';
+    } else if (momentumScore > 60) {
+      patternSignal = isBelow200EMA ? 'Counter-trend rally' : 'Bullish attempts';
+    } else {
+      patternSignal = 'Mixed price action';
+    }
   }
   
   // Weights
@@ -1656,7 +2794,8 @@ export function calculateSignalStrength(
 
 /**
  * Generate strategy recommendations based on technical analysis
- * Now with structure-aware logic, volatility-aware stops, and squeeze handling
+ * REGIME-FIRST APPROACH: Volatility and structure classification happens
+ * BEFORE any strategy, entry, stop, or target logic runs.
  */
 export function generateStrategyRecommendation(
   bars: OHLCV[],
@@ -1668,18 +2807,34 @@ export function generateStrategyRecommendation(
     support: { price: number; touches: number; strength: number }[];
     resistance: { price: number; touches: number; strength: number }[];
   },
-  // NEW: Structure analysis context
+  // Structure analysis context
   structureContext?: {
     classification: 'likely-pullback' | 'trend-reversal-risk' | 'mixed';
     priorTrendDirection: 'up' | 'down' | 'sideways';
     dominantBias: 'pullback' | 'reversal' | 'neutral';
   },
-  // NEW: Additional indicators for overbought/oversold and squeeze detection
+  // Additional indicators for overbought/oversold and squeeze detection
   oscillators?: {
     stochK?: number;
     mfi?: number;
     historicalVolatility?: number;
     bollingerBandwidth?: number;
+    bollingerB?: number;
+  },
+  // ADX data for regime classification
+  adxValue?: number,
+  // TTM Squeeze data for compression regime detection
+  squeezeData?: {
+    isInSqueeze: boolean;
+    squeezeDuration: number;
+    momentum: number;
+    momentumDirection: 'bullish' | 'bearish' | 'neutral';
+  },
+  // Volume flow data for confirmation
+  volumeFlowData?: {
+    obvTrend: 'rising' | 'falling' | 'flat';
+    cmf: number;
+    volumeZScore: number;
   }
 ): StrategyRecommendation {
   const currentPrice = bars[bars.length - 1].close;
@@ -1700,45 +2855,131 @@ export function generateStrategyRecommendation(
   const nearestRelevantSupport = relevantSupports[0]?.price || currentPrice - atr * 1.5;
   const nearestRelevantResistance = relevantResistances[0]?.price || currentPrice + atr * 1.5;
   
-  // ==========================================
-  // SQUEEZE DETECTION (HV > 150% or BB Width > 150%)
-  // ==========================================
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MARKET REGIME REASONING ENGINE
+  // INFER regimes from raw indicators, then determine valid strategies
+  // The flow: Regime → Valid Strategies → Trade Parameters (if any)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  const adx = adxValue ?? 20;
+  const stochK = oscillators?.stochK ?? 50;
+  const mfi = oscillators?.mfi ?? 50;
+  const bollingerBandwidth = oscillators?.bollingerBandwidth ?? 30;
+  const historicalVol = oscillators?.historicalVolatility ?? 40;
+  
+  // Calculate additional required values for regime analysis
+  const adxData = calculateADX(bars);
+  const plusDI = adxData.plusDI[adxData.plusDI.length - 1] || 20;
+  const minusDI = adxData.minusDI[adxData.minusDI.length - 1] || 20;
+  
+  // Calculate RSI for regime inference
+  const closes = bars.map(b => b.close);
+  const rsiArray = calculateRSI(closes, 14);
+  const rsi = rsiArray[rsiArray.length - 1] || 50;
+  
+  // Calculate MACD histogram
+  const macdData = calculateMACD(closes);
+  const macdHistogram = macdData.histogram[macdData.histogram.length - 1] || 0;
+  
+  // Calculate 200 EMA for context
+  const ema200 = calculateEMAValue(closes, Math.min(200, closes.length));
+  const priceVs200EMA = ((currentPrice - ema200) / ema200) * 100;
+  
+  // Infer structure (higher highs/lows)
+  const higherHighsLows = checkHigherLows(bars.slice(-20));
+  const lowerHighsLows = checkLowerHighs(bars.slice(-20));
+  
+  // Extract volume flow data
+  const patternSignalText = signalStrength.breakdown.pattern.signal.toLowerCase();
+  const hasReversalPatterns =
+    patternSignalText.includes('bearish') ||
+    patternSignalText.includes('reversal') ||
+    patternSignalText.includes('pressure');
+  
+  const volumeSignalText = signalStrength.breakdown.volume.signal.toLowerCase();
+  const hasOBVDivergence =
+    volumeSignalText.includes('divergence') ||
+    volumeSignalText.includes('distribution');
+  
+  // Infer OBV trend and CMF from volume signal
+  let obvTrend: 'rising' | 'falling' | 'flat' = 'flat';
+  let cmf = 0;
+  if (volumeSignalText.includes('accumulation')) {
+    obvTrend = 'rising';
+    cmf = 0.1;
+  } else if (volumeSignalText.includes('distribution') || volumeSignalText.includes('divergence')) {
+    obvTrend = 'falling';
+    cmf = -0.1;
+  }
+  
+  // Calculate volume Z-score
+  const volumes = bars.slice(-20).map(b => b.volume);
+  const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+  const recentVol = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const volStdDev = Math.sqrt(volumes.reduce((sum, v) => sum + Math.pow(v - avgVol, 2), 0) / volumes.length);
+  const volumeZScore = volStdDev > 0 ? (recentVol - avgVol) / volStdDev : 0;
+  
+  // Calculate Bollinger %B
+  const bollingerData = calculateBollingerBands(closes, 20, 2);
+  const bollingerB = bollingerData.percentB[bollingerData.percentB.length - 1] || 50;
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RUN FULL REGIME ANALYSIS (Steps 1-4)
+  // This determines what is TRADABLE, not what is theoretically bullish/bearish
+  // ═══════════════════════════════════════════════════════════════════════════
+  const regimeAnalysis = analyzeRegime(
+    adx, plusDI, minusDI, trend.emaAlignment, priceVs200EMA,
+    higherHighsLows, lowerHighsLows,
+    atrPercent, historicalVol, bollingerBandwidth, bollingerB,
+    rsi, stochK, mfi, macdHistogram,
+    obvTrend, cmf, volumeZScore
+  );
+  
+  // Legacy regime classification (for backwards compatibility and additional constraints)
+  const regime = classifyTradeRegime(
+    atrPercent,
+    historicalVol,
+    adx,
+    trend.emaAlignment,
+    structureContext?.classification || 'mixed',
+    hasReversalPatterns,
+    hasOBVDivergence
+  );
+  
+  // Attach regime analysis to regime object
+  regime.regimeAnalysis = regimeAnalysis;
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEASIBILITY CHECK - If no valid strategies, force WAIT
+  // ═══════════════════════════════════════════════════════════════════════════
+  const feasibility = regimeAnalysis.feasibility;
+  const forceWaitFromRegime = feasibility.defaultAction === 'wait' && feasibility.valid.every(s => s === 'wait');
+  
+  // ═══════════════════════════════════════════════════════════════
+  // SQUEEZE AND OVERBOUGHT/OVERSOLD DETECTION
+  // ═══════════════════════════════════════════════════════════════
   const isInSqueeze = (oscillators?.historicalVolatility ?? 0) > 150 || 
                       (oscillators?.bollingerBandwidth ?? 0) > 150;
   
-  // ==========================================
-  // OVERBOUGHT/OVERSOLD DETECTION
-  // ==========================================
-  // Slightly more conservative: treat Stoch > 70 as overbought for execution rules
-  const isOverbought = (oscillators?.stochK ?? 50) > 70 || (oscillators?.mfi ?? 50) > 85;
-  const isOversold = (oscillators?.stochK ?? 50) < 20 || (oscillators?.mfi ?? 50) < 15;
+  // Overbought/oversold detection
+  const isOverbought = stochK > 70 || mfi > 85;
+  const isOversold = stochK < 20 || mfi < 15;
   
-  // ==========================================
-  // VOLATILITY-AWARE STOP MULTIPLIER
-  // ==========================================
-  // ATR ≤ 10%: 1.5x ATR stops
-  // ATR 10-20%: 2x ATR stops
-  // ATR > 20%: Structure-based stops (use support/resistance)
-  let stopMultiplier: number;
-  let useStructureBasedStops = false;
-  
-  if (atrPercent <= 10) {
-    stopMultiplier = 1.5;
-  } else if (atrPercent <= 20) {
-    stopMultiplier = 2.0;
-  } else {
-    stopMultiplier = 2.5; // Will also use structure-based logic
-    useStructureBasedStops = true;
-  }
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 3: STOP MULTIPLIER FROM REGIME (not ad-hoc)
+  // ═══════════════════════════════════════════════════════════════
+  let stopMultiplier = regime.stopMultiplier;
+  let useStructureBasedStops = regime.isSpeculative || atrPercent > 15;
   
   // In squeeze conditions: tighter stops (1x ATR)
   if (isInSqueeze) {
     stopMultiplier = 1.0;
   }
   
-  // ==========================================
-  // STRATEGY-STRUCTURE ALIGNMENT
-  // ==========================================
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 4: STRATEGY CLASSIFICATION - GATED BY REGIME
+  // With explicit CONFLICT DETECTION - WAIT is a valid output
+  // ═══════════════════════════════════════════════════════════════
   let strategy: string;
   let direction: 'long' | 'short' | 'wait';
   let confidence: number;
@@ -1747,60 +2988,399 @@ export function generateStrategyRecommendation(
   const priorTrend = structureContext?.priorTrendDirection || 'sideways';
   const dominantBias = structureContext?.dominantBias || 'neutral';
   
-  // Base criteria
-  const strongBullish = signalStrength.direction === 'bullish' && 
+  // ═══════════════════════════════════════════════════════════════
+  // CONFLICT DETECTION (Critical)
+  // If regime + structure + momentum don't align → WAIT
+  // WAIT is optimal when constraints conflict
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Use pre-calculated 200 EMA context from regime analysis
+  const isBelow200EMA = priceVs200EMA < -2;
+  const isAbove200EMA = priceVs200EMA > 2;
+  
+  // Detect conflicts between layers
+  const conflicts: string[] = [];
+  
+  // Conflict: Bullish momentum below 200 EMA
+  if (momentum.direction === 'bullish' && isBelow200EMA) {
+    conflicts.push('Bullish momentum below 200 EMA (counter-trend)');
+  }
+  
+  // Conflict: Bearish momentum above 200 EMA
+  if (momentum.direction === 'bearish' && isAbove200EMA) {
+    conflicts.push('Bearish momentum above 200 EMA (counter-trend)');
+  }
+  
+  // Conflict: Structure and regime disagree
+  if (regime.structureClass === 'range-bound' && structure === 'likely-pullback') {
+    conflicts.push('Pullback structure in range-bound regime');
+  }
+  
+  // Conflict: Speculative regime with trend-following signals
+  if (regime.isSpeculative && signalStrength.direction !== 'neutral') {
+    conflicts.push('Directional signal in speculative regime');
+  }
+  
+  // Conflict: Momentum and trend direction disagree
+  if (momentum.direction === 'bullish' && trend.emaAlignment === 'bearish') {
+    conflicts.push('Bullish momentum against bearish trend');
+  }
+  if (momentum.direction === 'bearish' && trend.emaAlignment === 'bullish') {
+    conflicts.push('Bearish momentum against bullish trend');
+  }
+  
+  // Conflict: Reversal patterns with strong trend signals
+  if (hasReversalPatterns && signalStrength.overall > 60) {
+    conflicts.push('Reversal patterns contradict trend strength');
+  }
+  
+  // If 2+ conflicts exist → WAIT is the optimal output
+  const hasSignificantConflicts = conflicts.length >= 2;
+  
+  // Base criteria (only valid if no significant conflicts)
+  const strongBullish = !hasSignificantConflicts &&
+                        signalStrength.direction === 'bullish' && 
                         signalStrength.overall >= 55 && 
                         (momentum.strength === 'strong' || momentum.strength === 'moderate');
-  const strongBearish = signalStrength.direction === 'bearish' && 
+  const strongBearish = !hasSignificantConflicts &&
+                        signalStrength.direction === 'bearish' && 
                         signalStrength.overall >= 55 && 
                         (momentum.strength === 'strong' || momentum.strength === 'moderate');
   
-  // Weak setup - always wait
-  if (signalStrength.grade === 'F' || signalStrength.grade === 'D' || signalStrength.overall < 40) {
-    strategy = 'No Trade - Weak Setup';
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DETECTED REGIME - HIGH-LEVEL CLASSIFICATION
+  // Maps to one of: TRENDING, RANGE_BOUND, REVERSAL_ATTEMPT, VOLATILITY_EXPANSION, UNCERTAIN
+  // This determines which gates and rules apply to recommendations
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Check for support/resistance proximity
+  const nearestSupport = relevantSupports[0]?.price ?? (currentPrice - atr * 2);
+  const nearestResistance = relevantResistances[0]?.price ?? (currentPrice + atr * 2);
+  const nearResistance = (nearestResistance - currentPrice) / currentPrice < 0.02; // Within 2%
+  const nearSupport = (currentPrice - nearestSupport) / currentPrice < 0.02; // Within 2%
+  
+  // Check for swing high/low breaks
+  const swingPoints = findSwingPoints(bars.slice(-30));
+  const recentSwingHigh = swingPoints.highs[0]?.price ?? currentPrice * 1.1;
+  const recentSwingLow = swingPoints.lows[0]?.price ?? currentPrice * 0.9;
+  const brokeSwingHigh = currentPrice > recentSwingHigh;
+  const brokeSwingLow = currentPrice < recentSwingLow;
+  
+  // Get effective squeeze data (use different var names to avoid conflict with later declarations)
+  const regimeSqueezeActive = squeezeData?.isInSqueeze ?? false;
+  const regimeSqueezeMomentum = squeezeData?.momentumDirection ?? 'neutral';
+  
+  // Get effective CMF and OBV
+  const effectiveCMF = volumeFlowData?.cmf ?? cmf;
+  const effectiveOBV = volumeFlowData?.obvTrend ?? obvTrend;
+  
+  // Detect the high-level market regime
+  const detectedRegime = detectMarketRegime(
+    adx,
+    trend.emaAlignment,
+    priorTrend,
+    structure,
+    volatility.regime,
+    bollingerBandwidth,
+    atrPercent,
+    regimeSqueezeActive,
+    regimeSqueezeMomentum,
+    stochK,
+    rsi,
+    effectiveCMF,
+    effectiveOBV,
+    volumeZScore,
+    nearResistance,
+    nearSupport,
+    brokeSwingHigh,
+    brokeSwingLow
+  );
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CANDLESTICK SIGNAL CANCELLATION CHECK
+  // ═══════════════════════════════════════════════════════════════════════════
+  const candlestickCheck = checkCandlestickCancellation(
+    [], // Would need to pass bullish patterns - simplified for now
+    [], // Would need to pass bearish patterns - simplified for now
+    5,
+    detectedRegime.type
+  );
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REGIME EXECUTION VERIFICATION
+  // Before recommending ANY strategy, explicitly verify regime permits execution
+  // This is the PRIMARY GATE - all trade recommendations are blocked if failed
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Add feasibility reasoning to conflicts
+  if (feasibility.invalid.length > 0) {
+    conflicts.push(...feasibility.reasoning.slice(0, 2));
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HARD OUTPUT GATE - REGIME-AWARE STRATEGY GATING
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Gates are now CONDITIONAL on detected regime type.
+  // Different regimes use different gates and unlock conditions.
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  const executionBlocks: string[] = [];
+  const unlockConditions: string[] = [];
+  
+  // Get regime-specific rules
+  const regimeRules = detectedRegime.rules;
+  
+  // ─────────────────────────────────────────────────────────────────
+  // REGIME-AWARE HARD BLOCKS
+  // Only apply gates that the detected regime allows
+  // ─────────────────────────────────────────────────────────────────
+  
+  // HARD BLOCK 1: ADX Gate - ONLY applies if regime uses ADX gate
+  // In RANGE_BOUND regime, ADX gate is NOT used
+  if (regimeRules.useADXGate && adx < 25) {
+    executionBlocks.push(`ADX ${adx.toFixed(0)} < 25: No confirmed trend`);
+    unlockConditions.push(`ADX must rise above 25 for trend/breakout trades (currently ${adx.toFixed(0)})`);
+  }
+  
+  // HARD BLOCK 2: Regime-specific execution blocks
+  if (detectedRegime.type === 'RANGE_BOUND') {
+    // RANGE_BOUND: Don't block based on ADX - use range-specific unlocks instead
+    // Block directional trades until breakout confirmation
+    if (!brokeSwingHigh && !brokeSwingLow) {
+      executionBlocks.push('Range-bound: No breakout confirmation');
+      // Use regime-specific unlock conditions
+      unlockConditions.push(...detectedRegime.unlockConditions.slice(0, 2));
+    }
+    // Allow mean reversion only at extremes
+    if (regimeRules.allowMeanReversion) {
+      if (nearResistance && stochK > 85) {
+        // Mean reversion short may be allowed - don't block
+      } else if (nearSupport && stochK < 15) {
+        // Mean reversion long may be allowed - don't block
+      } else if (!nearResistance && !nearSupport) {
+        // Not at extremes - can't mean revert
+        executionBlocks.push('Range-bound: Not at range extremes for mean reversion');
+      }
+    }
+  } else if (detectedRegime.type === 'REVERSAL_ATTEMPT') {
+    // REVERSAL_ATTEMPT: Require structure break AND volume confirmation
+    const hasStructureBreak = (detectedRegime.direction === 'bullish' && brokeSwingHigh) ||
+                               (detectedRegime.direction === 'bearish' && brokeSwingLow);
+    const hasVolumeConfirm = (detectedRegime.direction === 'bullish' && effectiveOBV === 'rising' && effectiveCMF > 0) ||
+                              (detectedRegime.direction === 'bearish' && effectiveOBV === 'falling' && effectiveCMF < 0);
+    
+    if (!hasStructureBreak) {
+      executionBlocks.push('Reversal attempt: No structure break confirmation');
+      unlockConditions.push('Require break of prior swing high/low');
+    }
+    if (!hasVolumeConfirm) {
+      executionBlocks.push('Reversal attempt: Volume not confirming');
+      unlockConditions.push(`Volume confirmation: OBV ${effectiveOBV}, CMF ${effectiveCMF.toFixed(3)}`);
+    }
+  } else if (detectedRegime.type === 'VOLATILITY_EXPANSION') {
+    // VOLATILITY_EXPANSION: Require stronger confirmation
+    const hasStrongConfirmation = volumeZScore > 1.5 || 
+                                   (signalStrength.overall > 65 && momentum.strength === 'strong');
+    if (!hasStrongConfirmation) {
+      executionBlocks.push('Volatility expansion: Insufficient confirmation');
+      unlockConditions.push('Require volume z-score > 1.5 OR multi-indicator alignment');
+    }
+  } else if (detectedRegime.type === 'UNCERTAIN') {
+    // UNCERTAIN: Always wait
+    executionBlocks.push('Regime uncertain: No clear market structure');
+    unlockConditions.push(...detectedRegime.unlockConditions);
+  }
+  
+  // HARD BLOCK 3: Overbought/Oversold - ONLY applies if regime uses Stoch suppression
+  // In TRENDING regime with strong ADX, overbought doesn't suppress longs
+  if (regimeRules.useStochSupression) {
+    if (stochK > 80 && signalStrength.direction === 'bullish') {
+      executionBlocks.push(`Overbought (Stoch ${stochK.toFixed(0)}) - long entry suppressed`);
+      unlockConditions.push('Wait for Stochastic to drop below 70');
+    }
+    if (stochK < 20 && signalStrength.direction === 'bearish') {
+      executionBlocks.push(`Oversold (Stoch ${stochK.toFixed(0)}) - short entry suppressed`);
+      unlockConditions.push('Wait for Stochastic to rise above 30');
+    }
+  }
+  
+  // HARD BLOCK 4: Volume not confirming (applies to all regimes)
+  const effectiveVolumeZScore = volumeFlowData?.volumeZScore ?? volumeZScore;
+  if (effectiveVolumeZScore < -1.0 || regimeAnalysis.behavioral.context === 'distribution') {
+    executionBlocks.push(`Volume not confirming (Z: ${effectiveVolumeZScore.toFixed(2)})`);
+    unlockConditions.push('Wait for volume confirmation (Z-score > 0)');
+  }
+  
+  // HARD BLOCK 5: Chasing context = Always WAIT
+  if (regimeAnalysis.behavioral.context === 'chasing') {
+    executionBlocks.push('Chasing context - extended move');
+    unlockConditions.push('Wait for meaningful pullback to support');
+  }
+  
+  // HARD BLOCK 6: Mean reversion risk (unless in RANGE_BOUND with mean reversion allowed)
+  if (regimeAnalysis.behavioral.context === 'mean-reversion-risk' && 
+      !(detectedRegime.type === 'RANGE_BOUND' && regimeRules.allowMeanReversion)) {
+    executionBlocks.push('Mean reversion risk elevated');
+    unlockConditions.push('Wait for pullback or consolidation');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // HARD BLOCK 8: TTM SQUEEZE ON + MOMENTUM ≠ BULLISH → BLOCK ALL TREND-FOLLOWING
+  // This is CRITICAL: Compression regimes with bearish/neutral momentum must WAIT
+  // No discretionary trader enters a pullback long inside a bearish squeeze
+  // ─────────────────────────────────────────────────────────────────
+  const squeezeIsActive = squeezeData?.isInSqueeze ?? false;
+  const squeezeDuration = squeezeData?.squeezeDuration ?? 0;
+  const squeezeMomentumDir = squeezeData?.momentumDirection ?? 'neutral';
+  
+  if (squeezeIsActive && squeezeMomentumDir !== 'bullish' && signalStrength.direction === 'bullish') {
+    // Squeeze ON + bearish/neutral momentum → block longs
+    executionBlocks.push(`TTM Squeeze ON (${squeezeDuration} bars) + ${squeezeMomentumDir} momentum`);
+    unlockConditions.push('Wait for squeeze release with bullish momentum expansion');
+    unlockConditions.push('Expansion direction must confirm before entry');
+  } else if (squeezeIsActive && squeezeMomentumDir !== 'bearish' && signalStrength.direction === 'bearish') {
+    // Squeeze ON + bullish/neutral momentum → block shorts
+    executionBlocks.push(`TTM Squeeze ON (${squeezeDuration} bars) + ${squeezeMomentumDir} momentum`);
+    unlockConditions.push('Wait for squeeze release with bearish momentum expansion');
+    unlockConditions.push('Expansion direction must confirm before entry');
+  } else if (squeezeIsActive && squeezeMomentumDir === 'neutral') {
+    // Squeeze ON with neutral momentum → block all directional trades
+    executionBlocks.push(`TTM Squeeze ON - Compression regime (direction unknown)`);
+    unlockConditions.push('Wait for squeeze release and momentum direction confirmation');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // HARD BLOCK 9: DISTRIBUTION DETECTED (CMF < -0.1) → BLOCK LONGS
+  // Negative money flow indicates institutional selling - don't buy into distribution
+  // ─────────────────────────────────────────────────────────────────
+  const cmfValue = volumeFlowData?.cmf ?? 0;
+  const volumeZScoreValue = volumeFlowData?.volumeZScore ?? 0;
+  const obvTrendValue = volumeFlowData?.obvTrend ?? 'flat';
+  
+  if (cmfValue < -0.1 && signalStrength.direction === 'bullish') {
+    executionBlocks.push(`Distribution detected (CMF: ${cmfValue.toFixed(3)})`);
+    unlockConditions.push('Wait for CMF to turn positive (accumulation)');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // HARD BLOCK 10: MULTIPLE FLOW INDICATORS NEGATIVE → BLOCK EXECUTION
+  // When MACD histogram, CMF, and Volume Z all disagree with direction → no trade
+  // This is a "3-strike" rule for flow confirmation
+  // ─────────────────────────────────────────────────────────────────
+  const macdHistogramValue = macdHistogram ?? 0;
+  const flowStrikesAgainstLong = [
+    macdHistogramValue < 0,           // MACD weakening
+    cmfValue < 0,                     // Distribution
+    volumeZScoreValue < -0.5          // Below average volume
+  ].filter(Boolean).length;
+  
+  const flowStrikesAgainstShort = [
+    macdHistogramValue > 0,           // MACD strengthening
+    cmfValue > 0,                     // Accumulation
+    volumeZScoreValue < -0.5          // Below average volume (no participation)
+  ].filter(Boolean).length;
+  
+  if (flowStrikesAgainstLong >= 2 && signalStrength.direction === 'bullish') {
+    executionBlocks.push(`Flow disagreement: ${flowStrikesAgainstLong}/3 indicators against long`);
+    unlockConditions.push('Wait for MACD histogram positive AND CMF positive');
+  }
+  if (flowStrikesAgainstShort >= 2 && signalStrength.direction === 'bearish') {
+    executionBlocks.push(`Flow disagreement: ${flowStrikesAgainstShort}/3 indicators against short`);
+    unlockConditions.push('Wait for MACD histogram negative AND CMF negative');
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // DETERMINE IF STRATEGY GENERATION IS PERMITTED
+  // If ANY hard block exists, strategy generation is PROHIBITED
+  // ─────────────────────────────────────────────────────────────────
+  const strategyGenerationBlocked = executionBlocks.length >= 1 ||
+                                     forceWaitFromRegime ||
+                                     hasSignificantConflicts;
+  
+  // Directional bias (can be stated for informational purposes only)
+  const directionalBias = signalStrength.direction !== 'neutral' 
+    ? signalStrength.direction 
+    : (regimeAnalysis.market.direction !== 'neutral' ? regimeAnalysis.market.direction : 'neutral');
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HARD OUTPUT GATE - STRATEGY DECISION
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CRITICAL: Strategy generation is CONDITIONAL on regime validation.
+  // If strategyGenerationBlocked is true, we MUST output WAIT.
+  // We do NOT generate a strategy and then block it.
+  // The strategy generation code below ONLY runs if regime permits.
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // ─────────────────────────────────────────────────────────────────
+  // HARD GATE: If strategy generation is blocked, output WAIT IMMEDIATELY
+  // Do not proceed to any strategy generation logic
+  // ─────────────────────────────────────────────────────────────────
+  if (strategyGenerationBlocked) {
+    // Determine the most appropriate WAIT reason from execution blocks
+    const primaryBlock = executionBlocks[0] || 'Regime constraints not satisfied';
+    
+    if (executionBlocks.some(b => b.includes('ADX'))) {
+      strategy = 'WAIT - No Confirmed Trend';
+    } else if (executionBlocks.some(b => b.includes('Overbought'))) {
+      strategy = 'WAIT - Overbought Conditions';
+    } else if (executionBlocks.some(b => b.includes('regime'))) {
+      strategy = 'WAIT - Regime Prohibits Execution';
+    } else if (executionBlocks.some(b => b.includes('Volume'))) {
+      strategy = 'WAIT - Volume Not Confirming';
+    } else if (executionBlocks.some(b => b.includes('Chasing'))) {
+      strategy = 'WAIT - Chasing Risk';
+    } else if (hasSignificantConflicts) {
+      strategy = 'WAIT - Conflicting Signals';
+    } else {
+      strategy = 'WAIT - Monitoring Conditions';
+    }
+    
     direction = 'wait';
-    confidence = signalStrength.overall;
+    // HARD CAP: Confidence ≤40% for ALL blocked scenarios
+    confidence = Math.min(40, signalStrength.overall - 10);
+    
+    // Strategy generation is SKIPPED entirely - we go directly to entry/target suppression
+  }
+  // ─────────────────────────────────────────────────────────────────
+  // ONLY IF REGIME PERMITS: Generate strategy
+  // This code only runs when strategyGenerationBlocked === false
+  // ─────────────────────────────────────────────────────────────────
+  else if (signalStrength.grade === 'F' || signalStrength.grade === 'D' || signalStrength.overall < 40) {
+    // Weak setup - always wait
+    strategy = 'WAIT - Weak Setup';
+    direction = 'wait';
+    confidence = Math.min(40, signalStrength.overall);
   }
   // ===== TREND REVERSAL RISK STRUCTURE =====
-  // Use BREAKOUT entries, not pullbacks
+  // ONLY valid if ADX > 25 (already checked by hard gate)
   else if (structure === 'trend-reversal-risk') {
     if (priorTrend === 'down' && (strongBullish || dominantBias === 'reversal')) {
-      // Bullish reversal of downtrend - BREAKOUT LONG above resistance
       strategy = 'Breakout Long';
       direction = 'long';
       confidence = signalStrength.overall;
     } else if (priorTrend === 'up' && (strongBearish || dominantBias === 'reversal')) {
-      // Bearish reversal of uptrend - BREAKDOWN SHORT below support
       strategy = 'Breakdown Short';
       direction = 'short';
       confidence = signalStrength.overall;
     } else if (strongBullish) {
-      // Bullish momentum but mixed structure
       strategy = 'Breakout Long';
       direction = 'long';
       confidence = Math.max(40, signalStrength.overall - 10);
     } else if (strongBearish) {
-      // Bearish momentum but mixed structure
       strategy = 'Breakdown Short';
       direction = 'short';
       confidence = Math.max(40, signalStrength.overall - 10);
     } else {
-      // Mixed signals in reversal structure - wait
-      strategy = 'No Clear Edge - Reversal Unconfirmed';
+      // Mixed signals - WAIT (not a trade recommendation)
+      strategy = 'WAIT - Reversal Unconfirmed';
       direction = 'wait';
       confidence = Math.min(35, signalStrength.overall);
     }
   }
   // ===== LIKELY PULLBACK STRUCTURE =====
-  // Use PULLBACK entries with trend
+  // ONLY valid if ADX > 25 (already checked by hard gate)
   else if (structure === 'likely-pullback') {
     if (priorTrend === 'up' && (strongBullish || momentum.direction === 'bullish')) {
-      // Pullback in uptrend - buy the dip
-      // Only allow full "Trend Following Long" when:
-      // - Bullish EMA alignment
-      // - Strong momentum
-      // - NOT overbought
-      // - No volume/pattern caution
       const patternSignalText = signalStrength.breakdown.pattern.signal.toLowerCase();
       const hasPatternCaution =
         patternSignalText.includes('bearish') ||
@@ -1822,13 +3402,11 @@ export function generateStrategyRecommendation(
         strategy = 'Trend Following Long';
         confidence = Math.min(85, signalStrength.overall + 10);
       } else {
-        // Default to more conservative pullback/breakout-conditional long
         strategy = 'Pullback Long';
         confidence = Math.max(45, signalStrength.overall - 5);
       }
       direction = 'long';
     } else if (priorTrend === 'down' && (strongBearish || momentum.direction === 'bearish')) {
-      // Rally in downtrend - short the rip
       if (trend.emaAlignment === 'bearish' && momentum.strength === 'strong') {
         strategy = 'Trend Following Short';
         confidence = Math.min(85, signalStrength.overall + 10);
@@ -1846,7 +3424,7 @@ export function generateStrategyRecommendation(
       direction = 'short';
       confidence = Math.max(40, signalStrength.overall - 10);
     } else {
-      strategy = 'No Clear Edge - Wait for Confirmation';
+      strategy = 'WAIT - No Clear Edge';
       direction = 'wait';
       confidence = Math.min(40, signalStrength.overall);
     }
@@ -1878,31 +3456,48 @@ export function generateStrategyRecommendation(
   }
 
   // ==========================================
-  // VOLUME / REVERSAL CAUTION → CONFIDENCE CAP
+  // VOLUME / REVERSAL CAUTION → Already handled by regime.maxConfidence
+  // Regime classification already caps confidence for OBV divergence 
+  // and reversal patterns - no need to re-apply here
   // ==========================================
-  // OBV divergence / distribution or reversal-risk structure
-  // must automatically prevent HIGH-confidence labels
-  const volumeSignalText = signalStrength.breakdown.volume.signal.toLowerCase();
-  const hasVolumeCaution =
-    volumeSignalText.includes('distribution') ||
-    volumeSignalText.includes('divergence') ||
-    volumeSignalText.includes('caution');
-
-  const isReversalStructure = structure === 'trend-reversal-risk';
-
-  if (hasVolumeCaution || isReversalStructure) {
-    // Cap numerical confidence at <= 60 (i.e., MEDIUM at best)
-    confidence = Math.min(confidence, 60);
-  }
   
   // ==========================================
   // OVERBOUGHT/OVERSOLD CONFIDENCE ADJUSTMENT
   // ==========================================
   // Downgrade confidence by 10% if overbought for longs or oversold for shorts
+  // BUT: In TRENDING regime with strong ADX, overbought doesn't suppress
   if (direction === 'long' && isOverbought) {
-    confidence = Math.max(30, confidence - 10);
+    if (detectedRegime.type === 'TRENDING' && adx >= 30) {
+      // Strong trend - don't suppress for overbought
+    } else {
+      confidence = Math.max(30, confidence - 10);
+    }
   } else if (direction === 'short' && isOversold) {
-    confidence = Math.max(30, confidence - 10);
+    if (detectedRegime.type === 'TRENDING' && adx >= 30) {
+      // Strong trend - don't suppress for oversold
+    } else {
+      confidence = Math.max(30, confidence - 10);
+    }
+  }
+  
+  // ==========================================
+  // REGIME-BASED CONFIDENCE ADJUSTMENT (NEW)
+  // ==========================================
+  // Cap or reduce confidence based on detected regime
+  if (detectedRegime.rules.reduceConfidence) {
+    if (detectedRegime.type === 'RANGE_BOUND') {
+      // RANGE_BOUND: Cap confidence unless breakout confirmation
+      confidence = Math.min(confidence, 55);
+    } else if (detectedRegime.type === 'UNCERTAIN') {
+      // UNCERTAIN: Hard cap at 40%
+      confidence = Math.min(confidence, 40);
+    } else if (detectedRegime.type === 'VOLATILITY_EXPANSION') {
+      // VOLATILITY_EXPANSION: Reduce by 15%
+      confidence = Math.max(30, confidence - 15);
+    } else if (detectedRegime.type === 'REVERSAL_ATTEMPT') {
+      // REVERSAL_ATTEMPT: Cap at 50% unless fully confirmed
+      confidence = Math.min(confidence, 50);
+    }
   }
   
   // ==========================================
@@ -1917,31 +3512,232 @@ export function generateStrategyRecommendation(
     }
   }
   
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 5: REGIME ENFORCEMENT - FINAL GATE
+  // All previous logic is now validated against regime constraints
+  // ═══════════════════════════════════════════════════════════════
+  
+  // 5a. Apply regime maxConfidence cap (HARD CAP)
+  confidence = Math.min(confidence, regime.maxConfidence);
+  
+  // 5b. Speculative regime: reclassify trend-following to speculative
+  if (regime.isSpeculative && direction !== 'wait') {
+    if (strategy.includes('Trend Following')) {
+      strategy = direction === 'long' ? 'Speculative Pullback Long' : 'Speculative Pullback Short';
+    } else if (strategy.includes('Pullback') && !strategy.includes('Speculative')) {
+      strategy = direction === 'long' ? 'Speculative Pullback Long' : 'Speculative Pullback Short';
+    }
+    // Further cap confidence in speculative regime
+    confidence = Math.min(confidence, 50);
+  }
+  
+  // 5c. Range-bound regime: reclassify trend-following to mean-reversion
+  if (regime.structureClass === 'range-bound' && direction !== 'wait') {
+    if (strategy.includes('Trend Following')) {
+      strategy = direction === 'long' ? 'Mean Reversion Long' : 'Mean Reversion Short';
+    }
+  }
+  
+  // 5d. If regime requires confirmation, no market entries allowed (enforced below in entry logic)
+  // This is applied in the entry calculation section
+  
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 6: STRATEGY-SPECIFIC CONSTRAINT ENFORCEMENT
+  // After classifying strategy type, enforce strategy-specific constraints
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Determine if this is a high-volatility context
+  const isHighVolContext = atrPercent >= 5 || historicalVol >= 50;
+  const isVeryHighVol = atrPercent >= 8 || historicalVol >= 80;
+  
+  // Calculate what the stop distance will be (preview for constraint checking)
+  const previewStopDistance = stopMultiplier * atr;
+  const previewStopPercent = (previewStopDistance / currentPrice) * 100;
+  
+  // Track if we need to force downgrade
+  let forceSpeculative = false;
+  let forceWait = false;
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6a. PULLBACK CONTINUATION IN HIGH-VOL REGIMES
+  // ATR ≥5% or HV ≥50%: Risk must be capped or downgrade to speculative
+  // ─────────────────────────────────────────────────────────────────
+  if (strategy.includes('Pullback') && !strategy.includes('Speculative') && isHighVolContext && direction !== 'wait') {
+    // In high-vol, pullback trades must have:
+    // - Stops ≤1.25× ATR with reduced confidence, OR
+    // - Downgrade to speculative pullback
+    
+    if (stopMultiplier > 1.25) {
+      // Stop is too wide for a standard pullback in high vol
+      // Option 1: Tighten stop and reduce confidence
+      if (atrPercent < 8 && confidence >= 50) {
+        // Can keep as pullback with tighter stop and reduced confidence
+        stopMultiplier = 1.25;
+        confidence = Math.min(confidence, 55);
+      } else {
+        // Must downgrade to speculative
+        forceSpeculative = true;
+      }
+    }
+    
+    // Very high volatility (ATR ≥8% or HV ≥80%): Always speculative
+    if (isVeryHighVol) {
+      forceSpeculative = true;
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6b. APPLY SPECULATIVE DOWNGRADE IF REQUIRED
+  // ─────────────────────────────────────────────────────────────────
+  if (forceSpeculative && direction !== 'wait') {
+    if (!strategy.includes('Speculative')) {
+      strategy = direction === 'long' ? 'Speculative Pullback Long' : 'Speculative Pullback Short';
+    }
+    confidence = Math.min(confidence, 50);
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6c. SPECULATIVE PULLBACK CONSTRAINTS
+  // May NOT project aggressive targets beyond nearby resistance
+  // Must NOT exceed ~15% upside unless ADX expanding + vol contracting
+  // ─────────────────────────────────────────────────────────────────
+  let speculativeTargetCap = Infinity; // Will be applied to target calculation
+  let speculativeMaxUpside = 0.15; // 15% default cap
+  
+  if (strategy.includes('Speculative')) {
+    // Check for ADX expanding + vol contracting (allows more aggressive targets)
+    const adxExpanding = adx > 25 && regime.structureClass === 'trending';
+    const volContracting = volatility.regime === 'contracting' || volatility.regime === 'low';
+    
+    if (adxExpanding && volContracting) {
+      // Favorable conditions: allow up to 20% upside
+      speculativeMaxUpside = 0.20;
+    } else {
+      // Standard speculative: cap at 15% upside
+      speculativeMaxUpside = 0.15;
+    }
+    
+    // Calculate the max target price based on upside cap
+    speculativeTargetCap = currentPrice * (1 + speculativeMaxUpside);
+    
+    // Also cap at nearest relevant resistance
+    if (nearestRelevantResistance < speculativeTargetCap) {
+      speculativeTargetCap = nearestRelevantResistance * 1.02; // Just above resistance
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6d. LOW/MEDIUM CONFIDENCE + WIDE STOPS + AGGRESSIVE TARGETS CHECK
+  // May NOT combine wide stops (>1.5× ATR) with aggressive targets
+  // ─────────────────────────────────────────────────────────────────
+  const isLowMediumConfidence = confidence < 60;
+  const hasWideStop = stopMultiplier > 1.5;
+  
+  if (isLowMediumConfidence && hasWideStop && direction !== 'wait') {
+    // This combination is invalid - must choose:
+    // 1. Tighten stop (if setup supports it)
+    // 2. Or force WAIT
+    
+    // Check if we can tighten the stop
+    const canTightenStop = nearestRelevantSupport > currentPrice - atr * 1.5;
+    
+    if (canTightenStop) {
+      // Tighten stop to structure-based level
+      stopMultiplier = 1.5;
+    } else {
+      // Cannot make consistent - downgrade to WAIT
+      forceWait = true;
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6e. INTERNAL CONSISTENCY CHECK
+  // If stop distance, targets, and confidence cannot be made consistent → WAIT
+  // ─────────────────────────────────────────────────────────────────
+  // Calculate implied risk:reward based on stop and target cap
+  if (direction !== 'wait' && !forceWait) {
+    const impliedRiskPercent = previewStopPercent;
+    const impliedMaxReward = strategy.includes('Speculative') 
+      ? speculativeMaxUpside * 100 
+      : Math.min(atrPercent * 3, 20); // Standard max 3x ATR or 20%
+    
+    const impliedRR = impliedMaxReward / impliedRiskPercent;
+    
+    // Consistency rules:
+    // - Low confidence (<50%) requires at least 2:1 R:R to be valid
+    // - Medium confidence (50-60%) requires at least 1.5:1 R:R
+    // - High confidence (>60%) allows 1:1 R:R
+    
+    const minRequiredRR = confidence < 50 ? 2.0 : confidence < 60 ? 1.5 : 1.0;
+    
+    if (impliedRR < minRequiredRR) {
+      // Cannot achieve required R:R with current constraints
+      // Check if we can adjust
+      if (impliedRR < 1.0) {
+        // Risk exceeds potential reward - force WAIT
+        forceWait = true;
+      } else if (impliedRR < minRequiredRR && confidence >= 50) {
+        // Downgrade confidence to match R:R
+        confidence = Math.min(confidence, 50);
+      }
+    }
+  }
+  
+  // ─────────────────────────────────────────────────────────────────
+  // 6f. APPLY FORCE WAIT IF CONSTRAINTS CANNOT BE MET
+  // ─────────────────────────────────────────────────────────────────
+  if (forceWait && direction !== 'wait') {
+    strategy = 'No Trade - Constraints Not Satisfiable';
+    direction = 'wait';
+    confidence = Math.min(35, confidence);
+    // Add to conflicts for explanation
+    conflicts.push('Stop/target/confidence constraints cannot be made internally consistent');
+  }
+  
   // ==========================================
-  // ENTRY CALCULATION - STRUCTURE-AWARE
+  // ENTRY CALCULATION - STRUCTURE AND REGIME AWARE
   // ==========================================
   let entryType: 'market' | 'limit' | 'breakout' | 'pullback';
   let entryPrice: number;
   const conditions: string[] = [];
   const atResistance = Math.abs(nearestRelevantResistance - currentPrice) <= atr * 1.0;
+  const atSupport = Math.abs(currentPrice - nearestRelevantSupport) <= atr * 1.0;
+  
+  // REGIME ENFORCEMENT: If regime requires confirmation, convert market entries to conditional
+  const marketEntryBlocked = regime.requiresConfirmation || 
+                             (isOverbought && atResistance && direction === 'long') ||
+                             (isOversold && atSupport && direction === 'short');
   
   if (direction === 'long') {
     if (strategy.includes('Breakout') || strategy.includes('Trend Following')) {
-      // In squeeze or trend-reversal: use breakout/market entries,
-      // BUT prohibit market entries when overbought and at resistance.
-      if (!isInSqueeze && strategy.includes('Trend Following') && isOverbought && atResistance) {
-        // Overbought at/near resistance → require pullback entry
-        entryType = 'pullback';
-        const pullbackLevel = currentPrice - atr * 0.75;
-        entryPrice = Number(pullbackLevel.toFixed(2));
-        conditions.push(`Avoid buying into resistance while overbought`);
-        conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
-        conditions.push('Enter on bullish reversal candle after pullback');
-      } else if (isInSqueeze || strategy.includes('Trend Following')) {
+      // Check if market entry is blocked by regime or conditions
+      if (marketEntryBlocked && !isInSqueeze) {
+        // Force pullback or breakout entry
+        if (atResistance) {
+          // At resistance: require pullback entry
+          entryType = 'pullback';
+          const pullbackLevel = currentPrice - atr * 0.75;
+          entryPrice = Number(pullbackLevel.toFixed(2));
+          conditions.push(`⚠️ Market entry blocked by regime constraints`);
+          conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
+          conditions.push('Enter on bullish reversal candle after pullback');
+        } else {
+          // Not at resistance: require breakout confirmation
+          entryType = 'breakout';
+          const breakoutLevel = nearestRelevantResistance;
+          entryPrice = Number((breakoutLevel + atr * 0.05).toFixed(2));
+          conditions.push(`Confirmation required: Break above $${breakoutLevel.toFixed(2)}`);
+          conditions.push('Requires volume confirmation (Z-score > 1)');
+        }
+      } else if (isInSqueeze) {
         entryType = 'market';
         entryPrice = currentPrice;
         conditions.push('Enter at market on momentum confirmation');
-        if (isInSqueeze) conditions.push('⚡ Squeeze breakout - expect volatility expansion');
+        conditions.push('⚡ Squeeze breakout - expect volatility expansion');
+      } else if (strategy.includes('Trend Following') && !marketEntryBlocked) {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market on momentum confirmation');
       } else {
         entryType = 'breakout';
         const breakoutLevel = nearestRelevantResistance;
@@ -1949,25 +3745,57 @@ export function generateStrategyRecommendation(
         conditions.push(`Break above $${breakoutLevel.toFixed(2)}`);
         conditions.push('Requires volume confirmation (Z-score > 1)');
       }
-    } else if (strategy.includes('Pullback')) {
+    } else if (strategy.includes('Pullback') || strategy.includes('Mean Reversion') || strategy.includes('Speculative')) {
       entryType = 'pullback';
       const pullbackLevel = currentPrice - atr * 0.75;
       entryPrice = Number(pullbackLevel.toFixed(2));
       conditions.push(`Wait for pullback to $${pullbackLevel.toFixed(2)} zone`);
       conditions.push('Enter on bullish reversal candle');
+      if (strategy.includes('Speculative')) {
+        conditions.push('⚠️ Speculative regime: reduce position size');
+      }
     } else {
-      entryType = 'market';
-      entryPrice = currentPrice;
-      conditions.push('Enter at market with momentum confirmation');
+      // Default: conditional entry based on regime
+      if (marketEntryBlocked) {
+        entryType = 'pullback';
+        const pullbackLevel = currentPrice - atr * 0.5;
+        entryPrice = Number(pullbackLevel.toFixed(2));
+        conditions.push('Wait for price confirmation before entry');
+      } else {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market with momentum confirmation');
+      }
     }
   } else if (direction === 'short') {
     if (strategy.includes('Breakdown') || strategy.includes('Trend Following')) {
-      // In squeeze or trend-reversal: use breakdown/market entries
-      if (isInSqueeze || strategy.includes('Trend Following')) {
+      // Check if market entry is blocked by regime or conditions
+      if (marketEntryBlocked && !isInSqueeze) {
+        if (atSupport) {
+          // At support: require rally entry
+          entryType = 'pullback';
+          const rallyLevel = currentPrice + atr * 0.75;
+          entryPrice = Number(rallyLevel.toFixed(2));
+          conditions.push(`⚠️ Market entry blocked by regime constraints`);
+          conditions.push(`Wait for rally to $${rallyLevel.toFixed(2)} zone`);
+          conditions.push('Enter on bearish reversal candle after rally');
+        } else {
+          // Not at support: require breakdown confirmation
+          entryType = 'breakout';
+          const breakdownLevel = nearestRelevantSupport;
+          entryPrice = Number((breakdownLevel - atr * 0.05).toFixed(2));
+          conditions.push(`Confirmation required: Break below $${breakdownLevel.toFixed(2)}`);
+          conditions.push('Requires volume confirmation (Z-score > 1)');
+        }
+      } else if (isInSqueeze) {
         entryType = 'market';
         entryPrice = currentPrice;
         conditions.push('Enter at market on momentum confirmation');
-        if (isInSqueeze) conditions.push('⚡ Squeeze breakdown - expect volatility expansion');
+        conditions.push('⚡ Squeeze breakdown - expect volatility expansion');
+      } else if (strategy.includes('Trend Following') && !marketEntryBlocked) {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market on momentum confirmation');
       } else {
         entryType = 'breakout';
         const breakdownLevel = nearestRelevantSupport;
@@ -1975,23 +3803,52 @@ export function generateStrategyRecommendation(
         conditions.push(`Break below $${breakdownLevel.toFixed(2)}`);
         conditions.push('Requires volume confirmation (Z-score > 1)');
       }
-    } else if (strategy.includes('Rally')) {
+    } else if (strategy.includes('Rally') || strategy.includes('Mean Reversion') || strategy.includes('Speculative')) {
       entryType = 'pullback';
       const rallyLevel = currentPrice + atr * 0.75;
       entryPrice = Number(rallyLevel.toFixed(2));
       conditions.push(`Wait for rally to $${rallyLevel.toFixed(2)} zone`);
       conditions.push('Enter on bearish reversal candle');
+      if (strategy.includes('Speculative')) {
+        conditions.push('⚠️ Speculative regime: reduce position size');
+      }
     } else {
-      entryType = 'market';
-      entryPrice = currentPrice;
-      conditions.push('Enter at market with momentum confirmation');
+      // Default: conditional entry based on regime
+      if (marketEntryBlocked) {
+        entryType = 'pullback';
+        const rallyLevel = currentPrice + atr * 0.5;
+        entryPrice = Number(rallyLevel.toFixed(2));
+        conditions.push('Wait for price confirmation before entry');
+      } else {
+        entryType = 'market';
+        entryPrice = currentPrice;
+        conditions.push('Enter at market with momentum confirmation');
+      }
     }
   } else {
-    // Wait scenario - show what would trigger a trade
-    entryType = 'breakout';
-    entryPrice = currentPrice;
-    conditions.push(`LONG: Break above $${nearestRelevantResistance.toFixed(2)} with volume`);
-    conditions.push(`SHORT: Break below $${nearestRelevantSupport.toFixed(2)} with volume`);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WAIT SCENARIO - SUPPRESS ALL TRADE PARAMETERS
+    // Show unlock conditions only, not entries/targets/R:R
+    // ═══════════════════════════════════════════════════════════════════════════
+    entryType = 'breakout'; // Reference only
+    entryPrice = currentPrice; // Reference only
+    
+    // Suppressed trade parameters notice
+    conditions.push('🚫 ENTRIES SUPPRESSED - Execution blocked by regime constraints');
+    
+    // Show unlock conditions instead of entry levels
+    if (unlockConditions.length > 0) {
+      conditions.push('🔓 Unlock conditions required:');
+      unlockConditions.slice(0, 3).forEach(u => conditions.push(`   → ${u}`));
+    }
+    
+    // Show key levels for reference only (not actionable)
+    conditions.push(`📍 Reference: Resistance $${nearestRelevantResistance.toFixed(2)} | Support $${nearestRelevantSupport.toFixed(2)}`);
+    
+    // Show directional bias if present
+    if (directionalBias !== 'neutral') {
+      conditions.push(`📈 Bias: ${directionalBias.toUpperCase()} (not a trade signal)`);
+    }
   }
   
   // ==========================================
@@ -2049,70 +3906,172 @@ export function generateStrategyRecommendation(
   
   const riskPercent = Math.abs((entryPrice - stopPrice) / entryPrice) * 100;
   
-  // ==========================================
-  // TARGET CALCULATIONS - SQUEEZE-AWARE
-  // ==========================================
+  // ═══════════════════════════════════════════════════════════════
+  // TARGET CALCULATIONS - REGIME AND STRUCTURE CONSTRAINED
+  // Targets must be structurally reachable (200 EMA, major resistance)
+  // Do NOT project beyond structural barriers unless breakout required
+  // ═══════════════════════════════════════════════════════════════
   let targets: StrategyRecommendation['targets'];
   
-  // In squeeze: minimum 2:1 R:R on T1
-  // Outside squeezes, be more conservative on stretch targets
-  const t1Multiplier = isInSqueeze ? 2.0 : 1.5;
-  const t2Multiplier = isInSqueeze ? 3.5 : 2.25;
-  const t3Multiplier = isInSqueeze ? 5.0 : 3.0;
+  // Calculate 200 EMA for structural capping
+  const allCloses = bars.map(b => b.close);
+  const ema200ForTargets = calculateEMAValue(allCloses, Math.min(200, allCloses.length));
+  
+  // Base multipliers (before regime capping)
+  let t1Multiplier = isInSqueeze ? 2.0 : 1.5;
+  let t2Multiplier = isInSqueeze ? 3.5 : 2.25;
+  let t3Multiplier = isInSqueeze ? 5.0 : 3.0;
+  
+  // REGIME ENFORCEMENT: Cap target multipliers by regime.maxTargetMultiple
+  // If regime caps targets at 1.5x ATR, aggressive T3 targets are invalid
+  const maxMultiple = regime.maxTargetMultiple;
+  if (t3Multiplier > maxMultiple * 2) {
+    // Compress targets for restrictive regimes
+    t3Multiplier = Math.min(t3Multiplier, maxMultiple * 2);
+    t2Multiplier = Math.min(t2Multiplier, maxMultiple * 1.5);
+  }
   
   // Adjust probabilities for squeeze (higher momentum = higher probability of hitting targets)
-  const t1Prob = isInSqueeze ? 70 : 65;
-  const t2Prob = isInSqueeze ? 50 : 45;
-  const t3Prob = isInSqueeze ? 30 : 25;
+  // ALSO reduce probabilities in speculative/restrictive regimes
+  let t1Prob = isInSqueeze ? 70 : 65;
+  let t2Prob = isInSqueeze ? 50 : 45;
+  let t3Prob = isInSqueeze ? 30 : 25;
+  
+  // Speculative regime: reduce target probabilities
+  if (regime.isSpeculative) {
+    t1Prob = Math.min(t1Prob, 55);
+    t2Prob = Math.min(t2Prob, 35);
+    t3Prob = Math.min(t3Prob, 15);
+  }
+  
+  // Low confidence regime: reduce probabilities
+  if (regime.maxConfidence <= 55) {
+    t1Prob = Math.min(t1Prob, 50);
+    t2Prob = Math.min(t2Prob, 30);
+    t3Prob = Math.min(t3Prob, 10);
+  }
   
   if (direction === 'long') {
     const riskAmount = entryPrice - stopPrice;
-    targets = {
-      t1: {
-        price: Number((entryPrice + riskAmount * t1Multiplier).toFixed(2)),
-        rr: t1Multiplier,
-        probability: t1Prob
-      },
-      t2: {
-        price: Number((entryPrice + riskAmount * t2Multiplier).toFixed(2)),
-        rr: t2Multiplier,
-        probability: t2Prob
-      },
-      t3: {
-        price: Number((entryPrice + riskAmount * t3Multiplier).toFixed(2)),
-        rr: t3Multiplier,
-        probability: t3Prob
+    let t1Price = Number((entryPrice + riskAmount * t1Multiplier).toFixed(2));
+    let t2Price = Number((entryPrice + riskAmount * t2Multiplier).toFixed(2));
+    let t3Price = Number((entryPrice + riskAmount * t3Multiplier).toFixed(2));
+    
+    // ─────────────────────────────────────────────────────────────────
+    // SPECULATIVE STRATEGY TARGET CAPPING (from Step 6c)
+    // Speculative pullbacks may NOT project aggressive targets beyond cap
+    // ─────────────────────────────────────────────────────────────────
+    if (strategy.includes('Speculative') && speculativeTargetCap < Infinity) {
+      if (t1Price > speculativeTargetCap) {
+        t1Price = Number(speculativeTargetCap.toFixed(2));
+        t1Prob = Math.min(t1Prob, 45); // Reduced probability
       }
+      if (t2Price > speculativeTargetCap) {
+        t2Price = Number(speculativeTargetCap.toFixed(2));
+        t2Prob = Math.min(t2Prob, 25);
+      }
+      if (t3Price > speculativeTargetCap) {
+        // T3 is capped at speculative max - not allowed beyond
+        t3Price = Number(speculativeTargetCap.toFixed(2));
+        t3Prob = Math.min(t3Prob, 10);
+      }
+    }
+    
+    // STRUCTURAL CAPPING: For longs below 200 EMA, cap aggressive targets at 200 EMA
+    // This ensures targets are structurally reachable without breakout confirmation
+    if (currentPrice < ema200ForTargets) {
+      if (t2Price > ema200ForTargets) {
+        t2Price = Number(ema200ForTargets.toFixed(2));
+        t2Prob = Math.min(t2Prob, 35); // Reduced probability at structural barrier
+      }
+      if (t3Price > ema200ForTargets) {
+        t3Price = Number((ema200ForTargets * 1.02).toFixed(2)); // Just above 200 EMA
+        t3Prob = Math.min(t3Prob, 20); // Requires breakout confirmation
+      }
+    }
+    
+    // Cap targets at nearest major resistance if it's a barrier
+    if (nearestRelevantResistance < t2Price && nearestRelevantResistance > entryPrice) {
+      if (t2Price > nearestRelevantResistance * 1.05) {
+        t2Price = Number(nearestRelevantResistance.toFixed(2));
+      }
+    }
+    
+    targets = {
+      t1: { price: t1Price, rr: t1Multiplier, probability: t1Prob },
+      t2: { price: t2Price, rr: t2Multiplier, probability: t2Prob },
+      t3: { price: t3Price, rr: t3Multiplier, probability: t3Prob }
     };
   } else if (direction === 'short') {
     const riskAmount = stopPrice - entryPrice;
-    targets = {
-      t1: {
-        price: Number((entryPrice - riskAmount * t1Multiplier).toFixed(2)),
-        rr: t1Multiplier,
-        probability: t1Prob
-      },
-      t2: {
-        price: Number((entryPrice - riskAmount * t2Multiplier).toFixed(2)),
-        rr: t2Multiplier,
-        probability: t2Prob
-      },
-      t3: {
-        price: Number((entryPrice - riskAmount * t3Multiplier).toFixed(2)),
-        rr: t3Multiplier,
-        probability: t3Prob
+    let t1Price = Number((entryPrice - riskAmount * t1Multiplier).toFixed(2));
+    let t2Price = Number((entryPrice - riskAmount * t2Multiplier).toFixed(2));
+    let t3Price = Number((entryPrice - riskAmount * t3Multiplier).toFixed(2));
+    
+    // ─────────────────────────────────────────────────────────────────
+    // SPECULATIVE STRATEGY TARGET CAPPING (from Step 6c) - SHORTS
+    // Speculative pullbacks may NOT project aggressive targets beyond cap
+    // For shorts, cap is downside (speculativeMaxUpside applied as downside)
+    // ─────────────────────────────────────────────────────────────────
+    if (strategy.includes('Speculative') && speculativeTargetCap < Infinity) {
+      const speculativeDownsideCap = currentPrice * (1 - speculativeMaxUpside);
+      if (t1Price < speculativeDownsideCap) {
+        t1Price = Number(speculativeDownsideCap.toFixed(2));
+        t1Prob = Math.min(t1Prob, 45);
       }
+      if (t2Price < speculativeDownsideCap) {
+        t2Price = Number(speculativeDownsideCap.toFixed(2));
+        t2Prob = Math.min(t2Prob, 25);
+      }
+      if (t3Price < speculativeDownsideCap) {
+        t3Price = Number(speculativeDownsideCap.toFixed(2));
+        t3Prob = Math.min(t3Prob, 10);
+      }
+    }
+    
+    // STRUCTURAL CAPPING: For shorts above 200 EMA, cap aggressive targets at 200 EMA
+    if (currentPrice > ema200ForTargets) {
+      if (t2Price < ema200ForTargets) {
+        t2Price = Number(ema200ForTargets.toFixed(2));
+        t2Prob = Math.min(t2Prob, 35);
+      }
+      if (t3Price < ema200ForTargets) {
+        t3Price = Number((ema200ForTargets * 0.98).toFixed(2));
+        t3Prob = Math.min(t3Prob, 20);
+      }
+    }
+    
+    // Cap targets at nearest major support if it's a barrier
+    if (nearestRelevantSupport > t2Price && nearestRelevantSupport < entryPrice) {
+      if (t2Price < nearestRelevantSupport * 0.95) {
+        t2Price = Number(nearestRelevantSupport.toFixed(2));
+      }
+    }
+    
+    // Prevent negative or absurdly low targets
+    t1Price = Math.max(0.01, t1Price);
+    t2Price = Math.max(0.01, t2Price);
+    t3Price = Math.max(0.01, t3Price);
+    
+    targets = {
+      t1: { price: t1Price, rr: t1Multiplier, probability: t1Prob },
+      t2: { price: t2Price, rr: t2Multiplier, probability: t2Prob },
+      t3: { price: t3Price, rr: t3Multiplier, probability: t3Prob }
     };
   } else {
-    // Wait scenario - show relevant key levels for reference
+    // ═══════════════════════════════════════════════════════════════
+    // WAIT SCENARIO - STRATEGY CONSISTENCY RULE
+    // If recommendation is WAIT, do NOT include entries, stops, or targets
+    // Show only reference levels, not actionable trade levels
+    // ═══════════════════════════════════════════════════════════════
     targets = {
       t1: {
         price: Number(nearestRelevantResistance.toFixed(2)),
         rr: 0,
-        probability: 0
+        probability: 0  // 0 = reference level only
       },
       t2: {
-        price: Number((nearestRelevantResistance + atr).toFixed(2)),
+        price: Number(ema200ForTargets.toFixed(2)), // 200 EMA as key level
         rr: 0,
         probability: 0
       },
@@ -2131,15 +4090,151 @@ export function generateStrategyRecommendation(
   } else if (direction === 'short') {
     invalidation = `Short trade invalidated if price closes above $${stopPrice.toFixed(2)}`;
   } else {
-    invalidation = 'Wait for clear directional breakout before taking a position';
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WAIT SCENARIO - Provide unlock conditions, not trade parameters
+    // Execution is blocked - show what conditions would unlock a valid trade
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (unlockConditions.length > 0) {
+      invalidation = `EXECUTION BLOCKED. Unlock conditions: ${unlockConditions.slice(0, 3).join(' • ')}`;
+    } else if (conflicts.length > 0) {
+      invalidation = `WAIT due to: ${conflicts.slice(0, 2).join('; ')}. Wait for resolution.`;
+    } else {
+      invalidation = 'Wait for clear directional breakout before taking a position';
+    }
   }
   
-  // Notes - now structure and volatility aware
+  // Notes - now regime-reasoning aware
   const notes: string[] = [];
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DETECTED REGIME OUTPUT (NEW - TOP OF NOTES)
+  // High-level regime classification that determines which rules apply
+  // ═══════════════════════════════════════════════════════════════════════════
+  notes.push(`🏷️ Regime: ${detectedRegime.type} (${detectedRegime.confidence}% confidence)`);
+  
+  // Show regime direction if not neutral
+  if (detectedRegime.direction !== 'neutral') {
+    notes.push(`   Direction: ${detectedRegime.direction.toUpperCase()}`);
+  }
+  
+  // Show key regime rules that affect this analysis
+  const activeRules: string[] = [];
+  if (!detectedRegime.rules.useADXGate) {
+    activeRules.push('ADX gate disabled');
+  }
+  if (!detectedRegime.rules.useStochSupression) {
+    activeRules.push('Stoch suppression disabled');
+  }
+  if (detectedRegime.rules.allowMeanReversion) {
+    activeRules.push('Mean reversion allowed');
+  }
+  if (detectedRegime.rules.requireBreakoutConfirmation) {
+    activeRules.push('Breakout confirmation required');
+  }
+  if (detectedRegime.rules.widenStops) {
+    activeRules.push('Wider stops recommended');
+  }
+  if (activeRules.length > 0) {
+    notes.push(`   Rules: ${activeRules.join(' • ')}`);
+  }
+  
+  // Show regime-specific unlock conditions
+  if (detectedRegime.unlockConditions.length > 0 && direction === 'wait') {
+    notes.push(`🔓 Regime Unlock Conditions:`);
+    detectedRegime.unlockConditions.slice(0, 3).forEach(u => notes.push(`   • ${u}`));
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REGIME REASONING OUTPUT (PRIMARY)
+  // Report reflects what is TRADABLE, not theoretically bullish/bearish
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // ─────────────────────────────────────────────────────────────────
+  // EXECUTION STATUS (MOST IMPORTANT)
+  // ─────────────────────────────────────────────────────────────────
+  if (strategyGenerationBlocked) {
+    notes.push(`🚫 STRATEGY GENERATION BLOCKED - Regime constraints not satisfied`);
+    
+    // State directional bias WITHOUT recommending trade
+    if (directionalBias !== 'neutral') {
+      notes.push(`📈 Directional Bias: ${directionalBias.toUpperCase()} (informational only, NOT a trade signal)`);
+    }
+    
+    // List blocking conditions
+    if (executionBlocks.length > 0) {
+      notes.push(`⛔ Blocking Conditions:`);
+      executionBlocks.slice(0, 4).forEach(b => notes.push(`   • ${b}`));
+    }
+    
+    // List unlock conditions (from hard blocks, not regime-specific)
+    if (unlockConditions.length > 0) {
+      notes.push(`🔓 Conditions Required for Strategy Generation:`);
+      unlockConditions.slice(0, 4).forEach(u => notes.push(`   • ${u}`));
+    }
+  }
+  
+  // Market regime inference (detailed)
+  notes.push(`🎯 Market: ${regimeAnalysis.market.regime.toUpperCase()} (${regimeAnalysis.market.strength}) - ${regimeAnalysis.market.direction}`);
+  
+  // Risk regime inference
+  notes.push(`📊 Risk: ${regimeAnalysis.risk.regime} volatility, ${regimeAnalysis.risk.atrContext} ATR, momentum ${regimeAnalysis.risk.momentumDispersion}`);
+  
+  // Behavioral context
+  notes.push(`👥 Context: ${regimeAnalysis.behavioral.context} • ${regimeAnalysis.behavioral.volumeSignature} volume • ${regimeAnalysis.behavioral.oscillatorState} oscillators`);
+  
+  // Strategy feasibility
+  if (feasibility.valid.length > 0 && feasibility.valid[0] !== 'wait') {
+    notes.push(`✅ Valid strategies: ${feasibility.valid.filter(s => s !== 'wait').join(', ')}`);
+  }
+  if (feasibility.invalid.length > 0) {
+    notes.push(`❌ Invalid: ${feasibility.invalid.slice(0, 2).join(', ')}`);
+  }
+  
+  // Add key evidence from regime analysis
+  const keyEvidence = [
+    ...regimeAnalysis.market.evidence.slice(0, 1),
+    ...regimeAnalysis.behavioral.evidence.slice(0, 1)
+  ];
+  if (keyEvidence.length > 0) {
+    notes.push(`📋 Evidence: ${keyEvidence.join(' | ')}`);
+  }
+  
+  // Legacy regime notes
+  notes.push(`📊 Regime: ${regime.volatilityClass.toUpperCase()} volatility + ${regime.structureClass}`);
+  
+  // Add regime constraints
+  if (regime.constraints.length > 0) {
+    regime.constraints.slice(0, 3).forEach(c => notes.push(c));
+  }
+  
+  // Add speculative warning if applicable
+  if (regime.isSpeculative || strategy.includes('Speculative')) {
+    notes.push(`⚠️ SPECULATIVE SETUP - Reduce position size significantly`);
+    notes.push(`Max hold: ${regime.maxHoldingDays} days • Max upside: ${(speculativeMaxUpside * 100).toFixed(0)}%`);
+    if (speculativeTargetCap < Infinity) {
+      notes.push(`Targets capped at $${speculativeTargetCap.toFixed(2)} (nearby resistance)`);
+    }
+  }
+  
+  // Add high-volatility pullback constraint notes
+  if (isHighVolContext && strategy.includes('Pullback') && direction !== 'wait') {
+    notes.push(`📉 High-vol pullback: stops ≤${stopMultiplier.toFixed(2)}x ATR, reduced confidence`);
+  }
+  
+  // Add internal consistency notes if constraints were applied
+  if (forceSpeculative && !regime.isSpeculative) {
+    notes.push(`⚠️ Downgraded to speculative: high-vol pullback with wide stop`);
+  }
+  
+  // Add confirmation requirement
+  if (regime.requiresConfirmation && direction !== 'wait') {
+    notes.push(`🔒 Confirmation required - No immediate market entry`);
+  }
+  
+  // Secondary notes
   notes.push(`Signal: ${signalStrength.grade} (${signalStrength.overall}/100)`);
   notes.push(`Structure: ${structure} (${dominantBias} bias)`);
   notes.push(`Momentum: ${momentum.direction} (${momentum.strength})`);
-  notes.push(`Volatility: ${volatility.regime} (ATR: ${atrPercent.toFixed(1)}%)`);
   
   // Structure-specific notes
   if (structure === 'trend-reversal-risk') {
@@ -2166,6 +4261,13 @@ export function generateStrategyRecommendation(
   if (direction === 'wait') {
     notes.push(`Trading range: $${nearestRelevantSupport.toFixed(2)} - $${nearestRelevantResistance.toFixed(2)}`);
     notes.push('Wait for breakout with volume confirmation');
+    
+    // Add conflict explanation for WAIT recommendations
+    if (conflicts.length > 0) {
+      notes.push(`⚠️ CONFLICTS DETECTED:`);
+      conflicts.forEach(c => notes.push(`  • ${c}`));
+      notes.push(`WAIT is optimal when constraints conflict`);
+    }
   }
   
   if (momentum.divergences.length > 0) {
@@ -2191,4 +4293,113 @@ export function generateStrategyRecommendation(
     notes
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXAMPLE SCENARIOS - REGIME-AWARE DECISION VALIDATION
+// These serve as unit-test-like fixtures to validate expected behavior
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * EXAMPLE A: RANGE_BOUND regime with resistance holding
+ * 
+ * Input:
+ *   - ADX: 22 (weak trend)
+ *   - EMA Alignment: mixed
+ *   - Stochastic: 88 (overbought)
+ *   - Price: at resistance level
+ *   - Prior trend: sideways
+ *   - Structure: mixed
+ * 
+ * Expected Regime: RANGE_BOUND
+ * Expected Rules:
+ *   - useADXGate: false (ADX gate disabled in range)
+ *   - allowMeanReversion: true (at overbought near resistance)
+ *   - requireBreakoutConfirmation: true
+ * 
+ * Expected Output:
+ *   - Strategy: WAIT
+ *   - Confidence: ≤40% (capped for RANGE_BOUND)
+ *   - Unlock conditions:
+ *     - "LONG: Breakout above range resistance + close/hold confirmation"
+ *     - "Mean reversion SHORT: Stoch > 85 at resistance + bearish candle"
+ *   - Notes should NOT include "ADX must rise above 25" (wrong unlock for range)
+ */
+
+/**
+ * EXAMPLE B: TRENDING regime with overbought conditions
+ * 
+ * Input:
+ *   - ADX: 31 (strong trend)
+ *   - EMA Alignment: bullish
+ *   - Stochastic: 90 (overbought)
+ *   - Price: above all EMAs
+ *   - Prior trend: up
+ *   - Structure: likely-pullback
+ * 
+ * Expected Regime: TRENDING
+ * Expected Rules:
+ *   - useADXGate: true
+ *   - useStochSupression: false (overbought DOES NOT suppress in strong trend)
+ *   - allowMeanReversion: false
+ * 
+ * Expected Output:
+ *   - Strategy: LONG (Trend Following or Pullback)
+ *   - Confidence: NOT reduced for overbought (ADX > 30)
+ *   - Notes: Should NOT say "overbought suppresses long"
+ */
+
+/**
+ * EXAMPLE C: REVERSAL_ATTEMPT regime with partial confirmation
+ * 
+ * Input:
+ *   - ADX: 18 (weak trend)
+ *   - Prior trend: down
+ *   - Structure: trend-reversal-risk
+ *   - Price: broke recent swing high
+ *   - OBV: rising
+ *   - CMF: +0.15 (positive)
+ *   - Stochastic: 65 (neutral)
+ * 
+ * Expected Regime: REVERSAL_ATTEMPT
+ * Expected Rules:
+ *   - useADXGate: false (low ADX expected in reversals)
+ *   - requireBreakoutConfirmation: true
+ *   - requireStructureBreak: true
+ *   - widenStops: true
+ * 
+ * Expected Output:
+ *   - Strategy: LONG (conditional on confirmation)
+ *   - Confidence: ≤50% (capped for reversal)
+ *   - Unlock conditions:
+ *     - "Volume confirmation: OBV rising + CMF positive" (CHECK - satisfied)
+ *     - "Require break of prior swing high" (CHECK - satisfied)
+ *   - May allow execution IF all confirmations pass
+ */
+
+/**
+ * EXAMPLE D: VOLATILITY_EXPANSION regime
+ * 
+ * Input:
+ *   - ATR%: 8% (high)
+ *   - Bollinger Bandwidth: 45% (expanding)
+ *   - Volatility regime: expanding
+ *   - ADX: 26
+ *   - Squeeze: OFF (released)
+ *   - Volume Z-score: 0.5
+ * 
+ * Expected Regime: VOLATILITY_EXPANSION
+ * Expected Rules:
+ *   - widenStops: true
+ *   - reduceConfidence: true
+ *   - requireBreakoutConfirmation: true
+ * 
+ * Expected Output:
+ *   - Strategy: WAIT (unless very strong confirmation)
+ *   - Confidence: reduced by 15%
+ *   - Stop multiplier: increased (1.5-2x ATR)
+ *   - Unlock conditions:
+ *     - "Require stronger confirmation (volume z-score > 1.5 OR multi-indicator alignment)"
+ *     - "Use wider stops (1.5-2x normal ATR multiple)"
+ *   - Notes: "Reduce position size proportionally to volatility"
+ */
 

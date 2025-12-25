@@ -397,7 +397,7 @@ export function runTechnicalAnalysis(
     { obvTrend, cmf }          // Volume flow for conviction adjustment
   );
   
-  // Generate recommendation with structure context and oscillator data
+  // Generate recommendation with structure context, oscillator data, ADX, squeeze, and volume flow for regime classification
   const recommendation = generateStrategyRecommendation(
     bars, 
     momentumAssessment, 
@@ -405,18 +405,34 @@ export function runTechnicalAnalysis(
     volatilityAssessment, 
     signalStrength,
     supportResistance,
-    // NEW: Pass structure context for strategy alignment
+    // Pass structure context for strategy alignment
     {
       classification: structureAnalysis.classification,
       priorTrendDirection: structureAnalysis.priorTrendDirection,
       dominantBias: structureAnalysis.dominantBias
     },
-    // NEW: Pass oscillator values for overbought/oversold and squeeze detection
+    // Pass oscillator values for overbought/oversold and squeeze detection
     {
       stochK: stochasticK,
       mfi: mfi,
       historicalVolatility: historicalVolatility,
-      bollingerBandwidth: bollingerBandwidth
+      bollingerBandwidth: bollingerBandwidth,
+      bollingerB: bollingerPercentB * 100
+    },
+    // ADX value for regime-first classification
+    adx,
+    // TTM Squeeze data for compression regime detection
+    {
+      isInSqueeze: squeeze.isInSqueeze,
+      squeezeDuration: squeeze.squeezeDuration,
+      momentum: squeeze.momentum,
+      momentumDirection: squeeze.momentumDirection
+    },
+    // Volume flow data for confirmation
+    {
+      obvTrend: obvTrend,
+      cmf: cmf,
+      volumeZScore: volZScore
     }
   );
   
