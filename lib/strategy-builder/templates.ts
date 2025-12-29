@@ -15,6 +15,99 @@ export interface StrategyTemplate {
 }
 
 export const STRATEGY_TEMPLATES: StrategyTemplate[] = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW: US SWING – EARLY-STAGE BULLISH TREND (5–15 DAYS)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'us-swing-early-bullish',
+    name: 'US Swing – Early-Stage Bullish Trend (5–15 days)',
+    description: `Targets stocks already above 20/50 EMA with rising ADX (20-30 range).
+Prefers RSI 55–65 to avoid late overbought blow-offs.
+Requires confirming volume/flow and controlled ATR% (2-8%).
+Designed for directional long swings, NOT for mean-reversion shorts or late-stage chasing.`,
+    difficulty: 'intermediate',
+    dsl: {
+      name: 'US Swing – Early-Stage Bullish Trend',
+      description: `Early-stage uptrend scanner for 5-15 day swing trades.
+KEY PRINCIPLES:
+• Capture trends that are established but not yet mature or parabolic
+• Avoid extended/vertical moves (price not >10% above EMA20)
+• Momentum must confirm trend but avoid exhaustion
+• Volume should confirm buying interest, not chase blow-offs`,
+      direction: 'long',
+      timeframe: '1day',
+      eligibility: {
+        // EMA Structure: Price > EMA20 > EMA50
+        emaRules: [
+          { ema1: 9, operator: '>', ema2: 20, description: 'Price above EMA20' },
+          { ema1: 20, operator: '>', ema2: 50, description: 'EMA20 above EMA50 (uptrend)' },
+        ],
+        
+        // RSI: 55-65 (bullish but not overbought)
+        // DO NOT use RSI > 70 - explicitly avoiding overbought signals
+        rsiRange: {
+          period: 14,
+          min: 55,
+          max: 65,
+        },
+        
+        // ATR: 2-8% (tradable volatility)
+        atrRange: {
+          period: 14,
+          minPct: 2,
+          maxPct: 8,
+        },
+        
+        // Volume: ≥1.5× average (confirmation)
+        volumeRules: [
+          {
+            type: 'relative',
+            threshold: 1.5,
+            operator: '>=',
+            description: 'Volume ≥ 1.5× 20-day average',
+          },
+        ],
+        
+        // Custom conditions for advanced filtering
+        custom: [
+          'ADX >= 20 AND ADX <= 30',
+          '+DI > -DI',
+          'EMA20_DISTANCE >= 0% AND EMA20_DISTANCE <= 10%',
+          'MACD > 0 OR MACD_CROSSED_SIGNAL_WITHIN_5_BARS',
+          'CMF > -0.1',
+          'OBV > OBV_MA20 (uptrend)',
+        ],
+      },
+      trigger: {
+        type: 'pullback',
+        level: 'ema20',
+        description: 'Enter on pullback toward EMA20 or prior breakout level',
+      },
+      stop: {
+        type: 'swing',
+        value: 'low-1.35*ATR',
+        description: 'Below last swing low, or ~1.2-1.5× ATR below entry zone',
+      },
+      targets: [
+        {
+          level: 'entry+1.25*ATR',
+          label: 'T1 (5-10 day)',
+          rr: 1.0,
+        },
+        {
+          level: 'entry+2*ATR',
+          label: 'T2 (Extended - only if ADX > 25)',
+          rr: 1.5,
+        },
+      ],
+      riskManagement: {
+        minRR: 1.0,
+        maxPositionSize: 2,
+        earningsDaysBuffer: 3,
+      },
+    },
+  },
+  
   {
     id: 'breakout-retest',
     name: 'Breakout & Retest of Key Resistance',

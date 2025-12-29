@@ -38,6 +38,15 @@ interface ScanResult {
     rsi14: number;
     atrPct: number;
     volZ: number;
+    // New indicators from screener
+    adx?: number;
+    plusDI?: number;
+    minusDI?: number;
+    ema20Distance?: number;
+    cmf?: number;
+    relativeVolume?: number;
+    macdLine?: number;
+    macdHistogram?: number;
   };
   squeeze?: {
     combinedScore: number;
@@ -48,7 +57,24 @@ interface ScanResult {
     ttmState: 'ON' | 'FIRE' | 'OFF';
     ttmDuration: number;
   };
+  // New: Filter results from screener
+  filterResults?: Array<{
+    name: string;
+    passed: boolean;
+    value: number | string | boolean;
+    threshold?: string;
+    reason?: string;
+  }>;
 }
+
+// Screener presets
+const SCREENER_PRESETS = [
+  { id: 'earlyBullishTrend', name: '🚀 Early Bullish Trend (5-15 day swings)', description: 'ADX 20-30, RSI 55-65, above EMAs' },
+  { id: 'oversoldBounce', name: '📉 Oversold Bounce', description: 'RSI < 40, above EMA50, bounce candidates' },
+  { id: 'breakoutSetup', name: '💥 Breakout Setup', description: 'Near 52W high, in squeeze, consolidating' },
+  { id: 'highVolumeMovers', name: '📊 High Volume Movers', description: '3×+ relative volume, big movers' },
+  { id: 'strongTrend', name: '📈 Strong Trend', description: 'ADX > 30, bullish MA alignment' },
+];
 
 export default function ScannerClient() {
   const { data: session, status } = useSession();
@@ -56,6 +82,8 @@ export default function ScannerClient() {
   
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('overview'); // Default to overview
+  const [selectedPreset, setSelectedPreset] = useState<string>(''); // Screener preset
+  const [scanMode, setScanMode] = useState<'strategy' | 'screener' | 'overview'>('overview');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<string>('');
   const [scanPercent, setScanPercent] = useState(0);
@@ -63,13 +91,48 @@ export default function ScannerClient() {
   const [results, setResults] = useState<ScanResult[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string>('');
-  const [scanCompleted, setScanCompleted] = useState(false); // Track if a scan has completed
+  const [scanCompleted, setScanCompleted] = useState(false);
   
-  // Filter states
+  // Basic Filter states
   const [minDollarVolume, setMinDollarVolume] = useState(20);
   const [minAtrPct, setMinAtrPct] = useState(0);
   const [maxAtrPct, setMaxAtrPct] = useState(100);
   const [trendDirection, setTrendDirection] = useState('any');
+  const [minPrice, setMinPrice] = useState(5);
+  const [maxPrice, setMaxPrice] = useState(500);
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW SCREENER FILTERS
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // ADX Filter (Trend Strength)
+  const [adxFilterEnabled, setAdxFilterEnabled] = useState(false);
+  const [minAdx, setMinAdx] = useState(20);
+  const [maxAdx, setMaxAdx] = useState(30);
+  const [requirePlusDIAboveMinusDI, setRequirePlusDIAboveMinusDI] = useState(true);
+  
+  // RSI Filter
+  const [rsiFilterEnabled, setRsiFilterEnabled] = useState(false);
+  const [minRsi, setMinRsi] = useState(55);
+  const [maxRsi, setMaxRsi] = useState(65);
+  
+  // EMA Distance Filter
+  const [emaDistanceEnabled, setEmaDistanceEnabled] = useState(false);
+  const [emaDistanceType, setEmaDistanceType] = useState<'ema20' | 'ema50'>('ema20');
+  const [priceAboveEma, setPriceAboveEma] = useState(true);
+  const [maxEmaDistance, setMaxEmaDistance] = useState(10); // Max % above/below
+  
+  // MACD Filter
+  const [macdFilterEnabled, setMacdFilterEnabled] = useState(false);
+  const [requireMacdAboveZero, setRequireMacdAboveZero] = useState(true);
+  
+  // Volume Filter
+  const [volumeFilterEnabled, setVolumeFilterEnabled] = useState(false);
+  const [minRelativeVolume, setMinRelativeVolume] = useState(1.5);
+  
+  // CMF Filter (Money Flow)
+  const [cmfFilterEnabled, setCmfFilterEnabled] = useState(false);
+  const [minCmf, setMinCmf] = useState(-0.1); // Exclude distribution
   
   // Squeeze filter states
   const [minDaysToCover, setMinDaysToCover] = useState(0);
@@ -77,6 +140,7 @@ export default function ScannerClient() {
   const [ttmSqueezeState, setTtmSqueezeState] = useState('any');
   
   const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
   // Result filtering and sorting states
   const [sortBy, setSortBy] = useState<'matchScore' | 'rsi' | 'atr' | 'price' | 'volume' | 'changePercent'>('matchScore');
@@ -91,7 +155,8 @@ export default function ScannerClient() {
   const resultsPerPage = 10;
   
   // Check if we're in overview mode
-  const isOverviewMode = selectedStrategyId === 'overview';
+  const isOverviewMode = scanMode === 'overview';
+  const isScreenerMode = scanMode === 'screener';
 
   // Load strategies on mount
   useEffect(() => {
@@ -107,17 +172,83 @@ export default function ScannerClient() {
       
       const data = await response.json();
       setStrategies(data.strategies || []);
-      
-      // Don't auto-select - leave on 'overview' by default
     } catch (err: any) {
       console.error('Error loading strategies:', err);
       setError('Failed to load strategies');
     }
   };
 
+  // Apply a preset configuration
+  const applyPreset = (presetId: string) => {
+    setSelectedPreset(presetId);
+    setScanMode('screener');
+    
+    // Reset all filters first
+    setAdxFilterEnabled(false);
+    setRsiFilterEnabled(false);
+    setEmaDistanceEnabled(false);
+    setMacdFilterEnabled(false);
+    setVolumeFilterEnabled(false);
+    setCmfFilterEnabled(false);
+    
+    // Apply preset-specific settings
+    switch (presetId) {
+      case 'earlyBullishTrend':
+        setAdxFilterEnabled(true);
+        setMinAdx(20);
+        setMaxAdx(30);
+        setRequirePlusDIAboveMinusDI(true);
+        setRsiFilterEnabled(true);
+        setMinRsi(55);
+        setMaxRsi(65);
+        setEmaDistanceEnabled(true);
+        setEmaDistanceType('ema20');
+        setPriceAboveEma(true);
+        setMaxEmaDistance(10);
+        setCmfFilterEnabled(true);
+        setMinCmf(-0.1);
+        setMinAtrPct(2);
+        setMaxAtrPct(8);
+        break;
+      case 'oversoldBounce':
+        setRsiFilterEnabled(true);
+        setMinRsi(25);
+        setMaxRsi(40);
+        setEmaDistanceEnabled(true);
+        setEmaDistanceType('ema50');
+        setPriceAboveEma(true);
+        setMaxEmaDistance(20);
+        break;
+      case 'breakoutSetup':
+        setAdxFilterEnabled(true);
+        setMinAdx(15);
+        setMaxAdx(25);
+        setVolumeFilterEnabled(true);
+        setMinRelativeVolume(1.2);
+        setTtmSqueezeState('ON');
+        break;
+      case 'highVolumeMovers':
+        setVolumeFilterEnabled(true);
+        setMinRelativeVolume(3.0);
+        break;
+      case 'strongTrend':
+        setAdxFilterEnabled(true);
+        setMinAdx(30);
+        setMaxAdx(60);
+        setRequirePlusDIAboveMinusDI(true);
+        setEmaDistanceEnabled(true);
+        setEmaDistanceType('ema20');
+        setPriceAboveEma(true);
+        setMaxEmaDistance(15);
+        break;
+    }
+    
+    setShowAdvancedFilters(true);
+  };
+
   const startScan = async () => {
-    if (!selectedStrategyId) {
-      setError('Please select a scan mode or strategy');
+    if (scanMode === 'strategy' && !selectedStrategyId) {
+      setError('Please select a strategy');
       return;
     }
 
@@ -125,33 +256,43 @@ export default function ScannerClient() {
     setError('');
     setResults([]);
     setCurrentPage(1);
-    setScanCompleted(false); // Reset completed flag
-    setScanProgress(isOverviewMode ? 'Scanning market (overview mode)...' : 'Initializing scan...');
+    setScanCompleted(false);
+    setScanProgress(isScreenerMode ? 'Running screener filters...' : isOverviewMode ? 'Scanning market (overview mode)...' : 'Initializing scan...');
     setScanPercent(0);
     setCacheStats(null);
 
     try {
+      // ═══════════════════════════════════════════════════════════════════════════
+      // SCREENER MODE - Use new filter-based screener API
+      // ═══════════════════════════════════════════════════════════════════════════
+      if (isScreenerMode) {
+        await runScreenerScan();
+        return;
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // STRATEGY/OVERVIEW MODE - Use existing scanner API
+      // ═══════════════════════════════════════════════════════════════════════════
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          strategyId: isOverviewMode ? undefined : selectedStrategyId, // Don't pass strategyId in overview mode
-          stream: true, // Enable streaming
+          strategyId: isOverviewMode ? undefined : selectedStrategyId,
+          stream: true,
           config: {
-            overviewMode: isOverviewMode, // NEW: Enable overview mode (skip strategy matching)
-            minPrice: 5,
-            maxPrice: 1000,
+            overviewMode: isOverviewMode,
+            minPrice,
+            maxPrice,
             minVolume: 500000,
             minDollarVolume: minDollarVolume * 1_000_000,
             minAtrPct,
             maxAtrPct,
             trendDirection,
-            // Squeeze filters
             minDaysToCover: minDaysToCover > 0 ? minDaysToCover : undefined,
             minShortFloat: minShortFloat > 0 ? minShortFloat : undefined,
             ttmSqueezeState: ttmSqueezeState !== 'any' ? ttmSqueezeState : undefined,
             excludeOTC: true,
-            excludeETFs: true, // Default: true (exclude ETFs)
+            excludeETFs: true,
             excludeWarrants: true,
             excludeADRs: true,
             sortByDollarVolume: true,
@@ -242,7 +383,191 @@ export default function ScannerClient() {
       setScanPercent(0);
     } finally {
       setIsScanning(false);
-      setScanCompleted(true); // Mark scan as completed
+      setScanCompleted(true);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW SCREENER SCAN - Uses filter-based screener API
+  // ═══════════════════════════════════════════════════════════════════════════
+  const runScreenerScan = async () => {
+    // Build filters from UI state
+    const filters: any = {};
+    
+    // Price filter
+    filters.price = { type: 'price', enabled: true, minPrice, maxPrice };
+    
+    // ADX filter
+    if (adxFilterEnabled) {
+      filters.adx = { type: 'adx', enabled: true, minADX: minAdx, maxADX: maxAdx };
+      if (requirePlusDIAboveMinusDI) {
+        filters.directional = { type: 'directional', enabled: true, plusDIAboveMinusDI: true };
+      }
+    }
+    
+    // RSI filter
+    if (rsiFilterEnabled) {
+      filters.rsi = { type: 'rsi', enabled: true, minRSI: minRsi, maxRSI: maxRsi };
+    }
+    
+    // EMA Distance filter
+    if (emaDistanceEnabled) {
+      filters.priceToMA = [{
+        type: 'priceToMA',
+        enabled: true,
+        maType: 'ema',
+        maPeriod: emaDistanceType === 'ema20' ? 20 : 50,
+        position: priceAboveEma ? 'above' : 'below',
+        minDistancePercent: 0,
+        maxDistancePercent: maxEmaDistance,
+      }];
+    }
+    
+    // MACD filter
+    if (macdFilterEnabled) {
+      filters.macd = { type: 'macd', enabled: true, macdAboveZero: requireMacdAboveZero };
+    }
+    
+    // Volume filter
+    if (volumeFilterEnabled) {
+      filters.volume = { type: 'volume', enabled: true, minRelativeVolume };
+    }
+    
+    // CMF filter
+    if (cmfFilterEnabled) {
+      filters.cmf = { type: 'cmf', enabled: true, minCMF: minCmf };
+    }
+    
+    // ATR filter
+    if (minAtrPct > 0 || maxAtrPct < 100) {
+      filters.atr = { type: 'atr', enabled: true, minATRPercent: minAtrPct, maxATRPercent: maxAtrPct };
+    }
+    
+    // Dollar volume filter
+    if (minDollarVolume > 0) {
+      filters.dollarVolume = { type: 'dollarVolume', enabled: true, minDollarVolume: minDollarVolume * 1_000_000 };
+    }
+    
+    // Exchange filter (exclude ETFs, ADRs, warrants)
+    filters.exchange = {
+      type: 'exchange',
+      enabled: true,
+      includeExchanges: ['NYSE', 'NASDAQ', 'AMEX'],
+      excludeETFs: true,
+      excludeADRs: true,
+      excludeWarrants: true,
+    };
+    
+    // TTM Squeeze filter
+    if (ttmSqueezeState !== 'any') {
+      filters.ttmSqueeze = { 
+        type: 'ttmSqueeze', 
+        enabled: true, 
+        state: ttmSqueezeState === 'ON' ? 'on' : ttmSqueezeState === 'FIRE' ? 'firing' : 'off'
+      };
+    }
+
+    try {
+      // If preset is selected, use it; otherwise use custom filters
+      const requestBody: any = {
+        maxResults: 50,
+        maxCandidates: 2000, // Scan up to 2000 stocks (sorted by dollar volume)
+        stream: true,
+      };
+      
+      if (selectedPreset && selectedPreset !== 'custom') {
+        requestBody.preset = selectedPreset;
+      } else {
+        requestBody.filters = filters;
+      }
+      
+      const response = await fetch('/api/screener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error('Screener failed');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) throw new Error('No response body');
+
+      let buffer = '';
+      const foundResults: ScanResult[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const message = JSON.parse(line.substring(6));
+              
+              if (message.type === 'progress') {
+                setScanPercent(message.data.percent);
+                setScanProgress(message.data.message);
+              } else if (message.type === 'found') {
+                // Convert screener result to ScanResult format
+                const sr = message.data;
+                const converted: ScanResult = {
+                  ticker: sr.ticker,
+                  name: sr.name,
+                  price: sr.price,
+                  change: sr.change || 0,
+                  changePercent: sr.changePercent || 0,
+                  volume: sr.volume || 0,
+                  matchScore: sr.matchScore,
+                  matchDetails: {
+                    eligible: sr.passed,
+                    passedCriteria: sr.filterResults?.filter((f: any) => f.passed).map((f: any) => f.name) || [],
+                    failureReason: sr.filterResults?.filter((f: any) => !f.passed).map((f: any) => f.reason || f.name).join(', '),
+                  },
+                  indicators: {
+                    ema9: sr.indicators?.ema9 || 0,
+                    ema20: sr.indicators?.ema20 || 0,
+                    ema50: sr.indicators?.ema50 || 0,
+                    rsi14: sr.indicators?.rsi || 0,
+                    atrPct: sr.indicators?.atrPercent || 0,
+                    volZ: sr.indicators?.volumeZScore || 0,
+                    adx: sr.indicators?.adx,
+                    plusDI: sr.indicators?.plusDI,
+                    minusDI: sr.indicators?.minusDI,
+                    ema20Distance: sr.indicators?.ema20Distance,
+                    cmf: sr.indicators?.cmf,
+                    relativeVolume: sr.indicators?.relativeVolume,
+                  },
+                  filterResults: sr.filterResults,
+                };
+                foundResults.push(converted);
+                setResults([...foundResults]);
+              } else if (message.type === 'complete') {
+                setScanProgress(`Scan complete! Found ${foundResults.length} matches.`);
+                setScanPercent(100);
+              } else if (message.type === 'error') {
+                throw new Error(message.data.error);
+              }
+            } catch (parseErr) {
+              console.error('Error parsing SSE:', parseErr);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Screener error:', err);
+      setError(err.message || 'Screener failed');
+      setScanPercent(0);
+    } finally {
+      setIsScanning(false);
+      setScanCompleted(true);
     }
   };
 
@@ -329,35 +654,145 @@ export default function ScannerClient() {
 
       {/* Scanner Controls */}
       <div className="bg-slate-800/50 backdrop-blur border border-blue-500/30 rounded-xl p-6 mb-6">
+        {/* Scan Mode Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-blue-500/30 pb-4">
+          <button
+            onClick={() => { setScanMode('overview'); setSelectedPreset(''); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              scanMode === 'overview' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-slate-700/50 text-blue-300 hover:bg-slate-700'
+            }`}
+          >
+            📊 Overview
+          </button>
+          <button
+            onClick={() => { setScanMode('screener'); setSelectedPreset(''); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              scanMode === 'screener'
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-700/50 text-blue-300 hover:bg-slate-700'
+            }`}
+          >
+            🔬 Screener
+          </button>
+          <button
+            onClick={() => { setScanMode('strategy'); setSelectedPreset(''); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              scanMode === 'strategy'
+                ? 'bg-teal-600 text-white'
+                : 'bg-slate-700/50 text-blue-300 hover:bg-slate-700'
+            }`}
+          >
+            🎯 Strategy
+          </button>
+        </div>
+
+        {/* Mode-specific configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-          {/* Strategy Selector */}
+          {/* Left Panel - Mode Selection */}
           <div className="lg:col-span-2">
-            <label className="block text-sm font-medium text-blue-200 mb-2">
-              Scan Mode
-            </label>
-            <select
-              value={selectedStrategyId}
-              onChange={(e) => setSelectedStrategyId(e.target.value)}
-              disabled={isScanning}
-              className="w-full px-4 py-3 bg-slate-700/50 border border-blue-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              <option value="overview">📊 Market Overview (Filter Only - No Strategy)</option>
-              <optgroup label="─────────────────────"></optgroup>
-              <optgroup label="Your Strategies">
+            {/* OVERVIEW MODE */}
+            {scanMode === 'overview' && (
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">
+                  📊 Market Overview Mode
+                </label>
+                <p className="text-sm text-blue-300 bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+                  Scan the market with basic filters. Fastest mode - returns stocks sorted by dollar volume.
+                  Use the filters below to narrow results.
+                </p>
+              </div>
+            )}
+
+            {/* SCREENER MODE */}
+            {scanMode === 'screener' && (
+              <div>
+                <label className="block text-sm font-medium text-purple-200 mb-2">
+                  🔬 Filter-Based Screener
+                </label>
+                <div className="space-y-3">
+                  {/* Preset Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {SCREENER_PRESETS.map(preset => (
+                      <button
+                        key={preset.id}
+                        onClick={() => applyPreset(preset.id)}
+                        disabled={isScanning}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          selectedPreset === preset.id
+                            ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                            : 'bg-slate-700/50 text-purple-300 hover:bg-slate-700 border border-purple-500/30'
+                        }`}
+                        title={preset.description}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { setSelectedPreset('custom'); setShowAdvancedFilters(true); }}
+                      disabled={isScanning}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        selectedPreset === 'custom'
+                          ? 'bg-purple-600 text-white ring-2 ring-purple-400'
+                          : 'bg-slate-700/50 text-purple-300 hover:bg-slate-700 border border-purple-500/30'
+                      }`}
+                    >
+                      ⚙️ Custom Filters
+                    </button>
+                  </div>
+                  {selectedPreset && selectedPreset !== 'custom' && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-purple-300 bg-purple-500/10 rounded p-2 border border-purple-500/20">
+                        {SCREENER_PRESETS.find(p => p.id === selectedPreset)?.description}
+                      </p>
+                      <p className="text-xs text-purple-200 italic">
+                        💡 Preset filters are active. Click "Custom Filters" below to override.
+                      </p>
+                    </div>
+                  )}
+                  {selectedPreset === 'custom' && (
+                    <p className="text-xs text-purple-300 bg-purple-500/10 rounded p-2 border border-purple-500/20">
+                      ⚙️ Using custom filter configuration. Enable filters below.
+                    </p>
+                  )}
+                  {!selectedPreset && (
+                    <p className="text-xs text-purple-300 bg-purple-500/10 rounded p-2 border border-purple-500/20">
+                      Select a preset above or click "Custom Filters" to configure your own filters.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* STRATEGY MODE */}
+            {scanMode === 'strategy' && (
+              <div>
+                <label className="block text-sm font-medium text-teal-200 mb-2">
+                  🎯 Strategy-Based Scan
+                </label>
+                <select
+                  value={selectedStrategyId}
+                  onChange={(e) => setSelectedStrategyId(e.target.value)}
+                  disabled={isScanning}
+                  className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                >
+                  <option value="">Select a strategy...</option>
+                  {strategies.length === 0 && (
+                    <option value="" disabled>No strategies found - create one first</option>
+                  )}
+                  {strategies.map(strategy => (
+                    <option key={strategy.id} value={strategy.id}>
+                      {strategy.name} ({strategy.direction.toUpperCase()}, {strategy.timeframe})
+                    </option>
+                  ))}
+                </select>
                 {strategies.length === 0 && (
-                  <option value="" disabled>No strategies found</option>
+                  <p className="mt-2 text-xs text-teal-300">
+                    💡 Create a strategy in the Strategy Builder to use this mode.
+                  </p>
                 )}
-              {strategies.map(strategy => (
-                <option key={strategy.id} value={strategy.id}>
-                    🎯 {strategy.name} ({strategy.direction.toUpperCase()}, {strategy.timeframe})
-                </option>
-              ))}
-              </optgroup>
-            </select>
-            {isOverviewMode && (
-              <p className="mt-2 text-xs text-blue-300">
-                ℹ️ Overview mode: Stocks will be filtered but NOT evaluated against strategy criteria. Fastest scan mode.
-              </p>
+              </div>
             )}
           </div>
 
@@ -365,8 +800,18 @@ export default function ScannerClient() {
           <div className="flex items-end">
             <button
               onClick={startScan}
-              disabled={isScanning || !selectedStrategyId}
-              className="w-full px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              disabled={
+                isScanning || 
+                (scanMode === 'strategy' && !selectedStrategyId) || 
+                (scanMode === 'screener' && !selectedPreset && !adxFilterEnabled && !rsiFilterEnabled && !emaDistanceEnabled && !macdFilterEnabled && !volumeFilterEnabled && !cmfFilterEnabled)
+              }
+              className={`w-full px-8 py-3 font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+                scanMode === 'screener'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                  : scanMode === 'strategy'
+                    ? 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700'
+                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+              } text-white`}
             >
               {isScanning ? (
                 <span className="flex items-center justify-center gap-2">
@@ -377,7 +822,7 @@ export default function ScannerClient() {
                   Scanning...
                 </span>
               ) : (
-                '🔍 Start Scan'
+                `🔍 Run ${scanMode === 'screener' ? 'Screener' : scanMode === 'strategy' ? 'Strategy Scan' : 'Overview'}`
               )}
             </button>
           </div>
@@ -540,6 +985,264 @@ export default function ScannerClient() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════════════ */}
+        {/* ADVANCED SCREENER FILTERS (Only for Screener Mode) */}
+        {/* ═══════════════════════════════════════════════════════════════════════════ */}
+        {scanMode === 'screener' && showAdvancedFilters && (
+          <div className="mt-4 pt-4 border-t border-purple-500/30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-purple-200 flex items-center gap-2">
+                🔬 Technical Filters
+                <span className="text-xs font-normal text-purple-300">(Customize your screener)</span>
+              </h3>
+              <button
+                onClick={() => {
+                  // Reset all filters
+                  setAdxFilterEnabled(false);
+                  setRsiFilterEnabled(false);
+                  setEmaDistanceEnabled(false);
+                  setMacdFilterEnabled(false);
+                  setVolumeFilterEnabled(false);
+                  setCmfFilterEnabled(false);
+                  setSelectedPreset('custom');
+                }}
+                className="text-xs text-purple-300 hover:text-white transition-colors"
+              >
+                Reset Filters
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* ADX Filter */}
+              <div className={`p-3 rounded-lg border ${adxFilterEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={adxFilterEnabled}
+                    onChange={(e) => setAdxFilterEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">ADX (Trend Strength)</span>
+                </label>
+                {adxFilterEnabled && (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={minAdx}
+                        onChange={(e) => setMinAdx(Number(e.target.value))}
+                        disabled={isScanning}
+                        min="0" max="100" step="1"
+                        placeholder="Min"
+                        className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                      />
+                      <input
+                        type="number"
+                        value={maxAdx}
+                        onChange={(e) => setMaxAdx(Number(e.target.value))}
+                        disabled={isScanning}
+                        min="0" max="100" step="1"
+                        placeholder="Max"
+                        className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-purple-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={requirePlusDIAboveMinusDI}
+                        onChange={(e) => setRequirePlusDIAboveMinusDI(e.target.checked)}
+                        disabled={isScanning}
+                        className="w-3 h-3 accent-purple-500"
+                      />
+                      +DI &gt; -DI (Bullish)
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* RSI Filter */}
+              <div className={`p-3 rounded-lg border ${rsiFilterEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={rsiFilterEnabled}
+                    onChange={(e) => setRsiFilterEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">RSI</span>
+                </label>
+                {rsiFilterEnabled && (
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="number"
+                      value={minRsi}
+                      onChange={(e) => setMinRsi(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="0" max="100" step="1"
+                      placeholder="Min"
+                      className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                    />
+                    <input
+                      type="number"
+                      value={maxRsi}
+                      onChange={(e) => setMaxRsi(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="0" max="100" step="1"
+                      placeholder="Max"
+                      className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* EMA Distance Filter */}
+              <div className={`p-3 rounded-lg border ${emaDistanceEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={emaDistanceEnabled}
+                    onChange={(e) => setEmaDistanceEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">Price vs EMA</span>
+                </label>
+                {emaDistanceEnabled && (
+                  <div className="space-y-2 mt-2">
+                    <select
+                      value={emaDistanceType}
+                      onChange={(e) => setEmaDistanceType(e.target.value as 'ema20' | 'ema50')}
+                      disabled={isScanning}
+                      className="w-full px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                    >
+                      <option value="ema20">EMA 20</option>
+                      <option value="ema50">EMA 50</option>
+                    </select>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={priceAboveEma ? 'above' : 'below'}
+                        onChange={(e) => setPriceAboveEma(e.target.value === 'above')}
+                        disabled={isScanning}
+                        className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                      >
+                        <option value="above">Above</option>
+                        <option value="below">Below</option>
+                      </select>
+                      <input
+                        type="number"
+                        value={maxEmaDistance}
+                        onChange={(e) => setMaxEmaDistance(Number(e.target.value))}
+                        disabled={isScanning}
+                        min="0" max="50" step="1"
+                        placeholder="Max %"
+                        className="w-1/2 px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                      />
+                    </div>
+                    <p className="text-xs text-purple-300">Max {maxEmaDistance}% {priceAboveEma ? 'above' : 'below'}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Volume Filter */}
+              <div className={`p-3 rounded-lg border ${volumeFilterEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={volumeFilterEnabled}
+                    onChange={(e) => setVolumeFilterEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">Relative Volume</span>
+                </label>
+                {volumeFilterEnabled && (
+                  <div className="mt-2">
+                    <input
+                      type="number"
+                      value={minRelativeVolume}
+                      onChange={(e) => setMinRelativeVolume(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="0.5" max="10" step="0.1"
+                      className="w-full px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                    />
+                    <p className="text-xs text-purple-300 mt-1">Min {minRelativeVolume}× avg volume</p>
+                  </div>
+                )}
+              </div>
+
+              {/* MACD Filter */}
+              <div className={`p-3 rounded-lg border ${macdFilterEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={macdFilterEnabled}
+                    onChange={(e) => setMacdFilterEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">MACD</span>
+                </label>
+                {macdFilterEnabled && (
+                  <label className="flex items-center gap-2 text-xs text-purple-200 cursor-pointer mt-2">
+                    <input
+                      type="checkbox"
+                      checked={requireMacdAboveZero}
+                      onChange={(e) => setRequireMacdAboveZero(e.target.checked)}
+                      disabled={isScanning}
+                      className="w-3 h-3 accent-purple-500"
+                    />
+                    MACD Line &gt; 0
+                  </label>
+                )}
+              </div>
+
+              {/* CMF Filter */}
+              <div className={`p-3 rounded-lg border ${cmfFilterEnabled ? 'bg-purple-500/10 border-purple-500/40' : 'bg-slate-700/30 border-slate-600/30'}`}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={cmfFilterEnabled}
+                    onChange={(e) => setCmfFilterEnabled(e.target.checked)}
+                    disabled={isScanning}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <span className="text-sm font-medium text-white">CMF (Money Flow)</span>
+                </label>
+                {cmfFilterEnabled && (
+                  <div className="mt-2">
+                    <input
+                      type="number"
+                      value={minCmf}
+                      onChange={(e) => setMinCmf(Number(e.target.value))}
+                      disabled={isScanning}
+                      min="-1" max="1" step="0.05"
+                      className="w-full px-2 py-1 bg-slate-700/50 border border-purple-500/20 rounded text-white text-xs"
+                    />
+                    <p className="text-xs text-purple-300 mt-1">Min CMF: {minCmf} {minCmf >= 0 ? '(accumulation)' : '(exclude heavy distribution)'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Active Filters Summary */}
+            {(adxFilterEnabled || rsiFilterEnabled || emaDistanceEnabled || volumeFilterEnabled || macdFilterEnabled || cmfFilterEnabled) && (
+              <div className="mt-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <div className="text-xs text-purple-200 flex flex-wrap gap-2">
+                  <span className="font-semibold">Active Filters:</span>
+                  {adxFilterEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">ADX {minAdx}-{maxAdx}</span>}
+                  {rsiFilterEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">RSI {minRsi}-{maxRsi}</span>}
+                  {emaDistanceEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">{priceAboveEma ? 'Above' : 'Below'} {emaDistanceType.toUpperCase()} ≤{maxEmaDistance}%</span>}
+                  {volumeFilterEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">Vol ≥{minRelativeVolume}×</span>}
+                  {macdFilterEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">MACD {requireMacdAboveZero ? '> 0' : 'any'}</span>}
+                  {cmfFilterEnabled && <span className="px-2 py-0.5 bg-purple-600/30 rounded">CMF ≥{minCmf}</span>}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -928,11 +1631,65 @@ function ResultCard({ result }: { result: ScanResult }) {
           </div>
           <div className="bg-slate-700/50 rounded p-2">
             <div className="text-blue-300">Vol Z</div>
-            <div className="text-white font-semibold">{result.indicators.volZ.toFixed(2)}</div>
+            <div className="text-white font-semibold">{result.indicators.volZ?.toFixed(2) || result.indicators.relativeVolume?.toFixed(2) || 'N/A'}</div>
           </div>
           <div className="bg-slate-700/50 rounded p-2">
             <div className="text-blue-300">ATR%</div>
             <div className="text-white font-semibold">{result.indicators.atrPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      )}
+
+      {/* Additional Screener Indicators */}
+      {result.indicators && (result.indicators.adx || result.indicators.ema20Distance !== undefined) && (
+        <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+          {result.indicators.adx !== undefined && (
+            <div className="bg-slate-700/50 rounded p-2">
+              <div className="text-blue-300">ADX</div>
+              <div className="text-white font-semibold">{result.indicators.adx.toFixed(1)}</div>
+            </div>
+          )}
+          {result.indicators.ema20Distance !== undefined && (
+            <div className="bg-slate-700/50 rounded p-2">
+              <div className="text-blue-300">EMA20 Dist</div>
+              <div className={`font-semibold ${result.indicators.ema20Distance > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {result.indicators.ema20Distance > 0 ? '+' : ''}{result.indicators.ema20Distance.toFixed(1)}%
+              </div>
+            </div>
+          )}
+          {result.indicators.cmf !== undefined && (
+            <div className="bg-slate-700/50 rounded p-2">
+              <div className="text-blue-300">CMF</div>
+              <div className={`font-semibold ${result.indicators.cmf > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {result.indicators.cmf.toFixed(3)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filter Results (Screener Mode) */}
+      {result.filterResults && result.filterResults.length > 0 && (
+        <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+          <div className="text-xs font-semibold text-purple-200 mb-2">Filter Results:</div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {result.filterResults.slice(0, 5).map((filter, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-xs">
+                <span className={filter.passed ? 'text-green-400' : 'text-red-400'}>
+                  {filter.passed ? '✓' : '✗'}
+                </span>
+                <span className="text-blue-200">{filter.name}:</span>
+                <span className="text-white font-medium">{String(filter.value)}</span>
+                {filter.threshold && (
+                  <span className="text-blue-300 text-xs">({filter.threshold})</span>
+                )}
+              </div>
+            ))}
+            {result.filterResults.length > 5 && (
+              <div className="text-xs text-blue-300 italic">
+                +{result.filterResults.length - 5} more filters...
+              </div>
+            )}
           </div>
         </div>
       )}
