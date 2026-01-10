@@ -21,6 +21,7 @@ interface Trade {
   rMultiple: number | null;
   holdingDays: number | null;
   profitLoss: number | null;
+  analysisReportId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,8 +45,9 @@ interface JournalClientProps {
   session: Session;
 }
 
-interface SavedStrategyReport {
+interface SavedReport {
   id: string;
+  type: string;
   title: string;
   symbol: string;
   timeframe: string;
@@ -61,7 +63,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
-  const [savedStrategyReports, setSavedStrategyReports] = useState<SavedStrategyReport[]>([]);
+  const [tickerReports, setTickerReports] = useState<SavedReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   // Form state
   const [ticker, setTicker] = useState('');
@@ -86,7 +89,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     'Squeeze Play',
     'Other',
   ];
-  
+
   const exitReasonOptions = [
     { value: 'hit_target', label: 'Hit Target' },
     { value: 'stopped_out', label: 'Stopped Out' },
@@ -96,28 +99,41 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   useEffect(() => {
     fetchTrades();
-    fetchSavedStrategyReports();
   }, []);
 
-  const fetchSavedStrategyReports = async () => {
-    try {
-      const response = await fetch('/api/reports/strategies');
-      const data = await response.json();
-      
-      if (data.success) {
-        setSavedStrategyReports(data.reports);
-      }
-    } catch (error) {
-      console.error('Error fetching saved strategy reports:', error);
+  // Fetch reports by ticker (debounced)
+  useEffect(() => {
+    if (!ticker || ticker.length === 0) {
+      setTickerReports([]);
+      return;
     }
-  };
+
+    const timer = setTimeout(async () => {
+      try {
+        setLoadingReports(true);
+        const response = await fetch(`/api/reports/search?ticker=${encodeURIComponent(ticker)}`);
+        const data = await response.json();
+
+        if (data.success) {
+          setTickerReports(data.reports);
+        }
+      } catch (error) {
+        console.error('Error fetching reports for ticker:', error);
+        setTickerReports([]);
+      } finally {
+        setLoadingReports(false);
+      }
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(timer);
+  }, [ticker]);
 
   const fetchTrades = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/journal/list');
       const data = await response.json();
-      
+
       if (data.success) {
         setTrades(data.trades);
         setSummary(data.summary);
@@ -134,7 +150,7 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate required fields
     if (!ticker || !entryPrice || !entryDate || !amount) {
       alert('Please fill in all required fields');
@@ -173,7 +189,7 @@ export default function JournalClient({ session }: JournalClientProps) {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         alert(editingTrade ? 'Trade updated successfully!' : 'Trade added successfully!');
         resetForm();
@@ -211,16 +227,17 @@ export default function JournalClient({ session }: JournalClientProps) {
     setTicker(trade.ticker);
     setDirection(trade.direction);
     setEntryPrice(trade.entryPrice.toString());
-    
+
     // Extract date portion without timezone conversion
     const entryDateStr = trade.entryDate.split('T')[0];
     const exitDateStr = trade.exitDate ? trade.exitDate.split('T')[0] : '';
-    
+
     setEntryDate(entryDateStr);
     setExitPrice(trade.exitPrice?.toString() || '');
     setExitDate(exitDateStr);
     setAmount(trade.amount.toString());
     setStrategy(trade.strategy || '');
+    setSelectedReportId(trade.analysisReportId || '');
     setNotes(trade.notes || '');
     setIsOpen(trade.isOpen);
     setExitReason(trade.exitReason || '');
@@ -238,7 +255,7 @@ export default function JournalClient({ session }: JournalClientProps) {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         alert('Trade deleted successfully!');
         fetchTrades();
@@ -261,7 +278,7 @@ export default function JournalClient({ session }: JournalClientProps) {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         setAiAnalysis(data.analysis);
       } else {
@@ -294,7 +311,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-900 to-slate-900">
       <Navbar session={session} />
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -373,7 +390,7 @@ export default function JournalClient({ session }: JournalClientProps) {
             <h2 className="text-xl font-bold text-white mb-4">
               {editingTrade ? 'Edit Trade' : 'Add New Trade'}
             </h2>
-            
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Ticker */}
@@ -523,30 +540,49 @@ export default function JournalClient({ session }: JournalClientProps) {
                 </>
               )}
 
-              {/* Link to Saved Strategy Report */}
+              {/* Link to Saved Report */}
               <div>
                 <label className="block text-sm font-medium text-blue-200 mb-1">
-                  📊 Link to Strategy Report (optional)
+                  📊 Link to Analysis Report (optional)
                 </label>
                 <select
                   value={selectedReportId}
                   onChange={(e) => setSelectedReportId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  disabled={!ticker || loadingReports}
                 >
                   <option value="">None - Don't link to a report</option>
-                  {savedStrategyReports.length > 0 && (
-                    <optgroup label="Saved Strategy Reports">
-                      {savedStrategyReports.map(report => (
-                        <option key={report.id} value={report.id}>
-                          {report.symbol} - {report.title.substring(0, 40)}... ({new Date(report.createdAt).toLocaleDateString()})
-                        </option>
-                      ))}
+                  {loadingReports && (
+                    <option value="" disabled>Searching reports for {ticker}...</option>
+                  )}
+                  {!loadingReports && ticker && tickerReports.length > 0 && (
+                    <optgroup label={`Reports for ${ticker}`}>
+                      {tickerReports.map(report => {
+                        const typeLabel = report.type === 'strategy-analysis' ? '🎯' :
+                          report.type === 'technical-analysis' ? '📈' :
+                            report.type === 'deep-analysis' ? '🔍' : '📄';
+                        return (
+                          <option key={report.id} value={report.id}>
+                            {typeLabel} {report.title.substring(0, 35)}... ({new Date(report.createdAt).toLocaleDateString()})
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   )}
                 </select>
-                {savedStrategyReports.length === 0 && (
+                {!ticker && (
                   <p className="text-xs text-blue-300 mt-1">
-                    No saved strategy reports yet. Analyze a stock with strategies and save the report to link it here.
+                    💡 Enter a ticker above to see available reports for linking
+                  </p>
+                )}
+                {ticker && !loadingReports && tickerReports.length === 0 && (
+                  <p className="text-xs text-blue-300 mt-1">
+                    No saved reports found for {ticker}. Run an analysis and save it to link here.
+                  </p>
+                )}
+                {ticker && tickerReports.length > 0 && (
+                  <p className="text-xs text-green-400 mt-1">
+                    ✓ Found {tickerReports.length} report{tickerReports.length !== 1 ? 's' : ''} for {ticker}
                   </p>
                 )}
               </div>
@@ -591,7 +627,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                 >
                   {saving ? 'Saving...' : editingTrade ? 'Update Trade' : 'Add Trade'}
                 </button>
-                
+
                 {editingTrade && (
                   <button
                     type="button"
@@ -667,11 +703,10 @@ export default function JournalClient({ session }: JournalClientProps) {
                         {trade.isOpen && <div className="text-xs text-green-400">Open</div>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          trade.direction === 'long' 
-                            ? 'bg-green-500/20 text-green-300' 
-                            : 'bg-red-500/20 text-red-300'
-                        }`}>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${trade.direction === 'long'
+                          ? 'bg-green-500/20 text-green-300'
+                          : 'bg-red-500/20 text-red-300'
+                          }`}>
                           {trade.direction.toUpperCase()}
                         </span>
                       </td>
@@ -691,9 +726,8 @@ export default function JournalClient({ session }: JournalClientProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {trade.returnPct !== null ? (
-                          <div className={`text-sm font-semibold ${
-                            trade.returnPct > 0 ? 'text-green-400' : trade.returnPct < 0 ? 'text-red-400' : 'text-blue-300'
-                          }`}>
+                          <div className={`text-sm font-semibold ${trade.returnPct > 0 ? 'text-green-400' : trade.returnPct < 0 ? 'text-red-400' : 'text-blue-300'
+                            }`}>
                             {trade.returnPct > 0 ? '+' : ''}{trade.returnPct.toFixed(2)}%
                           </div>
                         ) : (
@@ -702,9 +736,8 @@ export default function JournalClient({ session }: JournalClientProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {trade.profitLoss !== null ? (
-                          <div className={`text-sm font-semibold ${
-                            trade.profitLoss > 0 ? 'text-green-400' : trade.profitLoss < 0 ? 'text-red-400' : 'text-blue-300'
-                          }`}>
+                          <div className={`text-sm font-semibold ${trade.profitLoss > 0 ? 'text-green-400' : trade.profitLoss < 0 ? 'text-red-400' : 'text-blue-300'
+                            }`}>
                             {formatCurrency(trade.profitLoss)}
                           </div>
                         ) : (

@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
         rMultiple: true,
         holdingDays: true,
         profitLoss: true,
+        analysisReportId: true,
         createdAt: true,
         updatedAt: true,
       },
