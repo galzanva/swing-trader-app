@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Session } from 'next-auth';
 import Navbar from '../components/navbar';
 
@@ -54,6 +54,8 @@ interface SavedReport {
   createdAt: string;
 }
 
+type TimePeriod = 'month' | 'ytd' | '1year' | 'all';
+
 export default function JournalClient({ session }: JournalClientProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -65,6 +67,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [tickerReports, setTickerReports] = useState<SavedReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all');
 
   // Form state
   const [ticker, setTicker] = useState('');
@@ -127,6 +130,87 @@ export default function JournalClient({ session }: JournalClientProps) {
 
     return () => clearTimeout(timer);
   }, [ticker]);
+
+  // Calculate date range for selected period
+  const getDateRange = (period: TimePeriod): { start: Date | null; end: Date } => {
+    const now = new Date();
+    const end = now;
+
+    switch (period) {
+      case 'month':
+        // First day of current month
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end };
+      case 'ytd':
+        // Jan 1 of current year
+        return { start: new Date(now.getFullYear(), 0, 1), end };
+      case '1year':
+        // 365 days ago
+        const oneYearAgo = new Date(now);
+        oneYearAgo.setFullYear(now.getFullYear() - 1);
+        return { start: oneYearAgo, end };
+      case 'all':
+        return { start: null, end };
+    }
+  };
+
+  // Filter trades based on selected period
+  const filteredTrades = useMemo(() => {
+    if (selectedPeriod === 'all') return trades;
+
+    const { start, end } = getDateRange(selectedPeriod);
+    if (!start) return trades;
+
+    return trades.filter(trade => {
+      const tradeDate = new Date(trade.entryDate);
+      return tradeDate >= start && tradeDate <= end;
+    });
+  }, [trades, selectedPeriod]);
+
+  // Recalculate summary for filtered period
+  const filteredSummary = useMemo(() => {
+    const closedTrades = filteredTrades.filter(t => !t.isOpen && t.returnPct !== null);
+    const openTrades = filteredTrades.filter(t => t.isOpen);
+
+    const totalTrades = filteredTrades.length;
+    const totalClosed = closedTrades.length;
+    const totalOpen = openTrades.length;
+
+    const winningTrades = closedTrades.filter(t => (t.returnPct ?? 0) > 0).length;
+    const losingTrades = closedTrades.filter(t => (t.returnPct ?? 0) < 0).length;
+    const breakEvenTrades = closedTrades.filter(t => (t.returnPct ?? 0) === 0).length;
+
+    const winRate = totalClosed > 0 ? (winningTrades / totalClosed) * 100 : 0;
+
+    const totalPL = closedTrades.reduce((sum, t) => sum + (t.profitLoss ?? 0), 0);
+    const avgPL = totalClosed > 0 ? totalPL / totalClosed : 0;
+
+    const avgReturn = totalClosed > 0
+      ? closedTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalClosed
+      : 0;
+
+    const avgRMultiple = closedTrades.filter(t => t.rMultiple !== null).length > 0
+      ? closedTrades.filter(t => t.rMultiple !== null).reduce((sum, t) => sum + (t.rMultiple ?? 0), 0) / closedTrades.filter(t => t.rMultiple !== null).length
+      : null;
+
+    const avgHoldingDays = closedTrades.filter(t => t.holdingDays !== null).length > 0
+      ? closedTrades.filter(t => t.holdingDays !== null).reduce((sum, t) => sum + (t.holdingDays ?? 0), 0) / closedTrades.filter(t => t.holdingDays !== null).length
+      : null;
+
+    return {
+      totalTrades,
+      totalClosed,
+      totalOpen,
+      winningTrades,
+      losingTrades,
+      breakEvenTrades,
+      winRate: parseFloat(winRate.toFixed(2)),
+      totalPL: parseFloat(totalPL.toFixed(2)),
+      avgPL: parseFloat(avgPL.toFixed(2)),
+      avgReturn: parseFloat(avgReturn.toFixed(2)),
+      avgRMultiple: avgRMultiple !== null ? parseFloat(avgRMultiple.toFixed(2)) : null,
+      avgHoldingDays: avgHoldingDays !== null ? parseFloat(avgHoldingDays.toFixed(1)) : null,
+    };
+  }, [filteredTrades]);
 
   const fetchTrades = async () => {
     try {
@@ -319,44 +403,70 @@ export default function JournalClient({ session }: JournalClientProps) {
           <p className="text-blue-200">Track your trades and discover patterns with AI analysis</p>
         </div>
 
+        {/* Time Period Filter */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-blue-200 text-sm font-medium">Time Period:</span>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { value: 'month' as TimePeriod, label: 'This Month' },
+                { value: 'ytd' as TimePeriod, label: 'YTD' },
+                { value: '1year' as TimePeriod, label: '1 Year' },
+                { value: 'all' as TimePeriod, label: 'All Time' },
+              ].map(period => (
+                <button
+                  key={period.value}
+                  onClick={() => setSelectedPeriod(period.value)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedPeriod === period.value
+                    ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
+                    : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                    }`}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Summary Stats */}
-        {summary && (
+        {filteredSummary && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Total Trades</div>
-              <div className="text-2xl font-bold text-white">{summary.totalTrades}</div>
+              <div className="text-2xl font-bold text-white">{filteredSummary.totalTrades}</div>
               <div className="text-xs text-blue-300 mt-1">
-                {summary.totalOpen} open, {summary.totalClosed} closed
+                {filteredSummary.totalOpen} open, {filteredSummary.totalClosed} closed
               </div>
             </div>
 
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Win Rate</div>
-              <div className={`text-2xl font-bold ${summary.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
-                {summary.winRate}%
+              <div className={`text-2xl font-bold ${filteredSummary.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                {filteredSummary.winRate}%
               </div>
               <div className="text-xs text-blue-300 mt-1">
-                {summary.winningTrades}W / {summary.losingTrades}L
+                {filteredSummary.winningTrades}W / {filteredSummary.losingTrades}L
               </div>
             </div>
 
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Total P/L</div>
-              <div className={`text-2xl font-bold ${summary.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatCurrency(summary.totalPL)}
+              <div className={`text-2xl font-bold ${filteredSummary.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatCurrency(filteredSummary.totalPL)}
               </div>
               <div className="text-xs text-blue-300 mt-1">
-                Avg: {formatCurrency(summary.avgPL)}
+                Avg: {formatCurrency(filteredSummary.avgPL)}
               </div>
             </div>
 
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Avg Return</div>
-              <div className={`text-2xl font-bold ${summary.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {summary.avgReturn > 0 ? '+' : ''}{summary.avgReturn}%
+              <div className={`text-2xl font-bold ${filteredSummary.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%
               </div>
               <div className="text-xs text-blue-300 mt-1">
-                {summary.avgRMultiple !== null ? `${summary.avgRMultiple}R` : 'N/A'} • {summary.avgHoldingDays !== null ? `${summary.avgHoldingDays} days` : 'N/A'}
+                {filteredSummary.avgRMultiple !== null ? `${filteredSummary.avgRMultiple}R` : 'N/A'} • {filteredSummary.avgHoldingDays !== null ? `${filteredSummary.avgHoldingDays} days` : 'N/A'}
               </div>
             </div>
           </div>
@@ -676,7 +786,9 @@ export default function JournalClient({ session }: JournalClientProps) {
             </div>
           ) : trades.length === 0 ? (
             <div className="px-6 py-12 text-center text-blue-200">
-              No trades yet. Click "Add Trade" to get started!
+              {selectedPeriod === 'all'
+                ? 'No trades yet. Click "Add Trade" to get started!'
+                : `No trades found for the selected period (${selectedPeriod === 'month' ? 'This Month' : selectedPeriod === 'ytd' ? 'YTD' : selectedPeriod === '1year' ? '1 Year' : 'All Time'})`}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -696,7 +808,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {trades.map((trade) => (
+                  {filteredTrades.map((trade) => (
                     <tr key={trade.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-white">{trade.ticker}</div>
