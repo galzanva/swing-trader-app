@@ -44,7 +44,8 @@ interface TechnicalAnalysisReportData {
       historicalVolatility: number;
     };
     volume: {
-      volumeZScore: number;
+      zScore?: number;          // Current: used by runTechnicalAnalysis
+      volumeZScore?: number;    // Legacy: some saved reports may use this
       volumeSignal: string;
       obvTrend: string;
       cmf: number;
@@ -108,6 +109,37 @@ interface TechnicalAnalysisReportData {
     tradingPlan?: string;
     confidenceLevel?: string;
   };
+  aiEnhanced?: {
+    signalStrength: {
+      overall: number;
+      grade: string;
+      direction: string;
+      reasoning: string[];
+      breakdown: any;
+    };
+    priceProjections: {
+      bullCase: { target: number; probability: number; timeframe: string; reasoning: string };
+      baseCase: { target: number; probability: number; timeframe: string; reasoning: string };
+      bearCase: { target: number; probability: number; timeframe: string; reasoning: string };
+      mostLikely: string;
+    };
+    recommendation: {
+      action: string;
+      strategy: string;
+      confidence: number;
+      confidenceReasoning: string;
+      entry: { type: string; price: number; conditions: string[] };
+      stopLoss: { price: number; riskPercent: number; reasoning: string };
+      targets: {
+        t1: { price: number; rr: number; probability: number; reasoning: string };
+        t2: { price: number; rr: number; probability: number; reasoning: string };
+        t3: { price: number; rr: number; probability: number; reasoning: string };
+      };
+      invalidation: string;
+      keyRisks: string[];
+      keyOpportunities: string[];
+    };
+  };
   marketData?: {
     name: string;
     exchange?: string;
@@ -147,9 +179,9 @@ function SignalBadge({ signal }: { signal: string }) {
     'falling': 'bg-red-500/20 text-red-400',
     'flat': 'bg-slate-500/20 text-slate-400',
   };
-  
+
   const classes = colorMap[signal?.toLowerCase()] || 'bg-slate-500/20 text-slate-400';
-  
+
   return (
     <span className={`${classes} px-2 py-0.5 text-xs rounded-full font-medium capitalize`}>
       {signal}
@@ -166,7 +198,7 @@ function GradeBadge({ grade }: { grade: string }) {
     'D': 'bg-orange-500 text-white',
     'F': 'bg-red-600 text-white',
   };
-  
+
   return (
     <span className={`${colorMap[grade] || 'bg-slate-500 text-white'} px-3 py-1 rounded-lg text-lg font-bold`}>
       {grade}
@@ -177,10 +209,15 @@ function GradeBadge({ grade }: { grade: string }) {
 export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnalysisReportDisplayProps) {
   if (!report) return null;
 
+  // Prioritize AI-enhanced data if available
+  const signalStrength = report.aiEnhanced?.signalStrength || report.signalStrength;
+  const recommendation = report.aiEnhanced?.recommendation || report.recommendation;
+  const isAiEnhanced = !!report.aiEnhanced;
+
   return (
     <div className="space-y-6">
       {/* Summary Header */}
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+      <div className={`rounded-xl p-6 border ${isAiEnhanced ? 'bg-indigo-900/10 border-indigo-500/30' : 'bg-white/5 border-white/10'} backdrop-blur-lg`}>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -188,43 +225,65 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
               {report.marketData?.name && (
                 <span className="text-slate-400">{report.marketData.name}</span>
               )}
+              {isAiEnhanced && (
+                <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
+                  AI Enhanced
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-2">
               <span className="text-3xl font-bold text-white">${report.currentPrice?.toFixed(2)}</span>
-              <SignalBadge signal={report.signalStrength?.direction} />
+              <SignalBadge signal={signalStrength?.direction} />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-6">
             <div className="text-center">
               <div className="text-sm text-slate-400 mb-1">Grade</div>
-              <GradeBadge grade={report.signalStrength?.grade} />
+              <GradeBadge grade={signalStrength?.grade} />
             </div>
             <div className="text-center">
               <div className="text-sm text-slate-400 mb-1">Strength</div>
-              <div className="text-2xl font-bold text-white">{report.signalStrength?.overall}/100</div>
+              <div className="text-2xl font-bold text-white">{signalStrength?.overall}/100</div>
             </div>
             <div className="text-center">
               <div className="text-sm text-slate-400 mb-1">Direction</div>
-              <SignalBadge signal={report.recommendation?.direction} />
+              <SignalBadge signal={(recommendation as any)?.action || (recommendation as any)?.direction} />
             </div>
           </div>
         </div>
+
+        {/* AI Reasoning for Signal Strength */}
+        {isAiEnhanced && report.aiEnhanced?.signalStrength.reasoning && (
+          <div className="mt-6 pt-6 border-t border-indigo-500/20">
+            <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">AI Analysis Reasoning</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+              {report.aiEnhanced.signalStrength.reasoning.map((reason, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                  <span className="text-indigo-400 mt-1">•</span>
+                  <span>{reason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-      
+
       {/* Signal Breakdown */}
       <div className="grid grid-cols-5 gap-4">
-        {Object.entries(report.signalStrength?.breakdown || {}).map(([key, data]: [string, any]) => (
-          <div key={key} className="bg-white/5 backdrop-blur-lg rounded-xl p-4 border border-white/10">
+        {Object.entries(signalStrength?.breakdown || {}).map(([key, data]: [string, any]) => (
+          <div key={key} className={`rounded-xl p-4 border backdrop-blur-lg ${isAiEnhanced ? 'bg-indigo-900/5 border-indigo-500/20' : 'bg-white/5 border-white/10'}`}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-slate-300 capitalize">{key}</span>
               <span className="text-xl font-bold text-white">{data.score}</span>
             </div>
-            <SignalBadge signal={data.signal} />
+            <div className="text-xs text-slate-400 mb-1">
+              {data.signal || (data as any).assessment}
+            </div>
           </div>
         ))}
       </div>
-      
+
       {/* Key Indicators Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Momentum */}
@@ -253,7 +312,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             </div>
           </div>
         </div>
-        
+
         {/* Trend */}
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
           <h3 className="text-lg font-semibold text-white mb-4">📈 Trend</h3>
@@ -281,7 +340,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             </div>
           </div>
         </div>
-        
+
         {/* Volatility */}
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
           <h3 className="text-lg font-semibold text-white mb-4">📉 Volatility</h3>
@@ -306,7 +365,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             </div>
           </div>
         </div>
-        
+
         {/* Volume */}
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
           <h3 className="text-lg font-semibold text-white mb-4">📊 Volume</h3>
@@ -314,7 +373,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             <div className="flex justify-between items-center">
               <span className="text-slate-300">Volume Z-Score</span>
               <div className="flex items-center gap-2">
-                <span className="text-white font-mono">{report.indicators?.volume?.volumeZScore?.toFixed(2)}</span>
+                <span className="text-white font-mono">{(report.indicators?.volume?.zScore ?? report.indicators?.volume?.volumeZScore)?.toFixed(2)}</span>
                 <SignalBadge signal={report.indicators?.volume?.volumeSignal || 'normal'} />
               </div>
             </div>
@@ -331,12 +390,12 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           </div>
         </div>
       </div>
-      
+
       {/* Structure Analysis */}
       {report.structureAnalysis && (
         <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
           <h3 className="text-lg font-semibold text-white mb-4">📐 Price Action & Structure</h3>
-          
+
           {/* Classification Badge */}
           <div className="flex items-center gap-4 mb-4">
             <SignalBadge signal={report.structureAnalysis.classification?.replace(/-/g, ' ')} />
@@ -347,10 +406,10 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
               Confidence: <span className="text-white font-medium">{report.structureAnalysis.confidence}%</span>
             </span>
           </div>
-          
+
           {/* Summary */}
           <p className="text-slate-300 mb-4 leading-relaxed">{report.structureAnalysis.summary}</p>
-          
+
           {/* Pullback & Reversal Signals */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             {report.structureAnalysis.pullbackSignals && report.structureAnalysis.pullbackSignals.length > 0 && (
@@ -380,7 +439,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
               </div>
             )}
           </div>
-          
+
           {/* Detected Candlestick Patterns */}
           {report.structureAnalysis.detectedPatterns && report.structureAnalysis.detectedPatterns.length > 0 && (
             <div className="bg-white/5 rounded-lg p-4">
@@ -389,24 +448,23 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
                 {report.structureAnalysis.detectedPatterns.map((pattern, i) => {
                   const isFailed = pattern.outcome === 'failed';
                   const isConfirmed = pattern.outcome === 'confirmed';
-                  const iconColor = 
+                  const iconColor =
                     isFailed ? 'text-slate-500' :
-                    isConfirmed && pattern.type === 'bullish' ? 'text-emerald-400' :
-                    isConfirmed && pattern.type === 'bearish' ? 'text-red-400' :
-                    pattern.type === 'bullish' ? 'text-emerald-300' :
-                    pattern.type === 'bearish' ? 'text-red-300' : 'text-slate-400';
-                  
+                      isConfirmed && pattern.type === 'bullish' ? 'text-emerald-400' :
+                        isConfirmed && pattern.type === 'bearish' ? 'text-red-400' :
+                          pattern.type === 'bullish' ? 'text-emerald-300' :
+                            pattern.type === 'bearish' ? 'text-red-300' : 'text-slate-400';
+
                   return (
                     <div
                       key={i}
-                      className={`p-3 rounded-lg border ${
-                        isFailed ? 'bg-slate-800/30 border-slate-700/50' :
+                      className={`p-3 rounded-lg border ${isFailed ? 'bg-slate-800/30 border-slate-700/50' :
                         isConfirmed && pattern.type === 'bullish' ? 'bg-emerald-500/10 border-emerald-500/30' :
-                        isConfirmed && pattern.type === 'bearish' ? 'bg-red-500/10 border-red-500/30' :
-                        pattern.type === 'bullish' ? 'bg-emerald-500/5 border-emerald-500/20' :
-                        pattern.type === 'bearish' ? 'bg-red-500/5 border-red-500/20' :
-                        'bg-white/5 border-white/10'
-                      } flex items-start gap-2`}
+                          isConfirmed && pattern.type === 'bearish' ? 'bg-red-500/10 border-red-500/30' :
+                            pattern.type === 'bullish' ? 'bg-emerald-500/5 border-emerald-500/20' :
+                              pattern.type === 'bearish' ? 'bg-red-500/5 border-red-500/20' :
+                                'bg-white/5 border-white/10'
+                        } flex items-start gap-2`}
                     >
                       <span className={`text-xs font-bold ${iconColor} flex-shrink-0`}>
                         {isFailed ? '✗' : isConfirmed ? '✓' : pattern.type === 'bullish' ? '▲' : pattern.type === 'bearish' ? '▼' : '◆'}
@@ -428,7 +486,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
               </div>
             </div>
           )}
-          
+
           {/* Structure Status Footer */}
           <div className="mt-4 flex items-center gap-4 pt-4 border-t border-white/10">
             <div className="flex items-center gap-2">
@@ -442,10 +500,9 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             <div className="text-sm text-slate-500">|</div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-400">
-                Dominant Bias: <span className={`font-medium capitalize ${
-                  report.structureAnalysis.dominantBias === 'pullback' ? 'text-emerald-400' :
+                Dominant Bias: <span className={`font-medium capitalize ${report.structureAnalysis.dominantBias === 'pullback' ? 'text-emerald-400' :
                   report.structureAnalysis.dominantBias === 'reversal' ? 'text-red-400' : 'text-yellow-400'
-                }`}>
+                  }`}>
                   {report.structureAnalysis.dominantBias}
                 </span>
               </span>
@@ -453,60 +510,159 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           </div>
         </div>
       )}
-      
+
       {/* Strategy Recommendation */}
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
+      <div className={`rounded-xl p-5 border backdrop-blur-lg ${isAiEnhanced ? 'bg-indigo-900/5 border-indigo-500/20' : 'bg-white/5 border-white/10'}`}>
         <h3 className="text-lg font-semibold text-white mb-4">🎲 Strategy Recommendation</h3>
         <div className="flex items-center gap-4 mb-4">
-          <SignalBadge signal={report.recommendation?.direction} />
-          <span className="text-white font-medium">{report.recommendation?.strategy}</span>
-          <span className="text-slate-400">Confidence: {report.recommendation?.confidence}%</span>
+          <SignalBadge signal={(recommendation as any)?.action || (recommendation as any)?.direction} />
+          <span className="text-white font-medium">{recommendation?.strategy}</span>
+          <span className="text-slate-400">Confidence: {recommendation?.confidence}%</span>
         </div>
-        
+
+        {isAiEnhanced && report.aiEnhanced?.recommendation.confidenceReasoning && (
+          <p className="text-sm text-indigo-300 mb-4 italic">
+            "{report.aiEnhanced.recommendation.confidenceReasoning}"
+          </p>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-white/5 rounded-lg p-4">
-            <div className="text-sm text-slate-400 mb-1">Entry ({report.recommendation?.entry?.type})</div>
-            <div className="text-xl font-bold text-white">${report.recommendation?.entry?.price?.toFixed(2)}</div>
+            <div className="text-sm text-slate-400 mb-1">Entry ({recommendation?.entry?.type})</div>
+            <div className="text-xl font-bold text-white">${recommendation?.entry?.price?.toFixed(2)}</div>
             <ul className="mt-2 space-y-1">
-              {report.recommendation?.entry?.conditions?.map((c, i) => (
+              {recommendation?.entry?.conditions?.map((c: string, i: number) => (
                 <li key={i} className="text-xs text-slate-400">{c}</li>
               ))}
             </ul>
           </div>
-          
+
           <div className="bg-white/5 rounded-lg p-4">
             <div className="text-sm text-slate-400 mb-1">Stop Loss</div>
-            <div className="text-xl font-bold text-red-400">${report.recommendation?.stopLoss?.price?.toFixed(2)}</div>
+            <div className="text-xl font-bold text-red-400">${recommendation?.stopLoss?.price?.toFixed(2)}</div>
             <div className="text-sm text-slate-400 mt-1">
-              Risk: {report.recommendation?.stopLoss?.riskPercent?.toFixed(1)}%
+              Risk: {recommendation?.stopLoss?.riskPercent?.toFixed(1)}%
             </div>
-            <div className="text-xs text-slate-500 mt-1">{report.recommendation?.stopLoss?.reason}</div>
+            <div className="text-xs text-slate-500 mt-1">
+              {(recommendation?.stopLoss as any)?.reasoning || (recommendation?.stopLoss as any)?.reason}
+            </div>
           </div>
-          
+
           <div className="bg-white/5 rounded-lg p-4">
             <div className="text-sm text-slate-400 mb-1">Targets</div>
             <div className="space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-300">T1</span>
-                <span className="text-emerald-400">${report.recommendation?.targets?.t1?.price?.toFixed(2)} ({report.recommendation?.targets?.t1?.rr}:1)</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-300">T2</span>
-                <span className="text-emerald-400">${report.recommendation?.targets?.t2?.price?.toFixed(2)} ({report.recommendation?.targets?.t2?.rr}:1)</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-300">T3</span>
-                <span className="text-emerald-400">${report.recommendation?.targets?.t3?.price?.toFixed(2)} ({report.recommendation?.targets?.t3?.rr}:1)</span>
-              </div>
+              {['t1', 't2', 't3'].map((tKey) => {
+                const target = (recommendation?.targets as any)?.[tKey];
+                if (!target) return null;
+                
+                // Calculate R:R correctly from entry, stop, and target
+                const entryPrice = recommendation?.entry?.price || 0;
+                const stopPrice = recommendation?.stopLoss?.price || 0;
+                const targetPrice = target.price || 0;
+                const risk = Math.abs(entryPrice - stopPrice);
+                const reward = Math.abs(targetPrice - entryPrice);
+                const calculatedRR = risk > 0 ? (reward / risk).toFixed(1) : target.rr;
+                
+                // Calculate % moves
+                const pctFromEntry = entryPrice > 0 ? ((targetPrice - entryPrice) / entryPrice * 100).toFixed(1) : '0';
+                const pctFromCurrent = report.currentPrice > 0 ? ((targetPrice - report.currentPrice) / report.currentPrice * 100).toFixed(1) : '0';
+                
+                return (
+                  <div key={tKey} className="flex flex-col mb-2 last:mb-0">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300 uppercase">{tKey}</span>
+                      <span className="text-emerald-400 font-bold">${targetPrice?.toFixed(2)} ({calculatedRR}:1)</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                      <span>From Entry: {pctFromEntry}%</span>
+                      <span>From Current: {pctFromCurrent}%</span>
+                    </div>
+                    {target.reasoning && (
+                      <div className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                        {target.reasoning} ({target.probability}%)
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-        
+
         <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <span className="text-sm text-red-300">{report.recommendation?.invalidation}</span>
+          <span className="text-sm text-red-300">{recommendation?.invalidation}</span>
         </div>
+
+        {isAiEnhanced && report.aiEnhanced?.recommendation.keyRisks && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+              <h4 className="text-xs font-bold text-red-400 uppercase mb-2">Key Risks</h4>
+              <ul className="space-y-1">
+                {report.aiEnhanced.recommendation.keyRisks.map((risk, i) => (
+                  <li key={i} className="text-xs text-slate-400 flex items-start gap-1">
+                    <span className="text-red-400">•</span>
+                    {risk}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2">Key Opportunities</h4>
+              <ul className="space-y-1">
+                {report.aiEnhanced.recommendation.keyOpportunities.map((opp, i) => (
+                  <li key={i} className="text-xs text-slate-400 flex items-start gap-1">
+                    <span className="text-emerald-400">•</span>
+                    {opp}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
-      
+
+      {/* AI Price Projections */}
+      {isAiEnhanced && report.aiEnhanced?.priceProjections && (
+        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-5 border border-white/10">
+          <h3 className="text-lg font-semibold text-white mb-4">🎯 AI Price Projections</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { key: 'bullCase', label: 'Bull Case', color: 'text-emerald-400', border: 'border-emerald-500/30' },
+              { key: 'baseCase', label: 'Base Case', color: 'text-blue-400', border: 'border-blue-500/30' },
+              { key: 'bearCase', label: 'Bear Case', color: 'text-red-400', border: 'border-red-500/30' }
+            ].map((item) => {
+              const projection = (report.aiEnhanced?.priceProjections as any)[item.key];
+              const isMostLikely = report.aiEnhanced?.priceProjections.mostLikely === item.key.replace('Case', '');
+
+              return (
+                <div key={item.key} className={`p-4 rounded-lg border bg-white/5 ${isMostLikely ? item.border : 'border-white/5'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className={`text-sm font-bold uppercase ${item.color}`}>{item.label}</span>
+                    {isMostLikely && (
+                      <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase">
+                        Most Likely
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-white mb-1">
+                    {typeof projection.target === 'string' 
+                      ? (projection.target.startsWith('$') ? projection.target : `$${projection.target}`)
+                      : `$${projection.target.toFixed(2)}`}
+                  </div>
+                  <div className="flex justify-between text-xs mb-3">
+                    <span className="text-slate-400">Prob: {projection.probability}%</span>
+                    <span className="text-slate-400">Time: {projection.timeframe}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed italic">
+                    "{projection.reasoning}"
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* AI Summary */}
       {report.aiSummary && (
         <div className="bg-gradient-to-r from-violet-900/20 to-indigo-900/10 backdrop-blur-lg rounded-xl p-6 border border-violet-500/20">
@@ -514,21 +670,21 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
             <span className="text-2xl">🤖</span>
             <span>AI Technical Summary</span>
           </h3>
-          
+
           {/* Headline */}
           {report.aiSummary.headline && (
             <div className="text-xl font-medium text-indigo-300 mb-4">
               {report.aiSummary.headline}
             </div>
           )}
-          
+
           {/* Technical Outlook */}
           {report.aiSummary.technicalOutlook && (
             <p className="text-base text-slate-300 leading-relaxed mb-6">
               {report.aiSummary.technicalOutlook}
             </p>
           )}
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Key Insights */}
             {report.aiSummary.keyInsights && report.aiSummary.keyInsights.length > 0 && (
@@ -544,7 +700,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
                 </ul>
               </div>
             )}
-            
+
             {/* Risk Factors */}
             {report.aiSummary.riskFactors && report.aiSummary.riskFactors.length > 0 && (
               <div>
@@ -559,7 +715,7 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
                 </ul>
               </div>
             )}
-            
+
             {/* Trading Plan */}
             {report.aiSummary.tradingPlan && (
               <div>
@@ -570,12 +726,12 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           </div>
         </div>
       )}
-      
+
       {/* Metadata */}
       <div className="text-center text-sm text-slate-500">
         <p>
-          Analyzed: {new Date(report.timestamp).toLocaleString()} | 
-          Timeframe: {report.timeframe} | 
+          Analyzed: {new Date(report.timestamp).toLocaleString()} |
+          Timeframe: {report.timeframe} |
           Bars: {report.marketData?.barsAnalyzed}
         </p>
       </div>

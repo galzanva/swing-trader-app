@@ -42,6 +42,7 @@ import {
   calculateSignalStrength,
   generateStrategyRecommendation,
   analyzeStructure,
+  detectMarketRegime,
   MomentumAssessment,
   TrendAssessment,
   VolatilityAssessment,
@@ -196,6 +197,9 @@ export interface TechnicalAnalysisReport {
   
   // Strategy Recommendation
   recommendation: StrategyRecommendation;
+
+  // Detected Regime (for AI context)
+  detectedRegime: any;
   
   // AI Summary (to be filled by LLM)
   aiSummary?: {
@@ -205,6 +209,35 @@ export interface TechnicalAnalysisReport {
     riskFactors: string[];
     tradingPlan: string;
     confidenceLevel: 'high' | 'medium' | 'low';
+  };
+
+  // AI-Enhanced structured data (replaces hardcoded logic)
+  aiEnhanced?: {
+    signalStrength: {
+      overall: number;
+      grade: string;
+      direction: string;
+      reasoning: string[];
+      breakdown: any;
+    };
+    priceProjections: {
+      bullCase: any;
+      baseCase: any;
+      bearCase: any;
+      mostLikely: string;
+    };
+    recommendation: {
+      action: string;
+      strategy: string;
+      confidence: number;
+      confidenceReasoning: string;
+      entry: any;
+      stopLoss: any;
+      targets: any;
+      invalidation: string;
+      keyRisks: string[];
+      keyOpportunities: string[];
+    };
   };
 }
 
@@ -385,6 +418,10 @@ export function runTechnicalAnalysis(
   // Projections & Signals
   // =====================
   
+  // =====================
+  // Projections & Signals
+  // =====================
+  
   const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment);
   
   // FIXED: Pass ADX and volume flow data for proper signal weighting
@@ -434,6 +471,31 @@ export function runTechnicalAnalysis(
       cmf: cmf,
       volumeZScore: volZScore
     }
+  );
+
+  // =====================
+  // Market Regime Detection
+  // =====================
+  
+  const detectedRegime = detectMarketRegime(
+    adx,
+    trendAssessment.emaAlignment,
+    structureAnalysis.priorTrendDirection,
+    structureAnalysis.classification,
+    volatilityAssessment.regime,
+    bollingerBandwidth,
+    atrPercent,
+    squeeze.isInSqueeze,
+    squeeze.momentumDirection,
+    stochasticK,
+    rsi,
+    cmf,
+    obvTrend,
+    volZScore,
+    nearTermResistance.length > 0 && Math.abs(nearTermResistance[0].price - currentPrice) < atr,
+    nearTermSupport.length > 0 && Math.abs(currentPrice - nearTermSupport[0].price) < atr,
+    false, // brokeSwingHigh - simplified for now
+    false  // brokeSwingLow - simplified for now
   );
   
   // =====================
@@ -533,7 +595,8 @@ export function runTechnicalAnalysis(
     
     projections,
     signalStrength,
-    recommendation
+    recommendation,
+    detectedRegime
   };
 }
 

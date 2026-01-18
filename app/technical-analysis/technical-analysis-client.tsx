@@ -13,6 +13,55 @@ interface ExtendedReport extends TechnicalAnalysisReport {
     dataAgeDays: number;
     barsAnalyzed: number;
   };
+  // AI-enhanced analysis (overrides base values when available)
+  aiEnhanced?: {
+    signalStrength: {
+      overall: number;
+      grade: string;
+      direction: string;
+      reasoning: string[];
+      breakdown: {
+        trend: { score: number; signal: string };
+        momentum: { score: number; signal: string };
+        volume: { score: number; signal: string };
+        volatility: { score: number; signal: string };
+        pattern: { score: number; signal: string };
+      };
+    };
+    structureAnalysis?: {
+      classification: 'likely-pullback' | 'trend-reversal-risk' | 'consolidation' | 'breakout-attempt' | 'mixed';
+      confidence: number;
+      priorTrend: 'up' | 'down' | 'sideways';
+      summary: string;
+      pullbackSignals: string[];
+      reversalSignals: string[];
+      patternAnalysis: string;
+      structureIntact: boolean;
+    };
+    priceProjections: {
+      bullCase: { target: number | string; targetLow?: number; targetHigh?: number; probability: number; timeframe: string; reasoning: string };
+      baseCase: { target: number | string; targetLow?: number; targetHigh?: number; probability: number; timeframe: string; reasoning: string };
+      bearCase: { target: number | string; targetLow?: number; targetHigh?: number; probability: number; timeframe: string; reasoning: string };
+      mostLikely: string;
+    };
+    recommendation: {
+      action: string;
+      strategy: string;
+      confidence: number;
+      confidenceReasoning: string;
+      entry: { type: string; price: number; conditions: string[] };
+      stopLoss: { price: number; riskPercent: number; reasoning: string };
+      targets: {
+        t1: { price: number; rr: number; probability: number; reasoning: string };
+        t2: { price: number; rr: number; probability: number; reasoning: string };
+        t3: { price: number; rr: number; probability: number; reasoning: string };
+      };
+      invalidation: string;
+      keyRisks: string[];
+      keyOpportunities: string[];
+    };
+  };
+  analysisMode?: 'ai-enhanced' | 'rule-based';
 }
 
 // Gauge component for visual indicators
@@ -181,6 +230,12 @@ export default function TechnicalAnalysisClient() {
     setSaveError("");
     setSaveSuccess(false);
     
+    // Use AI-enhanced values when available
+    const signalDirection = report.aiEnhanced?.signalStrength?.direction || report.signalStrength.direction;
+    const signalGrade = report.aiEnhanced?.signalStrength?.grade || report.signalStrength.grade;
+    const strategy = report.aiEnhanced?.recommendation?.strategy || report.recommendation.strategy;
+    const recDirection = report.aiEnhanced?.recommendation?.action?.toLowerCase() || report.recommendation.direction;
+    
     try {
       const response = await fetch("/api/reports/save", {
         method: "POST",
@@ -188,19 +243,21 @@ export default function TechnicalAnalysisClient() {
         body: JSON.stringify({
           type: "technical-analysis",
           title: `${report.symbol} Technical Analysis`,
-          description: `${report.signalStrength.direction.toUpperCase()} signal (${report.signalStrength.grade}) - ${report.recommendation.strategy}`,
+          description: `${signalDirection.toUpperCase()} signal (${signalGrade}) - ${strategy}`,
           parameters: {
             symbol: report.symbol,
             timeframe: report.timeframe,
             analyzedAt: report.timestamp,
+            aiEnhanced: !!report.aiEnhanced,
           },
           reportData: report,
           tags: [
             "technical-analysis",
             report.symbol,
-            report.signalStrength.direction,
-            report.recommendation.direction,
+            signalDirection,
+            recDirection,
             report.timeframe,
+            ...(report.aiEnhanced ? ["ai-enhanced"] : []),
           ],
         }),
       });
@@ -342,23 +399,70 @@ export default function TechnicalAnalysisClient() {
       )}
 
       {/* Report */}
-      {report && !isLoading && (
+      {report && !isLoading && (() => {
+        // Prioritize AI-enhanced values when available
+        const isAiEnhanced = !!report.aiEnhanced?.signalStrength;
+        const signalStrength = report.aiEnhanced?.signalStrength || report.signalStrength;
+        const recommendation = report.aiEnhanced?.recommendation ? {
+          ...report.recommendation,
+          direction: report.aiEnhanced.recommendation.action.toLowerCase() as 'long' | 'short' | 'wait',
+          strategy: report.aiEnhanced.recommendation.strategy,
+          confidence: report.aiEnhanced.recommendation.confidence,
+          entry: {
+            ...report.recommendation.entry,
+            type: report.aiEnhanced.recommendation.entry?.type || report.recommendation.entry.type,
+            price: report.aiEnhanced.recommendation.entry?.price || report.recommendation.entry.price,
+            conditions: report.aiEnhanced.recommendation.entry?.conditions || report.recommendation.entry.conditions,
+          },
+          stopLoss: {
+            ...report.recommendation.stopLoss,
+            price: report.aiEnhanced.recommendation.stopLoss?.price || report.recommendation.stopLoss.price,
+            riskPercent: report.aiEnhanced.recommendation.stopLoss?.riskPercent || report.recommendation.stopLoss.riskPercent,
+            reason: report.aiEnhanced.recommendation.stopLoss?.reasoning || report.recommendation.stopLoss.reason,
+          },
+          targets: {
+            t1: {
+              price: report.aiEnhanced.recommendation.targets?.t1?.price || report.recommendation.targets.t1.price,
+              rr: report.aiEnhanced.recommendation.targets?.t1?.rr || report.recommendation.targets.t1.rr,
+              probability: report.aiEnhanced.recommendation.targets?.t1?.probability || report.recommendation.targets.t1.probability,
+            },
+            t2: {
+              price: report.aiEnhanced.recommendation.targets?.t2?.price || report.recommendation.targets.t2.price,
+              rr: report.aiEnhanced.recommendation.targets?.t2?.rr || report.recommendation.targets.t2.rr,
+              probability: report.aiEnhanced.recommendation.targets?.t2?.probability || report.recommendation.targets.t2.probability,
+            },
+            t3: {
+              price: report.aiEnhanced.recommendation.targets?.t3?.price || report.recommendation.targets.t3.price,
+              rr: report.aiEnhanced.recommendation.targets?.t3?.rr || report.recommendation.targets.t3.rr,
+              probability: report.aiEnhanced.recommendation.targets?.t3?.probability || report.recommendation.targets.t3.probability,
+            },
+          },
+          invalidation: report.aiEnhanced.recommendation.invalidation || report.recommendation.invalidation,
+        } : report.recommendation;
+        const signalBreakdown = report.aiEnhanced?.signalStrength?.breakdown || report.signalStrength.breakdown;
+
+        return (
         <div className="space-y-6">
           
           {/* ==================== SECTION 1: Summary Header ==================== */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+          <div className={`backdrop-blur-lg rounded-2xl p-6 border ${isAiEnhanced ? 'bg-indigo-900/10 border-indigo-500/30' : 'bg-white/10 border-white/20'}`}>
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               {/* Left: Symbol & Price */}
               <div className="flex items-center gap-4">
-                <DirectionIndicator direction={report.signalStrength.direction} size="lg" />
+                <DirectionIndicator direction={signalStrength.direction as 'bullish' | 'bearish' | 'neutral'} size="lg" />
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-2xl font-bold text-white">{report.symbol}</h2>
                     <span className="text-slate-400">{report.marketData.name}</span>
+                    {isAiEnhanced && (
+                      <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
+                        AI Enhanced
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-3xl font-bold text-white">${report.currentPrice.toFixed(2)}</span>
-                    <SignalBadge signal={report.signalStrength.direction} size="lg" />
+                    <SignalBadge signal={signalStrength.direction} size="lg" />
                   </div>
                 </div>
               </div>
@@ -368,20 +472,21 @@ export default function TechnicalAnalysisClient() {
                 <div className="flex items-center gap-8">
                   <div className="text-center">
                     <div className="text-sm text-slate-400 mb-1">Signal Grade</div>
-                    <GradeBadge grade={report.signalStrength.grade} />
+                    <GradeBadge grade={signalStrength.grade} />
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-slate-400 mb-1">Strength</div>
-                    <div className="text-3xl font-bold text-white">{report.signalStrength.overall}</div>
+                    <div className="text-3xl font-bold text-white">{signalStrength.overall}</div>
                     <div className="text-sm text-slate-500">/ 100</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-slate-400 mb-1">Confidence</div>
                     <div className={`text-xl font-semibold ${
-                      report.aiSummary?.confidenceLevel === 'high' ? 'text-emerald-400' :
-                      report.aiSummary?.confidenceLevel === 'medium' ? 'text-yellow-400' : 'text-red-400'
+                      recommendation.confidence >= 70 ? 'text-emerald-400' :
+                      recommendation.confidence >= 50 ? 'text-yellow-400' : 'text-red-400'
                     }`}>
-                      {report.aiSummary?.confidenceLevel?.toUpperCase() || 'N/A'}
+                      {recommendation.confidence >= 70 ? 'HIGH' : recommendation.confidence >= 50 ? 'MEDIUM' : 'LOW'}
+                      <span className="text-sm ml-1 opacity-70">({recommendation.confidence}%)</span>
                     </div>
                   </div>
                 </div>
@@ -424,16 +529,21 @@ export default function TechnicalAnalysisClient() {
 
           {/* Signal Breakdown Bar */}
           <div className="grid grid-cols-5 gap-4">
-            {Object.entries(report.signalStrength.breakdown).map(([key, data]) => (
+            {Object.entries(signalBreakdown).map(([key, data]) => {
+              // Handle both AI format (assessment) and base format (signal)
+              const displayText = (data as any).assessment || (data as any).signal || '';
+              
+              return (
               <div key={key} className="bg-white/5 backdrop-blur-lg rounded-xl p-4 border border-white/10">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-slate-300 capitalize">{key}</span>
                   <span className="text-xl font-bold text-white">{data.score}</span>
                 </div>
                 <Gauge value={data.score} colorScheme="signal" />
-                <div className="text-xs text-slate-400 mt-2 truncate" title={data.signal}>{data.signal}</div>
+                <div className="text-xs text-slate-400 mt-2 leading-relaxed">{displayText}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* ==================== SECTION 2: Technical Indicators ==================== */}
@@ -774,48 +884,89 @@ export default function TechnicalAnalysisClient() {
           </div>
 
           {/* ==================== SECTION 5: Price Action & Structure ==================== */}
-          {report.structureAnalysis && (
+          {(report.structureAnalysis || report.aiEnhanced?.structureAnalysis) && (() => {
+            // Use AI structure analysis if available, otherwise fall back to base
+            const aiStructure = report.aiEnhanced?.structureAnalysis;
+            const baseStructure = report.structureAnalysis;
+            const hasAiStructure = !!aiStructure;
+            
+            // Determine classification for styling
+            const classification = aiStructure?.classification || baseStructure?.classification;
+            const confidence = aiStructure?.confidence || baseStructure?.confidence || 0;
+            const priorTrend = aiStructure?.priorTrend || baseStructure?.priorTrendDirection || 'sideways';
+            const summary = aiStructure?.summary || baseStructure?.summary || '';
+            const pullbackSignals = aiStructure?.pullbackSignals || baseStructure?.pullbackSignals || [];
+            const reversalSignals = aiStructure?.reversalSignals || baseStructure?.reversalSignals || [];
+            const structureIntact = aiStructure?.structureIntact ?? baseStructure?.structureIntact ?? false;
+            
+            return (
             <div className={`backdrop-blur-lg rounded-2xl p-6 border ${
-              report.structureAnalysis.classification === 'likely-pullback' 
+              hasAiStructure 
+                ? 'bg-gradient-to-br from-indigo-900/20 to-purple-900/10 border-indigo-500/30'
+                : classification === 'likely-pullback' 
                 ? 'bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 border-emerald-500/30' 
-                : report.structureAnalysis.classification === 'trend-reversal-risk'
+                : classification === 'trend-reversal-risk'
                 ? 'bg-gradient-to-br from-red-900/20 to-orange-900/10 border-red-500/30'
                 : 'bg-white/10 border-white/20'
             }`}>
               <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                 <span className="text-xl">📐</span> Price Action & Structure
+                {hasAiStructure && (
+                  <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30 ml-2">
+                    AI
+                  </span>
+                )}
               </h3>
               
               {/* Classification Header */}
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className={`px-4 py-2 rounded-xl font-bold text-lg ${
-                    report.structureAnalysis.classification === 'likely-pullback' 
+                    classification === 'likely-pullback' 
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                      : report.structureAnalysis.classification === 'trend-reversal-risk'
+                      : classification === 'trend-reversal-risk'
                       ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : classification === 'consolidation'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : classification === 'breakout-attempt'
+                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                       : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                   }`}>
-                    {report.structureAnalysis.classification === 'likely-pullback' 
+                    {classification === 'likely-pullback' 
                       ? '✓ Likely Pullback' 
-                      : report.structureAnalysis.classification === 'trend-reversal-risk'
+                      : classification === 'trend-reversal-risk'
                       ? '⚠️ Trend Reversal Risk'
+                      : classification === 'consolidation'
+                      ? '⏸️ Consolidation'
+                      : classification === 'breakout-attempt'
+                      ? '🚀 Breakout Attempt'
                       : '◐ Mixed / No Clear Edge'}
                   </div>
                   <div className="text-sm text-slate-400">
-                    Prior Trend: <span className="font-medium text-white capitalize">{report.structureAnalysis.priorTrendDirection}</span>
+                    Prior Trend: <span className="font-medium text-white capitalize">{priorTrend}</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-white">{report.structureAnalysis.confidence}%</div>
+                  <div className="text-2xl font-bold text-white">{confidence}%</div>
                   <div className="text-xs text-slate-400">Confidence</div>
                 </div>
               </div>
               
               {/* Summary */}
               <div className="p-4 rounded-xl bg-white/5 mb-6">
-                <p className="text-base text-slate-200 leading-relaxed">{report.structureAnalysis.summary}</p>
+                <p className="text-base text-slate-200 leading-relaxed">{summary}</p>
               </div>
+              
+              {/* AI Pattern Analysis (if available) */}
+              {hasAiStructure && aiStructure.patternAnalysis && (
+                <div className="p-4 rounded-xl bg-indigo-900/20 border border-indigo-500/20 mb-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">🕯️</span>
+                    <h4 className="text-sm font-semibold text-indigo-400">AI Pattern Analysis</h4>
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed">{aiStructure.patternAnalysis}</p>
+                </div>
+              )}
               
               {/* Signals Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -826,8 +977,8 @@ export default function TechnicalAnalysisClient() {
                     <h4 className="text-sm font-semibold text-emerald-400">Pullback Confirmation Signals</h4>
                   </div>
                   <ul className="space-y-2">
-                    {report.structureAnalysis.pullbackSignals.length > 0 ? (
-                      report.structureAnalysis.pullbackSignals.map((signal, i) => (
+                    {pullbackSignals.length > 0 ? (
+                      pullbackSignals.map((signal, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                           <span className="text-emerald-500 mt-0.5">•</span>
                           <span>{signal}</span>
@@ -846,8 +997,8 @@ export default function TechnicalAnalysisClient() {
                     <h4 className="text-sm font-semibold text-red-400">Trend Reversal Signals</h4>
                   </div>
                   <ul className="space-y-2">
-                    {report.structureAnalysis.reversalSignals.length > 0 ? (
-                      report.structureAnalysis.reversalSignals.map((signal, i) => (
+                    {reversalSignals.length > 0 ? (
+                      reversalSignals.map((signal, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                           <span className="text-red-500 mt-0.5">•</span>
                           <span>{signal}</span>
@@ -860,8 +1011,8 @@ export default function TechnicalAnalysisClient() {
                 </div>
               </div>
               
-              {/* Detected Candlestick Patterns with Outcome */}
-              {report.structureAnalysis.detectedPatterns && report.structureAnalysis.detectedPatterns.length > 0 && (
+              {/* Detected Candlestick Patterns with Outcome - Always show for chart verification */}
+              {report.structureAnalysis?.detectedPatterns && report.structureAnalysis.detectedPatterns.length > 0 && (
                 <div className="mt-6 pt-4 border-t border-white/10">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-lg">🕯️</span>
@@ -939,36 +1090,128 @@ export default function TechnicalAnalysisClient() {
               {/* Structure Status */}
               <div className="mt-4 flex items-center gap-4 pt-4 border-t border-white/10">
                 <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${report.structureAnalysis.structureIntact ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                  <span className={`w-3 h-3 rounded-full ${structureIntact ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
                   <span className="text-sm text-slate-400">
-                    Structure: <span className={`font-medium ${report.structureAnalysis.structureIntact ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {report.structureAnalysis.structureIntact ? 'Intact' : 'Broken'}
+                    Structure: <span className={`font-medium ${structureIntact ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {structureIntact ? 'Intact' : 'Broken'}
                     </span>
                   </span>
                 </div>
                 <div className="text-sm text-slate-500">|</div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-400">
-                    Dominant Bias: <span className={`font-medium ${
-                      report.structureAnalysis.dominantBias === 'pullback' ? 'text-emerald-400' :
-                      report.structureAnalysis.dominantBias === 'reversal' ? 'text-red-400' : 'text-yellow-400'
+                    Classification: <span className={`font-medium ${
+                      classification === 'likely-pullback' ? 'text-emerald-400' :
+                      classification === 'trend-reversal-risk' ? 'text-red-400' : 
+                      classification === 'breakout-attempt' ? 'text-orange-400' : 'text-yellow-400'
                     }`}>
-                      {report.structureAnalysis.dominantBias === 'pullback' ? 'Pullback' :
-                       report.structureAnalysis.dominantBias === 'reversal' ? 'Reversal' : 'Neutral'}
+                      {classification === 'likely-pullback' ? 'Pullback' :
+                       classification === 'trend-reversal-risk' ? 'Reversal Risk' : 
+                       classification === 'consolidation' ? 'Consolidation' :
+                       classification === 'breakout-attempt' ? 'Breakout Attempt' : 'Mixed'}
                     </span>
                   </span>
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ==================== SECTION 6: Price Projections ==================== */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+          <div className={`backdrop-blur-lg rounded-2xl p-6 border ${isAiEnhanced ? 'bg-indigo-900/10 border-indigo-500/30' : 'bg-white/10 border-white/20'}`}>
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <span className="text-xl">🎯</span> Price Projections
+              {isAiEnhanced && (
+                <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30 ml-2">
+                  AI
+                </span>
+              )}
             </h3>
             
-            {/* Most Probable Scenario */}
+            {/* AI Price Projections (Bull/Base/Bear) */}
+            {isAiEnhanced && report.aiEnhanced?.priceProjections && (() => {
+              // Helper to format price target (handles both number and string/range formats)
+              const formatTarget = (target: number | string, targetLow?: number, targetHigh?: number): string => {
+                // If targetLow and targetHigh are provided, use range format
+                if (targetLow !== undefined && targetHigh !== undefined) {
+                  return `$${targetLow.toFixed(2)} - $${targetHigh.toFixed(2)}`;
+                }
+                // If target is a string (already formatted range), return as-is
+                if (typeof target === 'string') {
+                  return target.startsWith('$') ? target : `$${target}`;
+                }
+                // Otherwise format as single number
+                return `$${target.toFixed(2)}`;
+              };
+              
+              const proj = report.aiEnhanced.priceProjections;
+              
+              return (
+              <div className="mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Bull Case */}
+                  <div className={`p-4 rounded-xl border ${
+                    proj.mostLikely === 'bull' 
+                      ? 'bg-emerald-500/20 border-emerald-500/50' 
+                      : 'bg-emerald-900/10 border-emerald-500/20'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium text-emerald-400">📈 Bull Case</div>
+                      {proj.mostLikely === 'bull' && (
+                        <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                      )}
+                    </div>
+                    <div className="text-xl font-mono text-white mb-1">
+                      {formatTarget(proj.bullCase.target, (proj.bullCase as any).targetLow, (proj.bullCase as any).targetHigh)}
+                    </div>
+                    <div className="text-sm text-slate-400">{proj.bullCase.probability}% • {proj.bullCase.timeframe}</div>
+                    <div className="text-xs text-slate-500 mt-2">{proj.bullCase.reasoning}</div>
+                  </div>
+                  
+                  {/* Base Case */}
+                  <div className={`p-4 rounded-xl border ${
+                    proj.mostLikely === 'base' 
+                      ? 'bg-blue-500/20 border-blue-500/50' 
+                      : 'bg-blue-900/10 border-blue-500/20'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium text-blue-400">📊 Base Case</div>
+                      {proj.mostLikely === 'base' && (
+                        <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                      )}
+                    </div>
+                    <div className="text-xl font-mono text-white mb-1">
+                      {formatTarget(proj.baseCase.target, (proj.baseCase as any).targetLow, (proj.baseCase as any).targetHigh)}
+                    </div>
+                    <div className="text-sm text-slate-400">{proj.baseCase.probability}% • {proj.baseCase.timeframe}</div>
+                    <div className="text-xs text-slate-500 mt-2">{proj.baseCase.reasoning}</div>
+                  </div>
+                  
+                  {/* Bear Case */}
+                  <div className={`p-4 rounded-xl border ${
+                    proj.mostLikely === 'bear' 
+                      ? 'bg-red-500/20 border-red-500/50' 
+                      : 'bg-red-900/10 border-red-500/20'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium text-red-400">📉 Bear Case</div>
+                      {proj.mostLikely === 'bear' && (
+                        <span className="text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                      )}
+                    </div>
+                    <div className="text-xl font-mono text-white mb-1">
+                      {formatTarget(proj.bearCase.target, (proj.bearCase as any).targetLow, (proj.bearCase as any).targetHigh)}
+                    </div>
+                    <div className="text-sm text-slate-400">{proj.bearCase.probability}% • {proj.bearCase.timeframe}</div>
+                    <div className="text-xs text-slate-500 mt-2">{proj.bearCase.reasoning}</div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+            
+            {/* Most Probable Scenario (base analysis) */}
+            {!isAiEnhanced && (
             <div className={`p-4 rounded-xl mb-6 ${
               report.projections.mostProbable.direction === 'up' ? 'bg-emerald-500/10 border border-emerald-500/30' :
               report.projections.mostProbable.direction === 'down' ? 'bg-red-500/10 border border-red-500/30' :
@@ -992,8 +1235,10 @@ export default function TechnicalAnalysisClient() {
                 </div>
               </div>
             </div>
+            )}
             
-            {/* Projection Tables */}
+            {/* Projection Tables (only shown when AI projections are NOT available) */}
+            {!isAiEnhanced && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Upside */}
               <div>
@@ -1057,41 +1302,49 @@ export default function TechnicalAnalysisClient() {
                 </table>
               </div>
             </div>
+            )}
           </div>
 
           {/* ==================== SECTION 6: Strategy Recommendation ==================== */}
           <div className={`backdrop-blur-lg rounded-2xl p-6 border ${
-            report.recommendation.direction === 'wait' 
+            recommendation.direction === 'wait' 
               ? 'bg-slate-800/30 border-slate-500/30' 
+              : isAiEnhanced
+              ? 'bg-gradient-to-br from-indigo-900/30 to-purple-900/20 border-indigo-500/30'
               : 'bg-gradient-to-br from-blue-900/30 to-purple-900/20 border-blue-500/30'
           }`}>
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <span className="text-xl">🎲</span> Strategy Recommendation
+              {isAiEnhanced && (
+                <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30 ml-2">
+                  AI
+                </span>
+              )}
             </h3>
             
             {/* Direction & Strategy */}
             <div className="flex items-center gap-4 mb-6">
               <div className={`px-5 py-2 rounded-xl font-bold text-xl ${
-                report.recommendation.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                report.recommendation.direction === 'short' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                recommendation.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                recommendation.direction === 'short' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
                 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
               }`}>
-                {report.recommendation.direction === 'wait' ? '⏳ WAIT' : report.recommendation.direction.toUpperCase()}
+                {recommendation.direction === 'wait' ? '⏳ WAIT' : recommendation.direction.toUpperCase()}
               </div>
               <div>
-                <div className="text-lg text-white font-medium">{report.recommendation.strategy}</div>
-                <div className="text-sm text-slate-400">Confidence: {report.recommendation.confidence}%</div>
+                <div className="text-lg text-white font-medium">{recommendation.strategy}</div>
+                <div className="text-sm text-slate-400">Confidence: {recommendation.confidence}%</div>
               </div>
             </div>
             
             {/* WAIT Scenario */}
-            {report.recommendation.direction === 'wait' ? (
+            {recommendation.direction === 'wait' ? (
               <div className="space-y-4">
                 {/* Conditions to Watch */}
                 <div className="p-4 rounded-xl bg-white/5">
                   <div className="text-sm font-medium text-slate-300 mb-3">Conditions to Watch</div>
                   <div className="space-y-2">
-                    {report.recommendation.entry.conditions.map((condition, i) => (
+                    {recommendation.entry.conditions.map((condition, i) => (
                       <div key={i} className="flex items-start gap-2 text-sm">
                         <span className="text-yellow-400 mt-0.5">→</span>
                         <span className="text-slate-300">{condition}</span>
@@ -1100,17 +1353,48 @@ export default function TechnicalAnalysisClient() {
                   </div>
                 </div>
                 
-                {/* Key Levels Reference */}
+                {/* Key Levels Reference - ensure resistance > support regardless of AI data order */}
+                {(() => {
+                  const t1 = recommendation.targets.t1.price;
+                  const t3 = recommendation.targets.t3.price;
+                  const currentPrice = report.currentPrice;
+                  
+                  // Determine which is resistance (should be above current) and which is support (below current)
+                  // Handle case where AI might return them in wrong order
+                  let resistance: number;
+                  let support: number;
+                  
+                  if (t1 > currentPrice && t3 < currentPrice) {
+                    // Normal case: t1 is resistance, t3 is support
+                    resistance = t1;
+                    support = t3;
+                  } else if (t3 > currentPrice && t1 < currentPrice) {
+                    // Swapped case: t3 is resistance, t1 is support
+                    resistance = t3;
+                    support = t1;
+                  } else if (t1 > t3) {
+                    // Both above or both below - use relative position
+                    resistance = t1;
+                    support = t3;
+                  } else {
+                    // t3 > t1 - swap
+                    resistance = t3;
+                    support = t1;
+                  }
+                  
+                  return (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-500/20">
                     <div className="text-sm text-emerald-400 mb-1">Resistance (Bullish Breakout)</div>
-                    <div className="text-xl font-mono text-white">${report.recommendation.targets.t1.price.toFixed(2)}</div>
+                    <div className="text-xl font-mono text-white">${resistance.toFixed(2)}</div>
                   </div>
                   <div className="p-4 rounded-xl bg-red-900/20 border border-red-500/20">
                     <div className="text-sm text-red-400 mb-1">Support (Bearish Breakdown)</div>
-                    <div className="text-xl font-mono text-white">${report.recommendation.targets.t3.price.toFixed(2)}</div>
+                    <div className="text-xl font-mono text-white">${support.toFixed(2)}</div>
                   </div>
                 </div>
+                  );
+                })()}
                 
                 {/* Notes */}
                 <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
@@ -1124,19 +1408,19 @@ export default function TechnicalAnalysisClient() {
                 {/* Entry & Stop */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="p-4 rounded-xl bg-white/5">
-                    <div className="text-sm text-slate-400 mb-1">Entry ({report.recommendation.entry.type})</div>
-                    <div className="text-2xl font-mono text-white">${report.recommendation.entry.price.toFixed(2)}</div>
-                    {report.recommendation.entry.conditions.length > 0 && (
+                    <div className="text-sm text-slate-400 mb-1">Entry ({recommendation.entry.type})</div>
+                    <div className="text-2xl font-mono text-white">${recommendation.entry.price.toFixed(2)}</div>
+                    {recommendation.entry.conditions.length > 0 && (
                       <div className="text-sm text-slate-400 mt-2">
-                        {report.recommendation.entry.conditions[0]}
+                        {recommendation.entry.conditions[0]}
                       </div>
                     )}
                   </div>
                   <div className="p-4 rounded-xl bg-red-900/20 border border-red-500/20">
                     <div className="text-sm text-red-400 mb-1">Stop Loss</div>
-                    <div className="text-2xl font-mono text-red-400">${report.recommendation.stopLoss.price.toFixed(2)}</div>
+                    <div className="text-2xl font-mono text-red-400">${recommendation.stopLoss.price.toFixed(2)}</div>
                     <div className="text-sm text-slate-400 mt-2">
-                      Risk: {report.recommendation.stopLoss.riskPercent.toFixed(1)}% • {report.recommendation.stopLoss.reason}
+                      Risk: {recommendation.stopLoss.riskPercent.toFixed(1)}% • {recommendation.stopLoss.reason}
                     </div>
                   </div>
                 </div>
@@ -1144,37 +1428,66 @@ export default function TechnicalAnalysisClient() {
                 {/* Targets Table */}
                 <div>
                   <h4 className={`text-base font-medium mb-3 ${
-                    report.recommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
+                    recommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
                   }`}>
-                    {report.recommendation.direction === 'long' ? '📈 Long Targets' : '📉 Short Targets'}
+                    {recommendation.direction === 'long' ? '📈 Long Targets' : '📉 Short Targets'}
                   </h4>
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="text-sm text-slate-500 border-b border-white/10">
                         <th className="text-left py-2 font-medium">Target</th>
                         <th className="text-right py-2 font-medium">Price</th>
+                        <th className="text-right py-2 font-medium">From Entry</th>
+                        <th className="text-right py-2 font-medium">From Current</th>
                         <th className="text-right py-2 font-medium">R:R</th>
                         <th className="text-right py-2 font-medium">Est. Prob</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {Object.entries(report.recommendation.targets).map(([key, target]) => (
+                      {Object.entries(recommendation.targets).map(([key, target]) => {
+                        const entryPrice = recommendation.entry.price;
+                        const currentPrice = report.currentPrice;
+                        const moveFromEntry = recommendation.direction === 'long' 
+                          ? ((target.price - entryPrice) / entryPrice) * 100
+                          : ((entryPrice - target.price) / entryPrice) * 100;
+                        const moveFromCurrent = recommendation.direction === 'long'
+                          ? ((target.price - currentPrice) / currentPrice) * 100
+                          : ((currentPrice - target.price) / currentPrice) * 100;
+                        
+                        return (
                         <tr key={key} className="text-base">
                           <td className="py-3 text-slate-300 font-medium">{key.toUpperCase()}</td>
                           <td className={`py-3 text-right font-mono ${
-                            report.recommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
+                            recommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
                           }`}>${target.price.toFixed(2)}</td>
+                          <td className="py-3 text-right text-slate-300">
+                            <span className={moveFromEntry >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                              {moveFromEntry >= 0 ? '+' : ''}{moveFromEntry.toFixed(2)}%
+                            </span>
+                          </td>
+                          <td className="py-3 text-right text-slate-300">
+                            <span className={moveFromCurrent >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                              {moveFromCurrent >= 0 ? '+' : ''}{moveFromCurrent.toFixed(2)}%
+                            </span>
+                          </td>
                           <td className="py-3 text-right text-white font-semibold">{target.rr}:1</td>
                           <td className="py-3 text-right text-slate-400">~{target.probability}%</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-500 flex flex-wrap items-center gap-4">
+                    <span>• <span className="text-slate-400">From Entry:</span> % move from entry price (${recommendation.entry.price.toFixed(2)})</span>
+                    <span>• <span className="text-slate-400">From Current:</span> % move from current price (${report.currentPrice.toFixed(2)})</span>
+                  </div>
                 </div>
                 
                 {/* Invalidation */}
                 <div className="mt-4 p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
-                  <span className="font-medium text-slate-300">Invalidation:</span> {report.recommendation.invalidation}
+                  <span className="font-medium text-slate-300">Invalidation:</span> {recommendation.invalidation}
                 </div>
               </>
             )}
@@ -1238,9 +1551,11 @@ export default function TechnicalAnalysisClient() {
             Analysis generated {new Date(report.timestamp).toLocaleString()} • 
             {report.marketData.barsAnalyzed} bars analyzed • 
             Data as of {new Date(report.marketData.lastBarDate).toLocaleDateString()}
+            {isAiEnhanced && <span className="ml-2">• AI Enhanced</span>}
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

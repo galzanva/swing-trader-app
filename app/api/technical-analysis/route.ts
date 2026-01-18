@@ -3,11 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { PolygonClient } from "@/lib/data-vendors/polygon";
 import { runTechnicalAnalysis, generateAISummaryPrompt, TechnicalAnalysisReport } from "@/lib/technical-analysis";
+import { generateAITechnicalAnalysis, prepareAIInput, AIAnalysisOutput } from "@/lib/technical-analysis/ai-analyst";
 
 /**
- * Technical Analysis API - Pure Technical Analysis
- * No fundamentals, no news, no options
- * Focus: Indicators, patterns, probabilities, price projections
+ * Technical Analysis API - AI-Enhanced Technical Analysis
+ * Uses GPT-4o-mini for intelligent interpretation of technical data
+ * Provides reasoning-backed signal grades, projections, and recommendations
  */
 
 export async function POST(request: Request) {
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`[TechnicalAnalysis] Starting analysis for ${symbol} on ${timeframe}`);
+    console.log(`[TechnicalAnalysis] Starting AI-enhanced analysis for ${symbol} on ${timeframe}`);
 
     // 1. Fetch market data
     const polygonClient = new PolygonClient(polygonApiKey);
@@ -74,70 +75,68 @@ export async function POST(request: Request) {
       volume: bar.volume
     }));
 
-    // 3. Run complete technical analysis
-    console.log(`[TechnicalAnalysis] Running technical analysis...`);
+    // 3. Run base technical analysis (indicators, patterns, levels)
+    console.log(`[TechnicalAnalysis] Running base technical analysis...`);
     const report = runTechnicalAnalysis(ohlcv, symbol.toUpperCase(), timeframe);
     
-    console.log(`[TechnicalAnalysis] Analysis complete:
-    - Signal Strength: ${report.signalStrength.overall}/100 (${report.signalStrength.grade})
+    console.log(`[TechnicalAnalysis] Base analysis complete:
+    - Base Signal: ${report.signalStrength.overall}/100 (${report.signalStrength.grade})
     - Direction: ${report.signalStrength.direction}
     - Strategy: ${report.recommendation.strategy}
-    - Momentum: ${report.assessments.momentum.direction} (${report.assessments.momentum.strength})
-    - Trend: ${report.assessments.trend.emaAlignment} alignment
-    - Volatility: ${report.assessments.volatility.regime}
     - Squeeze: ${report.squeeze.isInSqueeze ? `YES (${report.squeeze.squeezeDuration} bars)` : 'NO'}
     `);
 
-    // 4. Generate AI summary if OpenAI is available
+    // 4. Run AI-enhanced analysis for intelligent interpretation
+    let aiAnalysis: AIAnalysisOutput | null = null;
     let aiSummary = undefined;
     
     if (openaiApiKey) {
       try {
-        console.log(`[TechnicalAnalysis] Generating AI summary...`);
+        console.log(`[TechnicalAnalysis] Running AI-enhanced analysis...`);
         
-        const prompt = generateAISummaryPrompt(report);
+        // Prepare comprehensive input for AI analyst
+        const aiInput = prepareAIInput(
+          symbol.toUpperCase(),
+          timeframe,
+          report.currentPrice,
+          report.indicators,
+          report.assessments,
+          report.structureAnalysis,
+          report.squeeze,
+          report.levels.supportResistance,
+          report.detectedRegime
+        );
         
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a professional technical analyst. Provide concise, data-driven analysis based ONLY on technical indicators. Never mention fundamentals, news, or external factors. Always respond with valid JSON.'
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
-            response_format: { type: 'json_object' }
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const content = data.choices[0]?.message?.content;
+        // Generate AI-driven analysis
+        aiAnalysis = await generateAITechnicalAnalysis(aiInput, openaiApiKey);
+        
+        if (aiAnalysis && aiAnalysis.signalStrength) {
+          console.log(`[TechnicalAnalysis] AI Analysis complete:
+          - AI Signal: ${aiAnalysis.signalStrength?.overall}/100 (${aiAnalysis.signalStrength?.grade})
+          - AI Direction: ${aiAnalysis.signalStrength?.direction}
+          - AI Strategy: ${aiAnalysis.recommendation?.strategy}
+          - AI Confidence: ${aiAnalysis.recommendation?.confidence}%
+          - Headline: ${aiAnalysis.narrative?.headline}
+          `);
           
-          if (content) {
-            try {
-              aiSummary = JSON.parse(content);
-              console.log(`[TechnicalAnalysis] AI summary generated: ${aiSummary.headline}`);
-            } catch (parseError) {
-              console.error(`[TechnicalAnalysis] Failed to parse AI response:`, parseError);
-            }
-          }
+          // Use AI narrative as the summary
+          aiSummary = {
+            headline: aiAnalysis.narrative?.headline || "AI Analysis Available",
+            technicalOutlook: aiAnalysis.narrative?.technicalOutlook || "Detailed analysis provided below.",
+            keyInsights: aiAnalysis.narrative?.keyInsights || [],
+            riskFactors: aiAnalysis.narrative?.riskFactors || [],
+            tradingPlan: aiAnalysis.narrative?.tradingPlan || "See recommendation section.",
+            confidenceLevel: aiAnalysis.narrative?.confidenceLevel || "medium"
+          };
         } else {
-          console.error(`[TechnicalAnalysis] OpenAI API error: ${response.status}`);
+          console.log(`[TechnicalAnalysis] AI analysis returned incomplete data, using fallback`);
+          aiSummary = generateFallbackSummary(report);
+          aiAnalysis = null; // Reset to null so we don't try to use incomplete data later
         }
       } catch (aiError) {
-        console.error(`[TechnicalAnalysis] AI summary generation failed:`, aiError);
+        console.error(`[TechnicalAnalysis] AI analysis failed:`, aiError);
+        aiSummary = generateFallbackSummary(report);
+        aiAnalysis = null;
       }
     } else {
       // Generate fallback summary without AI
@@ -145,11 +144,42 @@ export async function POST(request: Request) {
       aiSummary = generateFallbackSummary(report);
     }
 
-    // 5. Compile final report with AI summary
-    const finalReport: TechnicalAnalysisReport = {
+    // 5. Compile final report with AI enhancements
+    const finalReport: TechnicalAnalysisReport & { aiEnhanced?: any } = {
       ...report,
       aiSummary
     };
+    
+    // If AI analysis succeeded, enhance the report with AI-driven values
+    if (aiAnalysis && aiAnalysis.signalStrength) {
+      finalReport.aiEnhanced = {
+        // AI-driven signal strength (replaces hardcoded)
+        signalStrength: {
+          overall: aiAnalysis.signalStrength.overall,
+          grade: aiAnalysis.signalStrength.grade,
+          direction: aiAnalysis.signalStrength.direction,
+          reasoning: aiAnalysis.signalStrength.reasoning,
+          breakdown: aiAnalysis.signalStrength.breakdown
+        },
+        // AI-driven price projections (replaces fixed ATR multiples)
+        priceProjections: aiAnalysis.priceProjections,
+        // AI-driven structure analysis (replaces hardcoded logic)
+        structureAnalysis: aiAnalysis.structureAnalysis,
+        // AI-driven recommendation (replaces if-else chains)
+        recommendation: {
+          action: aiAnalysis.recommendation.action,
+          strategy: aiAnalysis.recommendation.strategy,
+          confidence: aiAnalysis.recommendation.confidence,
+          confidenceReasoning: aiAnalysis.recommendation.confidenceReasoning,
+          entry: aiAnalysis.recommendation.entry,
+          stopLoss: aiAnalysis.recommendation.stopLoss,
+          targets: aiAnalysis.recommendation.targets,
+          invalidation: aiAnalysis.recommendation.invalidation,
+          keyRisks: aiAnalysis.recommendation.keyRisks,
+          keyOpportunities: aiAnalysis.recommendation.keyOpportunities
+        }
+      };
+    }
 
     // Add market data metadata
     const responseWithMeta = {
@@ -161,10 +191,11 @@ export async function POST(request: Request) {
         lastBarDate: marketData.lastBarDate.toISOString(),
         dataAgeDays: marketData.dataAgeDays,
         barsAnalyzed: marketData.bars.length
-      }
+      },
+      analysisMode: aiAnalysis ? 'ai-enhanced' : 'rule-based'
     };
 
-    console.log(`[TechnicalAnalysis] Complete for ${symbol}`);
+    console.log(`[TechnicalAnalysis] Complete for ${symbol} (mode: ${aiAnalysis ? 'AI-enhanced' : 'rule-based'})`);
 
     return NextResponse.json(responseWithMeta, { status: 200 });
 
