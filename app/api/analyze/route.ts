@@ -334,20 +334,7 @@ export interface AnalysisReport {
     summary: string;
   };
   
-  // Options Insight (from Massive.com options chain)
-  optionsInsight?: {
-    sentiment: 'bullish' | 'bearish' | 'neutral' | 'mixed';
-    confidence: 'high' | 'medium' | 'low';
-    message: string;
-    callPutRatio: number;
-    totalCallVolume: number;
-    totalPutVolume: number;
-    ivTrend: 'rising' | 'flat' | 'falling';
-    atmStrike: number;
-    topCallStrikes: Array<{ strike: number; volume: number; oi: number }>;
-    topPutStrikes: Array<{ strike: number; volume: number; oi: number }>;
-    expirations: string[];
-  };
+  // Note: Options data removed - not useful for swing trading analysis
   
   // Additional info
   marketData: {
@@ -695,67 +682,80 @@ export async function POST(request: Request) {
         console.log(`[Analyze] No fundamentals data available for ${symbol}`);
       }
       
-      // Process news
+      // Process news - filter to only recent articles (last 30 days)
       if (news && news.length > 0) {
-        console.log(`[Analyze] Found ${news.length} news articles`);
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         
-        // Calculate sentiment
-        let positiveCount = 0;
-        let negativeCount = 0;
-        let neutralCount = 0;
-        const keyThemes: Set<string> = new Set();
-        
-        newsArticles = news.map(article => {
-          // Extract sentiment from insights
-          let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral';
-          let sentiment_reasoning = '';
-          
-          if (article.insights && article.insights.length > 0) {
-            const insight = article.insights.find(i => i.ticker === symbol) || article.insights[0];
-            sentiment = insight.sentiment;
-            sentiment_reasoning = insight.sentiment_reasoning || '';
-            
-            if (sentiment === 'positive') positiveCount++;
-            else if (sentiment === 'negative') negativeCount++;
-            else neutralCount++;
-          } else {
-            neutralCount++;
-          }
-          
-          // Extract themes from title (simple keyword extraction)
-          const titleWords = article.title.toLowerCase().split(' ');
-          const themes = ['earnings', 'revenue', 'growth', 'acquisition', 'partnership', 'lawsuit', 'downgrade', 'upgrade'];
-          titleWords.forEach(word => {
-            if (themes.some(theme => word.includes(theme))) {
-              keyThemes.add(word);
-            }
-          });
-          
-          return {
-            id: article.id,
-            title: article.title,
-            published_utc: article.published_utc,
-            article_url: article.article_url,
-            description: article.description,
-            publisher: article.publisher?.name,
-            sentiment,
-            sentiment_reasoning
-          };
+        // Filter out old news articles
+        const recentNews = news.filter(article => {
+          const articleDate = new Date(article.published_utc);
+          return articleDate >= thirtyDaysAgo;
         });
         
-        // Calculate overall sentiment
-        const sentimentScore = ((positiveCount - negativeCount) / news.length) * 100;
-        const overallSentiment: 'bullish' | 'bearish' | 'neutral' = 
-          sentimentScore > 20 ? 'bullish' : sentimentScore < -20 ? 'bearish' : 'neutral';
+        console.log(`[Analyze] Found ${news.length} news articles, ${recentNews.length} from last 30 days`);
         
-        newsSummary = {
-          overallSentiment,
-          sentimentScore,
-          keyThemes: Array.from(keyThemes),
-          summary: `${positiveCount} positive, ${negativeCount} negative, ${neutralCount} neutral articles. Overall sentiment: ${overallSentiment}.`
-        };
-        
-        console.log(`[Analyze] News sentiment: ${overallSentiment} (score: ${sentimentScore.toFixed(0)})`);
+        if (recentNews.length === 0) {
+          console.log(`[Analyze] No recent news articles for ${symbol}`);
+        } else {
+          // Calculate sentiment from recent news only
+          let positiveCount = 0;
+          let negativeCount = 0;
+          let neutralCount = 0;
+          const keyThemes: Set<string> = new Set();
+          
+          newsArticles = recentNews.map(article => {
+            // Extract sentiment from insights
+            let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral';
+            let sentiment_reasoning = '';
+            
+            if (article.insights && article.insights.length > 0) {
+              const insight = article.insights.find(i => i.ticker === symbol) || article.insights[0];
+              sentiment = insight.sentiment;
+              sentiment_reasoning = insight.sentiment_reasoning || '';
+              
+              if (sentiment === 'positive') positiveCount++;
+              else if (sentiment === 'negative') negativeCount++;
+              else neutralCount++;
+            } else {
+              neutralCount++;
+            }
+            
+            // Extract themes from title (simple keyword extraction)
+            const titleWords = article.title.toLowerCase().split(' ');
+            const themes = ['earnings', 'revenue', 'growth', 'acquisition', 'partnership', 'lawsuit', 'downgrade', 'upgrade'];
+            titleWords.forEach(word => {
+              if (themes.some(theme => word.includes(theme))) {
+                keyThemes.add(word);
+              }
+            });
+            
+            return {
+              id: article.id,
+              title: article.title,
+              published_utc: article.published_utc,
+              article_url: article.article_url,
+              description: article.description,
+              publisher: article.publisher?.name,
+              sentiment,
+              sentiment_reasoning
+            };
+          });
+          
+          // Calculate overall sentiment from recent news
+          const sentimentScore = ((positiveCount - negativeCount) / recentNews.length) * 100;
+          const overallSentiment: 'bullish' | 'bearish' | 'neutral' = 
+            sentimentScore > 20 ? 'bullish' : sentimentScore < -20 ? 'bearish' : 'neutral';
+          
+          newsSummary = {
+            overallSentiment,
+            sentimentScore,
+            keyThemes: Array.from(keyThemes),
+            summary: `${positiveCount} positive, ${negativeCount} negative, ${neutralCount} neutral articles (last 30 days). Overall sentiment: ${overallSentiment}.`
+          };
+          
+          console.log(`[Analyze] News sentiment: ${overallSentiment} (score: ${sentimentScore.toFixed(0)})`);
+        }
       } else {
         console.log(`[Analyze] No news articles found for ${symbol}`);
       }
@@ -763,52 +763,7 @@ export async function POST(request: Request) {
       console.error("[Analyze] Error fetching fundamentals or news:", error);
     }
 
-    // Fetch and analyze options chain
-    let optionsInsight;
-    try {
-      console.log(`[Analyze] Fetching options chain for ${symbol}...`);
-      const optionsChain = await polygonClient.getOptionsChain(symbol, marketData.currentPrice);
-      
-      if (optionsChain) {
-        console.log(`[Analyze] Options chain received: ${optionsChain.contracts.length} contracts across ${[...new Set(optionsChain.contracts.map(c => c.expiration))].length} expirations`);
-        
-        try {
-          // Analyze options sentiment (use executionDirection from pattern hierarchy)
-          const fullOptionsInsight = polygonClient.analyzeOptionsInsight(optionsChain, {
-            direction: executionDirection,
-            rsi: indicators.rsi,
-            volZ: indicators.volumeZScore,
-            trend: compositePattern.candlestickPattern.name,
-          });
-          
-          // Store the insight (excluding raw data for API response)
-          optionsInsight = {
-            sentiment: fullOptionsInsight.sentiment,
-            confidence: fullOptionsInsight.confidence,
-            message: fullOptionsInsight.message,
-            callPutRatio: fullOptionsInsight.callPutRatio,
-            totalCallVolume: fullOptionsInsight.totalCallVolume,
-            totalPutVolume: fullOptionsInsight.totalPutVolume,
-            ivTrend: fullOptionsInsight.ivTrend,
-            atmStrike: fullOptionsInsight.atmStrike,
-            topCallStrikes: fullOptionsInsight.topCallStrikes,
-            topPutStrikes: fullOptionsInsight.topPutStrikes,
-            expirations: fullOptionsInsight.expirations,
-          };
-          
-          console.log(`[Analyze] ✅ Options sentiment: ${optionsInsight.sentiment} (${optionsInsight.confidence} confidence)`);
-          console.log(`[Analyze] ✅ Call/Put ratio: ${optionsInsight.callPutRatio.toFixed(2)}, IV trend: ${optionsInsight.ivTrend}`);
-          console.log(`[Analyze] ✅ Options insight successfully generated and will be included in report`);
-        } catch (analysisError) {
-          console.error(`[Analyze] Error analyzing options chain:`, analysisError);
-          optionsInsight = undefined;
-        }
-      } else {
-        console.log(`[Analyze] ⚠️ No options data available for ${symbol} (optionsChain is null)`);
-      }
-    } catch (error) {
-      console.error("[Analyze] Error fetching or analyzing options:", error);
-    }
+    // Note: Options chain analysis removed - not useful for swing trading
 
     // 7. Generate AI analysis (if OpenAI key is available)
     let aiAnalysis;
@@ -834,10 +789,9 @@ export async function POST(request: Request) {
           squeezeAnalysis, // Pass squeeze analysis to LLM
           fundamentalsData, // Pass fundamentals to LLM
           newsSummary, // Pass news summary to LLM
-          optionsInsight, // Pass options insight to LLM
           mainScore // Pass the ACTUAL displayed score (mainScore) to prevent AI hallucination
         );
-        console.log(`[Analyze] Generated AI analysis with fundamentals, news, and options context`);
+        console.log(`[Analyze] Generated AI analysis with fundamentals and news context`);
         
         // Apply AI rating adjustment if provided and store the adjustment details
         if (aiAnalysis.ratingAdjustment) {
@@ -1226,7 +1180,7 @@ export async function POST(request: Request) {
       
       newsSummary,
       
-      optionsInsight,
+      // Note: optionsInsight removed - not useful for swing trading
       
       marketData: {
         marketCap: marketData.marketCap,

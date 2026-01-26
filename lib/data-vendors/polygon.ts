@@ -677,6 +677,251 @@ export class PolygonClient {
   }
 
   /**
+   * Get real-time snapshot for a single ticker
+   * Returns the most current price data available (15-min delayed for free tier)
+   * https://polygon.io/docs/stocks/get_v2_snapshot_locale_us_markets_stocks_tickers__stocksticker
+   */
+  async getTickerSnapshot(symbol: string): Promise<{
+    price: number;
+    change: number;
+    changePercent: number;
+    open: number;
+    high: number;
+    low: number;
+    volume: number;
+    previousClose: number;
+    timestamp: number;
+    source: 'last_trade' | 'today_close' | 'prev_close' | 'error';
+    isStale: boolean;
+  } | null> {
+    try {
+      const url = `${this.baseUrl}/v2/snapshot/locale/us/markets/stocks/tickers/${symbol.toUpperCase()}`;
+      const params = new URLSearchParams({
+        apiKey: this.apiKey,
+      });
+
+      console.log(`[Polygon] Fetching snapshot for ${symbol}...`);
+      const response = await fetch(`${url}?${params}`, {
+        cache: 'no-store', // Disable caching to get fresh data
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`[Polygon] Ticker ${symbol} not found`);
+          return null;
+        }
+        const errorText = await response.text();
+        console.error(`[Polygon] Snapshot error for ${symbol} (${response.status}): ${errorText}`);
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (!data.ticker) {
+        console.warn(`[Polygon] No snapshot data for ${symbol}`);
+        return null;
+      }
+
+      const snapshot = data.ticker;
+      
+      // Helper to convert Polygon timestamp to milliseconds
+      // Polygon uses nanoseconds (19 digits) for trade timestamps
+      const toMs = (ts: number | undefined): number => {
+        if (!ts || ts === 0) return Date.now();
+        // Nanoseconds have 16-19 digits, milliseconds have 13
+        if (ts > 1e15) return Math.floor(ts / 1e6); // nanoseconds to ms
+        if (ts > 1e12) return ts; // already in ms
+        return ts * 1000; // seconds to ms
+      };
+
+      // Debug: Log what we received from the API
+      console.log(`[Polygon] ${symbol} snapshot:`, {
+        hasLastTrade: !!snapshot.lastTrade?.p,
+        hasMin: !!snapshot.min?.c,
+        hasDay: !!snapshot.day?.c,
+        hasPrevDay: !!snapshot.prevDay?.c,
+        updated: snapshot.updated,
+        todaysChange: snapshot.todaysChange,
+      });
+
+      // Determine market context FIRST to correctly label data sources
+      const now = new Date();
+      const estOptions = { timeZone: 'America/New_York' };
+      const estNow = new Date(now.toLocaleString('en-US', estOptions));
+      const estHour = estNow.getHours();
+      const dayOfWeek = estNow.getDay(); // 0 = Sunday, 6 = Saturday
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isWeekday = !isWeekend;
+      const isMarketHours = isWeekday && estHour >= 9 && estHour < 16;
+      const isPreMarket = isWeekday && estHour >= 4 && estHour < 9;
+      const isAfterHours = isWeekday && estHour >= 16 && estHour < 20;
+      const isExtendedHours = isPreMarket || isAfterHours;
+      
+      console.log(`[Polygon] ${symbol}: Market context - ${isWeekend ? 'WEEKEND' : isMarketHours ? 'MARKET HOURS' : isExtendedHours ? 'EXTENDED HOURS' : 'OVERNIGHT'}`);
+
+      // Priority: lastTrade.p > min.c > day.c > prevDay.c
+      // Per Polygon docs: https://massive.com/docs/rest/stocks/snapshots/single-ticker-snapshot
+      let price = 0;
+      let timestamp = Date.now();
+      let source: 'last_trade' | 'today_close' | 'prev_close' | 'error' = 'error';
+      let dataDescription = '';
+      
+      // 1. Most recent trade price (includes pre/post market) - requires certain plan tiers
+      if (snapshot.lastTrade?.p && snapshot.lastTrade.p > 0) {
+        price = snapshot.lastTrade.p;
+        timestamp = toMs(snapshot.lastTrade.t);
+        // Only label as real-time if market is actually open/extended
+        source = (isMarketHours || isExtendedHours) ? 'last_trade' : 'prev_close';
+        dataDescription = 'Last trade';
+        console.log(`[Polygon] ${symbol}: Last trade $${price.toFixed(2)} at ${new Date(timestamp).toLocaleString()}`);
+      } 
+      // 2. Most recent minute bar - more current than daily close
+      else if (snapshot.min?.c && snapshot.min.c > 0) {
+        price = snapshot.min.c;
+        timestamp = toMs(snapshot.min.t || snapshot.updated);
+        // Minute bar on weekend = Friday's last minute, not real-time
+        source = (isMarketHours || isExtendedHours) ? 'last_trade' : 'prev_close';
+        dataDescription = 'Minute bar';
+        console.log(`[Polygon] ${symbol}: Minute bar $${price.toFixed(2)} at ${new Date(timestamp).toLocaleString()}`);
+      }
+      // 3. Today's aggregated data (OHLCV for current day)
+      else if (snapshot.day?.c && snapshot.day.c > 0) {
+        price = snapshot.day.c;
+        timestamp = toMs(snapshot.updated);
+        // On weekends, "today" is actually Friday
+        source = isWeekend ? 'prev_close' : 'today_close';
+        dataDescription = isWeekend ? 'Friday close' : 'Today close';
+        console.log(`[Polygon] ${symbol}: Today's bar $${price.toFixed(2)}, updated: ${new Date(timestamp).toLocaleString()}`);
+      } 
+      // 4. Previous day's close (fallback)
+      else if (snapshot.prevDay?.c && snapshot.prevDay.c > 0) {
+        price = snapshot.prevDay.c;
+        timestamp = toMs(snapshot.updated);
+        source = 'prev_close';
+        dataDescription = 'Previous close';
+        console.log(`[Polygon] ${symbol}: Previous close $${price.toFixed(2)}`);
+      }
+
+      if (price === 0) {
+        console.warn(`[Polygon] No valid price for ${symbol}`);
+        return null;
+      }
+
+      // Determine staleness based on market context
+      let isStale = false;
+      
+      if (isWeekend) {
+        // On weekends, Friday's data is fresh (expected)
+        isStale = false;
+        console.log(`[Polygon] ${symbol}: Weekend - ${dataDescription} $${price.toFixed(2)} (Friday's close, fresh)`);
+      } else if (source === 'last_trade') {
+        // Real-time data during market/extended hours
+        const dataAge = now.getTime() - timestamp;
+        const minutesOld = dataAge / (1000 * 60);
+        // Stale if more than 30 minutes old during market hours, or 2 hours in extended
+        if (isMarketHours && minutesOld > 30) {
+          isStale = true;
+        } else if (isExtendedHours && minutesOld > 120) {
+          isStale = true;
+        }
+        console.log(`[Polygon] ${symbol}: ${dataDescription} $${price.toFixed(2)} (${Math.round(minutesOld)} min old, ${isStale ? 'STALE' : 'fresh'})`);
+      } else if (source === 'today_close') {
+        // Today's close during weekday
+        if (snapshot.todaysChange !== undefined && snapshot.todaysChange !== null) {
+          isStale = false;
+          console.log(`[Polygon] ${symbol}: Today's close $${price.toFixed(2)} (change: ${snapshot.todaysChangePerc?.toFixed(2) || 0}%, fresh)`);
+        } else {
+          const dataAge = now.getTime() - timestamp;
+          isStale = dataAge > 2 * 24 * 60 * 60 * 1000;
+          console.log(`[Polygon] ${symbol}: Today's close $${price.toFixed(2)} (no change data, ${isStale ? 'STALE' : 'ok'})`);
+        }
+      } else if (source === 'prev_close' && isWeekday) {
+        // Previous close on a weekday - stale if market is open
+        if (isMarketHours) {
+          isStale = true;
+          console.log(`[Polygon] ${symbol}: Previous close $${price.toFixed(2)} (market open, STALE - should have today's data)`);
+        } else {
+          console.log(`[Polygon] ${symbol}: Previous close $${price.toFixed(2)} (pre-market/overnight, ok)`);
+        }
+      }
+      
+      console.log(`[Polygon] ${symbol}: Final -> $${price.toFixed(2)} | source: ${source} | stale: ${isStale}`);
+      
+
+      return {
+        price,
+        change: snapshot.todaysChange || 0,
+        changePercent: snapshot.todaysChangePerc || 0,
+        open: snapshot.day?.o || snapshot.prevDay?.o || price,
+        high: snapshot.day?.h || snapshot.prevDay?.h || price,
+        low: snapshot.day?.l || snapshot.prevDay?.l || price,
+        volume: snapshot.day?.v || snapshot.prevDay?.v || 0,
+        previousClose: snapshot.prevDay?.c || price,
+        timestamp,
+        source,
+        isStale,
+      };
+    } catch (error) {
+      console.error(`[Polygon] Error fetching snapshot for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get real-time snapshots for multiple tickers using parallel individual calls
+   * Polygon doesn't have a batch endpoint for specific tickers, so we make parallel calls
+   */
+  async getMultipleTickerSnapshots(symbols: string[]): Promise<Map<string, {
+    price: number;
+    change: number;
+    changePercent: number;
+    previousClose: number;
+    timestamp: number;
+    source: 'last_trade' | 'today_close' | 'prev_close';
+    isStale: boolean;
+  }>> {
+    const results = new Map();
+    
+    if (symbols.length === 0) {
+      return results;
+    }
+
+    console.log(`[Polygon] Fetching real-time snapshots for ${symbols.length} tickers: ${symbols.join(', ')}`);
+
+    // Make parallel calls for each ticker
+    const snapshots = await Promise.all(
+      symbols.map(async (symbol) => {
+        const snapshot = await this.getTickerSnapshot(symbol);
+        return { symbol: symbol.toUpperCase(), snapshot };
+      })
+    );
+
+    // Process results
+    for (const { symbol, snapshot } of snapshots) {
+      if (snapshot && snapshot.price > 0) {
+        results.set(symbol, {
+          price: snapshot.price,
+          change: snapshot.change,
+          changePercent: snapshot.changePercent,
+          previousClose: snapshot.previousClose,
+          timestamp: snapshot.timestamp,
+          source: snapshot.source,
+          isStale: snapshot.isStale,
+        });
+        console.log(`[Polygon] ${symbol}: $${snapshot.price.toFixed(2)} (${snapshot.source}, ${snapshot.isStale ? 'STALE' : 'fresh'})`);
+      } else {
+        console.warn(`[Polygon] ${symbol}: No price data available`);
+      }
+    }
+
+    console.log(`[Polygon] Successfully fetched ${results.size}/${symbols.length} ticker prices`);
+    return results;
+  }
+
+  /**
    * Get options chain snapshot for a stock
    * Fetches options contracts for the nearest 1-2 expirations
    * https://massive.com/docs/rest/options/overview

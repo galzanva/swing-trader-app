@@ -115,12 +115,19 @@ export default function DashboardNewClient({ session }: DashboardNewClientProps)
   const fetchOpenTrades = async () => {
     try {
       setLoadingTrades(true);
-      const response = await fetch('/api/dashboard/open-trades');
+      // Add cache-busting and no-cache headers to ensure fresh real-time prices
+      const response = await fetch(`/api/dashboard/open-trades?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       const data = await response.json();
       
       if (data.success) {
         setOpenTrades(data.trades);
         setOpenTradesSummary(data.summary);
+        console.log(`[Dashboard] Loaded ${data.trades.length} positions with real-time prices`);
       }
     } catch (error) {
       console.error('Error fetching open trades:', error);
@@ -266,16 +273,16 @@ export default function DashboardNewClient({ session }: DashboardNewClientProps)
                           {trade.direction.toUpperCase()}
                         </span>
                         Entry: ${trade.entryPrice.toFixed(2)} • {trade.daysHeld}d ago
-                        {trade.priceSource === 'last_trade' && (
+                        {trade.priceSource === 'last_trade' && !trade.isStale && (
                           <span className="ml-2 text-green-400" title="Real-time price (15-min delayed)">🟢</span>
                         )}
-                        {trade.priceSource === 'today_close' && (
-                          <span className="ml-2 text-blue-400" title="Today's close">📊</span>
+                        {trade.priceSource === 'today_close' && !trade.isStale && (
+                          <span className="ml-2 text-blue-400" title="Today's market data">📊</span>
                         )}
-                        {trade.priceSource === 'prev_close' && (
-                          <span className="ml-2 text-yellow-400" title="Previous day's close">📅</span>
+                        {trade.priceSource === 'prev_close' && !trade.isStale && (
+                          <span className="ml-2 text-yellow-400" title="Last market close (Friday on weekends)">📅</span>
                         )}
-                        {trade.isStale && <span className="ml-2 text-red-400" title="Price data is stale (>2 days)">⚠️</span>}
+                        {trade.isStale && <span className="ml-2 text-red-400" title="Price data may be outdated">⚠️</span>}
                       </p>
                     </div>
                   </div>
@@ -321,16 +328,16 @@ export default function DashboardNewClient({ session }: DashboardNewClientProps)
             <p className="text-xs text-blue-300 mb-2 font-semibold">Price Indicators:</p>
             <div className="flex flex-wrap gap-3 text-xs">
               <span className="text-blue-200">
-                <span className="text-green-400">🟢</span> Real-time (15-min delayed, includes pre/post market)
+                <span className="text-green-400">🟢</span> Real-time (15-min delayed, market/extended hours only)
               </span>
               <span className="text-blue-200">
-                <span className="text-blue-400">📊</span> Today's close
+                <span className="text-blue-400">📊</span> Today&apos;s close
               </span>
               <span className="text-blue-200">
-                <span className="text-yellow-400">📅</span> Previous close
+                <span className="text-yellow-400">📅</span> Last close (previous day or Friday on weekends)
               </span>
               <span className="text-blue-200">
-                <span className="text-red-400">⚠️</span> Stale data (&gt;2 days)
+                <span className="text-red-400">⚠️</span> Stale (&gt;4 days old)
               </span>
             </div>
           </div>
