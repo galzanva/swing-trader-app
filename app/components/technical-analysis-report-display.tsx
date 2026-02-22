@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import IndicatorExplanationModal, { IndicatorSection } from './indicator-explanation-modal';
+
 interface TechnicalAnalysisReportData {
   symbol: string;
   timeframe: string;
@@ -207,6 +210,16 @@ function GradeBadge({ grade }: { grade: string }) {
 }
 
 export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnalysisReportDisplayProps) {
+  // Indicator explanation modal state
+  const [indicatorModalOpen, setIndicatorModalOpen] = useState(false);
+  const [indicatorSection, setIndicatorSection] = useState<IndicatorSection>('all');
+  
+  // Helper to open indicator explanation modal
+  const openIndicatorHelp = (section: IndicatorSection) => {
+    setIndicatorSection(section);
+    setIndicatorModalOpen(true);
+  };
+
   if (!report) return null;
 
   // Prioritize AI-enhanced data if available
@@ -291,23 +304,31 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           <h3 className="text-lg font-semibold text-white mb-4">⚡ Momentum</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-slate-300">RSI (14)</span>
+              <button onClick={() => openIndicatorHelp('rsi')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                RSI (14) <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">{report.indicators?.momentum?.rsi?.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">Stochastic %K / %D</span>
+              <button onClick={() => openIndicatorHelp('stochastic')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Stochastic %K / %D <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">
                 {report.indicators?.momentum?.stochasticK?.toFixed(1)} / {report.indicators?.momentum?.stochasticD?.toFixed(1)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">MACD Histogram</span>
+              <button onClick={() => openIndicatorHelp('macd')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                MACD Histogram <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className={`font-mono ${(report.indicators?.momentum?.macdHistogram || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {report.indicators?.momentum?.macdHistogram?.toFixed(4)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">MFI</span>
+              <button onClick={() => openIndicatorHelp('mfi')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                MFI <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">{report.indicators?.momentum?.mfi?.toFixed(1)}</span>
             </div>
           </div>
@@ -318,20 +339,26 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           <h3 className="text-lg font-semibold text-white mb-4">📈 Trend</h3>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-slate-300">ADX</span>
+              <button onClick={() => openIndicatorHelp('adx')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                ADX <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <div className="flex items-center gap-2">
                 <span className="text-white font-mono">{report.indicators?.trend?.adx?.toFixed(1)}</span>
                 <SignalBadge signal={report.indicators?.trend?.trendStrength || 'neutral'} />
               </div>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">+DI / -DI</span>
+              <button onClick={() => openIndicatorHelp('di')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                +DI / -DI <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">
                 {report.indicators?.trend?.plusDI?.toFixed(1)} / {report.indicators?.trend?.minusDI?.toFixed(1)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-slate-300">EMA Alignment</span>
+              <button onClick={() => openIndicatorHelp('ema')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                EMA Alignment <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <SignalBadge signal={report.indicators?.trend?.emaAlignment || 'mixed'} />
             </div>
             <div className="flex justify-between items-center">
@@ -346,21 +373,29 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           <h3 className="text-lg font-semibold text-white mb-4">📉 Volatility</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-slate-300">ATR (14)</span>
+              <button onClick={() => openIndicatorHelp('atr')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                ATR (14) <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">
                 ${report.indicators?.volatility?.atr?.toFixed(2)} ({report.indicators?.volatility?.atrPercent?.toFixed(2)}%)
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-slate-300">Volatility Regime</span>
+              <button onClick={() => openIndicatorHelp('volatility')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Volatility Regime <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <SignalBadge signal={report.indicators?.volatility?.volatilityRegime || 'normal'} />
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">Bollinger %B</span>
+              <button onClick={() => openIndicatorHelp('bollinger')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Bollinger %B <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">{(report.indicators?.volatility?.bollingerPercentB * 100)?.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">Historical Vol</span>
+              <button onClick={() => openIndicatorHelp('volatility')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Historical Vol <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className="text-white font-mono">{report.indicators?.volatility?.historicalVolatility?.toFixed(1)}%</span>
             </div>
           </div>
@@ -371,18 +406,24 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           <h3 className="text-lg font-semibold text-white mb-4">📊 Volume</h3>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-slate-300">Volume Z-Score</span>
+              <button onClick={() => openIndicatorHelp('volume-z')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Volume Z-Score <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <div className="flex items-center gap-2">
                 <span className="text-white font-mono">{(report.indicators?.volume?.zScore ?? report.indicators?.volume?.volumeZScore)?.toFixed(2)}</span>
                 <SignalBadge signal={report.indicators?.volume?.volumeSignal || 'normal'} />
               </div>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-slate-300">OBV Trend</span>
+              <button onClick={() => openIndicatorHelp('obv')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                OBV Trend <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <SignalBadge signal={report.indicators?.volume?.obvTrend || 'flat'} />
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-300">Chaikin Money Flow</span>
+              <button onClick={() => openIndicatorHelp('cmf')} className="text-slate-300 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                Chaikin Money Flow <span className="text-blue-400 text-xs">ⓘ</span>
+              </button>
               <span className={`font-mono ${(report.indicators?.volume?.cmf || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {report.indicators?.volume?.cmf?.toFixed(3)}
               </span>
@@ -735,6 +776,13 @@ export default function TechnicalAnalysisReportDisplay({ report }: TechnicalAnal
           Bars: {report.marketData?.barsAnalyzed}
         </p>
       </div>
+      
+      {/* Indicator Explanation Modal */}
+      <IndicatorExplanationModal
+        isOpen={indicatorModalOpen}
+        onClose={() => setIndicatorModalOpen(false)}
+        section={indicatorSection}
+      />
     </div>
   );
 }

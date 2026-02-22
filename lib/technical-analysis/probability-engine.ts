@@ -2286,12 +2286,16 @@ export function calculatePriceProjections(
   bars: OHLCV[],
   momentum: MomentumAssessment,
   trend: TrendAssessment,
-  volatility: VolatilityAssessment
+  volatility: VolatilityAssessment,
+  timeframe: string = '1day' // Add timeframe parameter for intraday adjustments
 ): PriceProjection {
   const currentPrice = bars[bars.length - 1].close;
   const atr = volatility.current;
   const adxData = calculateADX(bars);
   const adx = adxData.adx[adxData.adx.length - 1] || 0;
+  
+  // Determine if this is intraday analysis
+  const isIntraday = ['1min', '5min', '15min', '1hour'].includes(timeframe);
   
   // Check if we have a weak trend (reduce confidence and shorten horizons)
   const isWeakTrend = trend.primary.strength < 40 || trend.emaAlignment === 'mixed';
@@ -2316,6 +2320,7 @@ export function calculatePriceProjections(
   // ═══════════════════════════════════════════════════════════════
   // RULE 4️⃣: PROJECTION DISCIPLINE
   // High-vol / weak-trend regimes → constrained probabilities & horizons
+  // INTRADAY: Use hour-based timeframes instead of days
   // ═══════════════════════════════════════════════════════════════
   
   // Check if momentum is bearish/bullish and if volatility is high
@@ -2323,12 +2328,29 @@ export function calculatePriceProjections(
   const isBullishMomentum = momentum.score > 10;
   const isHighVol = volatility.regime === 'high' || volatility.regime === 'expanding';
   
-  // Shorten time horizons for weak trends
-  // ADX/structure handled upstream via trendAssessment; here we just compress timing
-  const conservativeDays = isWeakTrend ? 3 : 4;
-  const moderateDays = isWeakTrend ? 5 : 8;
-  // Aggressive days shortened further for weak trends - these are speculative extensions
-  const aggressiveDays = isWeakTrend ? 6 : 15;
+  // Time horizons - DIFFERENT for intraday vs swing
+  // For intraday, we use hours instead of days, and ATR multiples are smaller
+  let conservativeDays: number;
+  let moderateDays: number;
+  let aggressiveDays: number;
+  
+  if (isIntraday) {
+    // Intraday: timeframes in hours (represented as fractions of days for consistency)
+    // These will be converted to "hours" in the output
+    conservativeDays = isWeakTrend ? 0.5 : 1; // 0.5-1 hours
+    moderateDays = isWeakTrend ? 1 : 2;       // 1-2 hours
+    aggressiveDays = isWeakTrend ? 2 : 4;      // 2-4 hours (rarely used)
+  } else {
+    // Swing: traditional day-based horizons
+    conservativeDays = isWeakTrend ? 3 : 4;
+    moderateDays = isWeakTrend ? 5 : 8;
+    aggressiveDays = isWeakTrend ? 6 : 15;
+  }
+  
+  // ATR multipliers - tighter for intraday (smaller moves expected)
+  const atrMultConservative = isIntraday ? 0.5 : 1.0;
+  const atrMultModerate = isIntraday ? 1.0 : 1.5;
+  const atrMultAggressive = isIntraday ? 1.5 : 2.5;
   
   // Base probability caps
   let upsideProbCap = isWeakTrend ? 65 : 85;
@@ -2359,22 +2381,23 @@ export function calculatePriceProjections(
   const probFloor = (isWeakTrend || isHighVol || adx < 35) ? 35 : 25;
   
   // Calculate targets based on ATR multiples with regime-aware probability caps
+  // Use timeframe-appropriate ATR multipliers
   const upside = {
     conservative: {
-      price: Number((currentPrice + atr * 1).toFixed(2)),
-      percent: Number(((atr * 1) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice + atr * atrMultConservative).toFixed(2)),
+      percent: Number(((atr * atrMultConservative) / currentPrice * 100).toFixed(2)),
       probability: roundTo5(Math.min(upsideProbCap, bullishBias + 5)),
       days: conservativeDays
     },
     moderate: {
-      price: Number((currentPrice + atr * 1.5).toFixed(2)),
-      percent: Number(((atr * 1.5) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice + atr * atrMultModerate).toFixed(2)),
+      percent: Number(((atr * atrMultModerate) / currentPrice * 100).toFixed(2)),
       probability: roundTo5(Math.min(upsideProbCap - 10, bullishBias)),
       days: moderateDays
     },
     aggressive: {
-      price: Number((currentPrice + atr * 2.5).toFixed(2)),
-      percent: Number(((atr * 2.5) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice + atr * atrMultAggressive).toFixed(2)),
+      percent: Number(((atr * atrMultAggressive) / currentPrice * 100).toFixed(2)),
       // Aggressive = heavily suppressed in weak regimes
       probability: roundTo5(Math.max(probFloor, Math.min(upsideProbCap - 30, bullishBias - 20))),
       days: aggressiveDays
@@ -2383,20 +2406,20 @@ export function calculatePriceProjections(
   
   const downside = {
     conservative: {
-      price: Number((currentPrice - atr * 1).toFixed(2)),
-      percent: Number(((atr * 1) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice - atr * atrMultConservative).toFixed(2)),
+      percent: Number(((atr * atrMultConservative) / currentPrice * 100).toFixed(2)),
       probability: roundTo5(Math.min(downsideProbCap, bearishBias + 5)),
       days: conservativeDays
     },
     moderate: {
-      price: Number((currentPrice - atr * 1.5).toFixed(2)),
-      percent: Number(((atr * 1.5) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice - atr * atrMultModerate).toFixed(2)),
+      percent: Number(((atr * atrMultModerate) / currentPrice * 100).toFixed(2)),
       probability: roundTo5(Math.min(downsideProbCap - 10, bearishBias)),
       days: moderateDays
     },
     aggressive: {
-      price: Number((currentPrice - atr * 2.5).toFixed(2)),
-      percent: Number(((atr * 2.5) / currentPrice * 100).toFixed(2)),
+      price: Number((currentPrice - atr * atrMultAggressive).toFixed(2)),
+      percent: Number(((atr * atrMultAggressive) / currentPrice * 100).toFixed(2)),
       probability: roundTo5(Math.max(probFloor, Math.min(downsideProbCap - 30, bearishBias - 20))),
       days: aggressiveDays
     }
@@ -2405,37 +2428,50 @@ export function calculatePriceProjections(
   // Most probable scenario
   let mostProbable: PriceProjection['mostProbable'];
   
+  // Helper function to format timeframe string based on intraday vs swing
+  const formatTimeframe = (value: number, isIntra: boolean): string => {
+    if (isIntra) {
+      // Intraday: convert to hours
+      const hours = Math.round(value * 6.5); // Assuming 6.5 trading hours per "day"
+      if (hours <= 1) return '30min - 1 hour';
+      return `${hours}-${hours + 2} hours`;
+    } else {
+      // Swing: use days
+      return `${Math.round(value)}-${Math.round(value) + 3} days`;
+    }
+  };
+  
   // FIXED: For weak trends or neutral momentum, default to sideways
   if (isWeakTrend || isNeutralMomentum) {
     mostProbable = {
       direction: 'sideways',
       priceRange: { 
-        low: currentPrice - atr * 0.75, 
-        high: currentPrice + atr * 0.75 
+        low: currentPrice - atr * (isIntraday ? 0.5 : 0.75), 
+        high: currentPrice + atr * (isIntraday ? 0.5 : 0.75) 
       },
       probability: roundTo5(Math.min(65, 55)), // Lower confidence, capped
-      timeframe: '3-5 days' // Shorter horizon
+      timeframe: isIntraday ? '1-2 hours' : '3-5 days' // Appropriate horizon
     };
   } else if (bullishBias >= 60) {
     mostProbable = {
       direction: 'up',
       priceRange: { low: currentPrice, high: upside.moderate.price },
       probability: roundTo5(Math.min(upsideProbCap, bullishBias)),
-      timeframe: `${moderateDays}-${moderateDays + 3} days`
+      timeframe: formatTimeframe(moderateDays, isIntraday)
     };
   } else if (bearishBias >= 60) {
     mostProbable = {
       direction: 'down',
       priceRange: { low: downside.moderate.price, high: currentPrice },
       probability: roundTo5(Math.min(downsideProbCap, bearishBias)),
-      timeframe: `${moderateDays}-${moderateDays + 3} days`
+      timeframe: formatTimeframe(moderateDays, isIntraday)
     };
   } else {
     mostProbable = {
       direction: 'sideways',
       priceRange: { 
-        low: currentPrice - atr * 0.75, 
-        high: currentPrice + atr * 0.75 
+        low: currentPrice - atr * (isIntraday ? 0.5 : 0.75), 
+        high: currentPrice + atr * (isIntraday ? 0.5 : 0.75) 
       },
       probability: roundTo5(55),
       timeframe: '5-8 days'

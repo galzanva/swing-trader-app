@@ -253,18 +253,28 @@ export function runTechnicalAnalysis(
   const volumes = bars.map(b => b.volume);
   const currentPrice = closes[closes.length - 1];
   
+  // Determine if this is intraday analysis
+  const isIntraday = ['1min', '5min', '15min', '1hour'].includes(timeframe);
+  
   // =====================
   // Calculate all indicators
   // =====================
   
-  // Moving Averages
-  const ema9Array = calculateEMA(closes, 9);
-  const ema20Array = calculateEMA(closes, 20);
-  const ema50Array = calculateEMA(closes, 50);
-  const ema200Array = calculateEMA(closes, 200);
-  const sma20Array = calculateSMA(closes, 20);
-  const sma50Array = calculateSMA(closes, 50);
-  const sma200Array = calculateSMA(closes, 200);
+  // Moving Averages - ADAPTIVE PERIODS based on timeframe
+  // Intraday: Use 8, 13, 21, 50 EMAs (faster, more relevant for day trading)
+  // Swing: Use 9, 20, 50, 200 EMAs (traditional swing trading periods)
+  const fastPeriod = isIntraday ? 8 : 9;
+  const mediumPeriod = isIntraday ? 13 : 20;
+  const slowPeriod = isIntraday ? 21 : 50;
+  const longPeriod = isIntraday ? 50 : 200;  // For intraday, 50 period is the "anchor"
+  
+  const ema9Array = calculateEMA(closes, fastPeriod);
+  const ema20Array = calculateEMA(closes, mediumPeriod);
+  const ema50Array = calculateEMA(closes, slowPeriod);
+  const ema200Array = calculateEMA(closes, Math.min(longPeriod, closes.length)); // Cap at available data
+  const sma20Array = calculateSMA(closes, mediumPeriod);
+  const sma50Array = calculateSMA(closes, slowPeriod);
+  const sma200Array = calculateSMA(closes, Math.min(longPeriod, closes.length));
   
   const ema9 = ema9Array[ema9Array.length - 1] || currentPrice;
   const ema20 = ema20Array[ema20Array.length - 1] || currentPrice;
@@ -422,7 +432,7 @@ export function runTechnicalAnalysis(
   // Projections & Signals
   // =====================
   
-  const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment);
+  const projections = calculatePriceProjections(bars, momentumAssessment, trendAssessment, volatilityAssessment, timeframe);
   
   // FIXED: Pass ADX and volume flow data for proper signal weighting
   const signalStrength = calculateSignalStrength(

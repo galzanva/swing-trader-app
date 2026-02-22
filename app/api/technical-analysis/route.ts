@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     // Parse request body
     const body = await request.json();
-    const { symbol, timeframe = "1day" } = body;
+    const { symbol, timeframe = "1day", aiEvaluate = false } = body;
 
     if (!symbol) {
       return NextResponse.json(
@@ -50,20 +50,64 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`[TechnicalAnalysis] Starting AI-enhanced analysis for ${symbol} on ${timeframe}`);
+    console.log(`[TechnicalAnalysis] Starting analysis for ${symbol} on ${timeframe} (AI: ${aiEvaluate ? 'requested' : 'off'})`);
 
     // 1. Fetch market data
     const polygonClient = new PolygonClient(polygonApiKey);
     const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
 
-    if (marketData.bars.length < 100) {
+    // Minimum bars needed for analysis varies by timeframe
+    // - Daily: 50 bars minimum (allows newer stocks, uses adaptive EMAs)
+    // - Intraday: 30 bars minimum (enough for RSI-14, MACD-26, ADX-14, 21 EMA)
+    // Note: Polygon's free/starter tiers may have limited intraday history
+    const minBarsRequired: Record<string, number> = {
+      '1min': 30,
+      '5min': 30,
+      '15min': 30,
+      '1hour': 30,
+      '1day': 50  // Reduced from 100 to allow newer stocks
+    };
+    const requiredBars = minBarsRequired[timeframe] || 30;
+    
+    // Determine if this is intraday analysis (different trading style)
+    const isIntraday = ['1min', '5min', '15min', '1hour'].includes(timeframe);
+    
+    if (marketData.bars.length < requiredBars) {
+      console.warn(`[TechnicalAnalysis] Insufficient data: got ${marketData.bars.length} bars, need ${requiredBars}`);
+      
+      // Calculate how much trading time is represented
+      const barsPerDay: Record<string, number> = {
+        '1min': 390,
+        '5min': 78,
+        '15min': 26,
+        '1hour': 7,
+        '1day': 1
+      };
+      const tradingDaysAvailable = Math.round(marketData.bars.length / (barsPerDay[timeframe] || 1));
+      const tradingDaysNeeded = Math.ceil(requiredBars / (barsPerDay[timeframe] || 1));
+      
       return NextResponse.json(
-        { error: "Insufficient data for analysis. Need at least 100 bars." },
+        { 
+          error: `Insufficient data for ${timeframe} analysis. Got ${marketData.bars.length} bars (~${tradingDaysAvailable} trading days), need at least ${requiredBars} bars (~${tradingDaysNeeded} trading days).`,
+          details: {
+            barsReceived: marketData.bars.length,
+            barsRequired: requiredBars,
+            timeframe,
+            suggestion: timeframe !== '1day' 
+              ? 'Your Polygon plan may have limited intraday history. Try using the 1day timeframe for more comprehensive analysis.'
+              : 'This stock may be newly listed or have limited trading history.'
+          }
+        },
         { status: 400 }
       );
     }
+    
+    // Log warning if we have limited data for longer-period indicators
+    if (marketData.bars.length < 50) {
+      console.warn(`[TechnicalAnalysis] Limited data (${marketData.bars.length} bars): 50+ period EMAs will use partial data`);
+    }
 
-    console.log(`[TechnicalAnalysis] Fetched ${marketData.bars.length} bars for ${symbol}`);
+    console.log(`[TechnicalAnalysis] Fetched ${marketData.bars.length} bars for ${symbol} (${timeframe})`);
 
     // 2. Convert bars to OHLCV format
     const ohlcv = marketData.bars.map(bar => ({
@@ -86,15 +130,21 @@ export async function POST(request: Request) {
     - Squeeze: ${report.squeeze.isInSqueeze ? `YES (${report.squeeze.squeezeDuration} bars)` : 'NO'}
     `);
 
-    // 4. Run AI-enhanced analysis for intelligent interpretation
+    // 4. Run AI-enhanced analysis ONLY when explicitly requested
     let aiAnalysis: AIAnalysisOutput | null = null;
     let aiSummary = undefined;
     
-    if (openaiApiKey) {
+    if (aiEvaluate) {
+      if (!openaiApiKey) {
+        return NextResponse.json(
+          { error: "OpenAI API key not configured. AI evaluation requires OPENAI_API_KEY." },
+          { status: 500 }
+        );
+      }
+      
       try {
-        console.log(`[TechnicalAnalysis] Running AI-enhanced analysis...`);
+        console.log(`[TechnicalAnalysis] Running AI evaluation (requested by user)...`);
         
-        // Prepare comprehensive input for AI analyst
         const aiInput = prepareAIInput(
           symbol.toUpperCase(),
           timeframe,
@@ -104,14 +154,14 @@ export async function POST(request: Request) {
           report.structureAnalysis,
           report.squeeze,
           report.levels.supportResistance,
-          report.detectedRegime
+          report.detectedRegime,
+          isIntraday
         );
         
-        // Generate AI-driven analysis
-        aiAnalysis = await generateAITechnicalAnalysis(aiInput, openaiApiKey);
+        aiAnalysis = await generateAITechnicalAnalysis(aiInput, openaiApiKey, isIntraday);
         
         if (aiAnalysis && aiAnalysis.signalStrength) {
-          console.log(`[TechnicalAnalysis] AI Analysis complete:
+          console.log(`[TechnicalAnalysis] AI Evaluation complete:
           - AI Signal: ${aiAnalysis.signalStrength?.overall}/100 (${aiAnalysis.signalStrength?.grade})
           - AI Direction: ${aiAnalysis.signalStrength?.direction}
           - AI Strategy: ${aiAnalysis.recommendation?.strategy}
@@ -119,7 +169,6 @@ export async function POST(request: Request) {
           - Headline: ${aiAnalysis.narrative?.headline}
           `);
           
-          // Use AI narrative as the summary
           aiSummary = {
             headline: aiAnalysis.narrative?.headline || "AI Analysis Available",
             technicalOutlook: aiAnalysis.narrative?.technicalOutlook || "Detailed analysis provided below.",
@@ -129,19 +178,15 @@ export async function POST(request: Request) {
             confidenceLevel: aiAnalysis.narrative?.confidenceLevel || "medium"
           };
         } else {
-          console.log(`[TechnicalAnalysis] AI analysis returned incomplete data, using fallback`);
-          aiSummary = generateFallbackSummary(report);
-          aiAnalysis = null; // Reset to null so we don't try to use incomplete data later
+          console.log(`[TechnicalAnalysis] AI evaluation returned incomplete data`);
+          aiAnalysis = null;
         }
       } catch (aiError) {
-        console.error(`[TechnicalAnalysis] AI analysis failed:`, aiError);
-        aiSummary = generateFallbackSummary(report);
+        console.error(`[TechnicalAnalysis] AI evaluation failed:`, aiError);
         aiAnalysis = null;
       }
     } else {
-      // Generate fallback summary without AI
-      console.log(`[TechnicalAnalysis] No OpenAI key - using fallback summary`);
-      aiSummary = generateFallbackSummary(report);
+      console.log(`[TechnicalAnalysis] Pure technical analysis mode (no AI)`);
     }
 
     // 5. Compile final report with AI enhancements
@@ -192,7 +237,7 @@ export async function POST(request: Request) {
         dataAgeDays: marketData.dataAgeDays,
         barsAnalyzed: marketData.bars.length
       },
-      analysisMode: aiAnalysis ? 'ai-enhanced' : 'rule-based'
+      analysisMode: aiAnalysis ? 'ai-enhanced' : 'technical-only'
     };
 
     console.log(`[TechnicalAnalysis] Complete for ${symbol} (mode: ${aiAnalysis ? 'AI-enhanced' : 'rule-based'})`);

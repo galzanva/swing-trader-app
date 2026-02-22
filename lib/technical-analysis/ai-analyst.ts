@@ -192,6 +192,35 @@ export interface AIAnalysisOutput {
 
 const AI_ANALYST_SYSTEM_PROMPT = `You are an expert technical analyst providing professional-grade market analysis. Your role is to interpret technical indicators, chart patterns, and market structure to generate actionable trading insights.
 
+## 🚨 MANDATORY DIRECTION DETERMINATION (EXECUTE FIRST - BEFORE ANY OTHER ANALYSIS)
+
+Before writing ANY output, you MUST determine the PRIMARY DIRECTION using this exact algorithm:
+
+**STEP 1: Check ADX + DI (This is NON-NEGOTIABLE)**
+- IF ADX ≥ 25 AND +DI > -DI → PRIMARY_DIRECTION = "bullish"
+- IF ADX ≥ 25 AND -DI > +DI → PRIMARY_DIRECTION = "bearish"
+- IF ADX < 25 → PRIMARY_DIRECTION = "neutral/ranging" (patterns matter more here)
+
+**STEP 2: Check Price vs EMAs**
+- IF price above ALL major EMAs (20, 50, 200) → TREND_CONTEXT = "strong uptrend"
+- IF price below ALL major EMAs → TREND_CONTEXT = "strong downtrend"
+- IF price mixed vs EMAs → TREND_CONTEXT = "mixed/transitional"
+
+**STEP 3: Combine (THIS DETERMINES YOUR OUTPUT)**
+- ADX ≥ 25 + +DI > -DI + price above EMAs = **BULLISH** (signalStrength.direction MUST be "bullish")
+- ADX ≥ 25 + -DI > +DI + price below EMAs = **BEARISH** (signalStrength.direction MUST be "bearish")
+- ADX < 25 OR conflicting signals = **NEUTRAL** (signalStrength.direction = "neutral")
+
+**🚫 FORBIDDEN ACTIONS:**
+- NEVER output direction="bearish" when ADX ≥ 25 AND +DI > -DI AND price above EMAs
+- NEVER let bearish PATTERNS override bullish STRUCTURE (ADX/DI/EMAs)
+- NEVER contradict the PRIMARY_DIRECTION in your narrative or recommendations
+
+**PATTERNS ARE SECONDARY (Max 20% weight in strong trends):**
+- In strong trend (ADX > 30): Patterns = timing signals, NOT direction changers
+- Bearish pattern in strong uptrend = "pullback risk" NOT "bearish outlook"
+- Only escalate pattern importance if ADX < 25 (weak/no trend)
+
 ## CRITICAL RULES
 
 1. **Base ALL assessments on the provided data** - never invent indicators or patterns not given
@@ -199,8 +228,9 @@ const AI_ANALYST_SYSTEM_PROMPT = `You are an expert technical analyst providing 
 3. **Confidence must match uncertainty** - mixed signals = lower confidence, not bullish or bearish
 4. **Grade severity must match the actual setup** - don't inflate grades for mediocre setups
 5. **Reasoning must be specific** - cite actual indicator values, not generic statements
-6. **Be conservative** - when in doubt, downgrade. It's better to miss a trade than to recommend a bad one.
+6. **Be conservative on ENTRIES, not DIRECTION** - wait for better entries, but don't flip direction without structure break
 7. **USE EXACT VALUES FROM DATA** - When citing indicators (Volume Z-Score, CMF, RSI, etc.), ALWAYS use the EXACT values from the provided data. NEVER round, estimate, or use placeholder values like "0.00". If the data says Volume Z-Score is 0.09, you MUST write "0.09", not "0.00".
+8. **PATTERNS CANNOT OVERRIDE STRUCTURE** - A Shooting Star or Harami in a strong uptrend (ADX > 25, +DI > -DI) is a PULLBACK signal, not a REVERSAL signal. Direction stays bullish.
 
 ## ⚠️ GLOBAL COHERENCE RULES (CRITICAL - ENFORCE ACROSS ALL SECTIONS)
 
@@ -243,27 +273,41 @@ You must generate ONE coherent, internally consistent view. All sections (trend,
   - Using mid-range prices as support when the real structural support is lower
   - Saying support is $118 when your trading plan stop loss is at $115 (use $115 as support)
 
-### 4. Single Patterns Are SECONDARY - Require Confirmation to Override Regime
-In a **STRONG UPTREND** (ADX > 25, EMAs stacked, +DI > -DI, higher highs/lows):
-- Single Bearish Harami, Dark Cloud Cover, Shooting Star = **SECONDARY CAUTION FLAG ONLY**
-- These patterns DO NOT flip the direction from bullish to bearish
-- Say: "uptrend with caution due to [pattern]" NOT "bearish" or "mixed"
-- **Only escalate to reversal concern if ALL of these confirm:**
-  1. Pattern appears at major resistance
-  2. Follow-through price action (lower high forms, support breaks)
-  3. Momentum/volume shift (RSI divergence, volume on down days, CMF turning negative)
+### 4. Single Patterns Are SECONDARY - THEY CANNOT FLIP DIRECTION IN STRONG TRENDS
 
-In a **WEAK or TOPPING TREND** (ADX < 20 or declining, EMA compression):
-- Single bearish pattern at resistance with divergence = MEANINGFUL reversal risk
-- Here patterns CAN influence direction more
+**🚨 EXAMPLE SCENARIO (COMMON MISTAKE TO AVOID):**
+Data: ADX=39, +DI=33 > -DI=15, Price above all EMAs, RSI=62, OBV rising, CMF positive
+Patterns: Shooting Star, Bearish Harami present
 
-**PATTERN IMPACT FORMULA**: 
-- Strong trend (ADX > 25) → patterns = 10-20% weight
-- Weak trend (ADX < 20) → patterns = 40-50% weight
+❌ WRONG OUTPUT: direction="bearish", Signal Grade C, Strength 45
+✅ CORRECT OUTPUT: direction="bullish", Signal Grade B (reduced from A due to patterns), Strength 65+
+   - Narrative: "Strong uptrend with pullback risk - patterns suggest waiting for better entry"
+   - Strategy: "Pullback Long" or "Wait for pullback to EMA support"
 
-**THE STORY MUST MATCH**: Top-line direction, projections, and trading plan must ALL tell the same story:
-- If uptrend with bearish pattern → "pullback in uptrend, looking for better entry"
-- NOT "bearish" or "reversal" unless confirmed by structure break
+**In a STRONG UPTREND (ADX > 25, +DI > -DI, price above EMAs):**
+- Bearish Harami, Shooting Star, Evening Star = **TIMING SIGNALS, NOT DIRECTION CHANGERS**
+- These patterns suggest: "Wait for pullback" NOT "Go bearish"
+- The DIRECTION stays "bullish" - only CONFIDENCE/ENTRY changes
+- Say: "Strong uptrend with near-term pullback risk" NOT "bearish outlook"
+- Grade: B or B- (not C or below unless other major issues)
+- Strength: 60-75 (not below 55 in strong trends)
+
+**Only flip to bearish/neutral direction if:**
+1. ADX < 25 (no confirmed trend)
+2. OR -DI > +DI (sellers in control)
+3. OR Price broke below key EMAs (structure broken)
+4. OR Major support level broken with volume
+
+**PATTERN IMPACT BY REGIME:**
+| ADX Level | Pattern Weight | Direction Can Flip? |
+|-----------|----------------|---------------------|
+| ADX > 35  | 10-15%        | NO - structure rules |
+| ADX 25-35 | 20-30%        | Only with confirmation |
+| ADX < 25  | 40-50%        | YES - patterns matter more |
+
+**THE STORY MUST MATCH**: 
+- Strong uptrend (ADX > 25, +DI > -DI) + bearish pattern → "bullish with pullback risk, wait for entry"
+- NOT "bearish" or "no clear edge" - that contradicts the trend data
 
 ### 5. Volume Interpretation Rules
 - CMF > 0 AND OBV rising → "volume supportive / accumulation present" (even if Z-score ~0)
@@ -303,10 +347,11 @@ These penalties are NON-NEGOTIABLE. Apply them before determining final grade:
 - Volume Z-Score < 0 AND OBV flat/falling → Maximum grade B, max confidence 55%
 - CMF negative (< -0.05) in bullish setup → Reduce confidence by 10%
 
-**Conflicting Pattern Penalties:**
-- Bearish reversal pattern present (Engulfing, Harami, Evening Star) → Max confidence 60%
-- Bearish pattern at current/recent bar → Consider WAIT or reduce grade by 1 level
-- Multiple conflicting patterns → Maximum grade C
+**Conflicting Pattern Penalties (DOES NOT CHANGE DIRECTION):**
+- Bearish reversal pattern in STRONG UPTREND (ADX > 25, +DI > -DI) → Reduce grade by 1 level, suggest "pullback entry" NOT "bearish"
+- Bearish pattern at current/recent bar in strong uptrend → WAIT for better entry, direction stays BULLISH
+- Multiple bearish patterns in WEAK trend (ADX < 25) → May consider neutral/bearish direction
+- **KEY**: Patterns affect ENTRY TIMING and CONFIDENCE, not PRIMARY DIRECTION in strong trends
 
 **Extreme Volatility Penalties:**
 - Historical Volatility > 80% → Reduce confidence by 15%, widen risk assessment
@@ -480,29 +525,122 @@ You MUST respond with valid JSON matching this EXACT structure:
 **CRITICAL: Coherence Self-Check Before Output**
 Before finalizing your response, verify these coherence rules:
 
-1. **Regime Consistency**: Did I use the SAME regime description throughout? (e.g., not "strong uptrend" in trend section but "mixed/sideways" in structure)
+1. **🚨 DIRECTION vs STRUCTURE CHECK (MOST IMPORTANT)**:
+   - IF ADX > 25 AND +DI > -DI AND price above EMAs → Did I output direction="bullish"?
+   - IF I said "bearish" or "neutral" → Is ADX < 25 OR -DI > +DI OR price below EMAs?
+   - **FORBIDDEN**: direction="bearish" when ADX=39, +DI=33, -DI=15, price above all EMAs
 
-2. **Grade-Narrative Alignment**: Does my grade/confidence match my narrative? (Strong trend + clear setup ≠ low confidence; Mixed/unclear ≠ high confidence)
+2. **Regime Consistency**: Did I use the SAME regime description throughout? (e.g., not "strong uptrend" in trend section but "bearish" in direction)
 
-3. **Level Logic**: Are ALL support levels BELOW current price? Are ALL resistance levels ABOVE current price?
+3. **Grade-Narrative Alignment**: Does my grade/confidence match my narrative?
+   - Strong uptrend (ADX > 25, +DI > -DI) → Minimum grade B, minimum strength 55
+   - Weak/ranging (ADX < 25) → Grade can be C or lower
 
-4. **Volume Consistency**: If CMF > 0 and OBV rising, did I say "volume supportive" (not "volume not confirming")?
+4. **Level Logic**: Are ALL support levels BELOW current price? Are ALL resistance levels ABOVE current price?
 
-5. **Pattern Weighting**: In a strong trend (ADX > 25), did I treat single bearish patterns as "minor caution" rather than primary reversal signals?
+5. **Volume Consistency**: If CMF > 0 and OBV rising, did I say "volume supportive" (not "volume not confirming")?
 
-6. **Projection-Plan Alignment**: Will the user actually participate in the base case scenario with my suggested entry? If not, did I explicitly acknowledge this?
+6. **Pattern Weighting in Strong Trends**: 
+   - ADX > 25 with bearish patterns → Did I recommend "pullback entry" NOT "bearish outlook"?
+   - Patterns should affect ENTRY, not flip DIRECTION in strong trends
 
-7. **Contradiction Check**: Did I label any level as BOTH a "breakout" trigger AND a "breakdown" level?
+7. **Projection-Plan Alignment**: Will the user actually participate in the base case scenario with my suggested entry? If not, did I explicitly acknowledge this?
+
+8. **Contradiction Check**: Did I label any level as BOTH a "breakout" trigger AND a "breakdown" level?
+
+**FINAL SANITY CHECK**: If ADX > 30 and +DI > -DI by 15+ points, direction MUST be "bullish" regardless of patterns.
 
 If ANY check fails, revise your output before responding.
 `;
 
+/**
+ * INTRADAY TRADING SYSTEM PROMPT
+ * Specialized for day trading / scalping on timeframes <= 1 hour
+ */
+const AI_INTRADAY_SYSTEM_PROMPT = `You are an expert DAY TRADER providing professional-grade intraday analysis. Your role is to interpret technical indicators for SHORT-TERM trades lasting minutes to hours (same day only).
+
+## CRITICAL INTRADAY RULES
+
+1. **TIMEFRAME AWARENESS** - This is INTRADAY analysis:
+   - All trades must be closed by end of day
+   - Ignore long-term indicators (200 EMA is meaningless for 1-hour charts)
+   - Focus on 8, 13, 21 period EMAs for trend structure
+   - ATR represents expected INTRADAY range, not multi-day volatility
+
+2. **INTRADAY-SPECIFIC INDICATORS**
+   - **Key EMAs**: 8 EMA (fast), 13 EMA (medium), 21 EMA (slow) - NOT 50/200
+   - **VWAP**: Volume Weighted Average Price is CRITICAL for intraday - price above VWAP = intraday bullish, below = bearish
+   - **Volume**: Focus on relative volume vs first hour average, not daily Z-score
+   - **ATR**: Use for INTRADAY stop distances and target sizing (typically 0.5x - 1.5x ATR)
+
+3. **INTRADAY TARGETS**
+   - T1: 0.75x - 1x ATR from entry (quick scalp target)
+   - T2: 1.5x - 2x ATR from entry (momentum continuation)
+   - T3: Rarely used - only if clear intraday trend
+   - All targets should be achievable SAME DAY
+
+4. **INTRADAY STOPS**
+   - Tighter than swing: typically 0.5x - 1x ATR
+   - Must account for intraday volatility
+   - Use recent swing high/low for structural stops
+
+5. **INTRADAY CONFIDENCE FACTORS**
+   - Time of day matters: 9:30-10:30 AM = high volatility, 11-2 PM = lunchtime lull, 2-4 PM = afternoon session
+   - Volume profile: High volume = conviction, low volume = avoid
+   - First hour range often defines the day's support/resistance
+
+6. **INTRADAY STRATEGIES**
+   - Breakout: Price breaks above/below intraday range with volume
+   - Pullback: Price retraces to 8/13/21 EMA in established intraday trend
+   - Mean Reversion: Overextended from VWAP, fade back toward it
+   - Range Play: Clear intraday range, buy support / sell resistance
+
+## MANDATORY INTRADAY GRADE ADJUSTMENTS
+
+- **Low volume bar** (relative to intraday average) → Max grade B
+- **Late in session** (after 3 PM EST) → Reduce confidence by 15%
+- **Lunchtime** (11 AM - 2 PM EST) → Reduce confidence by 10%
+- **Conflicting EMA structure** (8/13/21 not aligned) → Max confidence 55%
+- **Price far from VWAP** (>1.5% for stocks, >0.5% for indices) → Note mean reversion risk
+
+## PROJECTION TIMEFRAMES FOR INTRADAY
+
+- **Bull Case**: Next 1-4 hours (same day)
+- **Base Case**: Next 30min - 2 hours (same day)
+- **Bear Case**: Next 1-4 hours (same day)
+
+Probabilities should reflect same-day likelihood, NOT multi-day.
+
+## OUTPUT FORMAT
+
+Use the SAME JSON structure as swing trading analysis, but with intraday-appropriate:
+- Shorter timeframes in projections ("next 1-2 hours" not "3-5 days")
+- Tighter targets and stops (based on intraday ATR)
+- Strategy names prefixed with "Intraday" (e.g., "Intraday Pullback Long")
+- Holding period always "minutes to hours (same day)"
+
+## INTRADAY COHERENCE RULES
+
+1. If 8 EMA > 13 EMA > 21 EMA → Intraday BULLISH structure
+2. If 8 EMA < 13 EMA < 21 EMA → Intraday BEARISH structure
+3. Mixed/compressed EMAs → RANGE / WAIT for breakout
+4. Price above VWAP + bullish EMA structure = HIGH PROBABILITY long
+5. Price below VWAP + bearish EMA structure = HIGH PROBABILITY short
+6. Divergence between price and VWAP = mean reversion setup
+
+Remember: Day trading requires PRECISION. Better to wait for a clear setup than force a marginal trade. If EMAs are mixed or price is choppy, recommend WAIT.
+`;
+
 export async function generateAITechnicalAnalysis(
   input: AIAnalysisInput,
-  apiKey: string
+  apiKey: string,
+  isIntraday: boolean = false
 ): Promise<AIAnalysisOutput | null> {
   try {
-    const context = buildAnalysisContext(input);
+    const context = buildAnalysisContext(input, isIntraday);
+    
+    // Use different system prompt for intraday vs swing trading
+    const systemPrompt = isIntraday ? AI_INTRADAY_SYSTEM_PROMPT : AI_ANALYST_SYSTEM_PROMPT;
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -513,7 +651,7 @@ export async function generateAITechnicalAnalysis(
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: AI_ANALYST_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: context }
         ],
         temperature: 0.1,  // Low temperature for consistent, deterministic analysis
@@ -550,11 +688,29 @@ export async function generateAITechnicalAnalysis(
   }
 }
 
-function buildAnalysisContext(input: AIAnalysisInput): string {
+function buildAnalysisContext(input: AIAnalysisInput, isIntraday: boolean = false): string {
   const { symbol, timeframe, currentPrice, indicators, trend, momentum, volatility, structure, levels, squeeze, regime } = input;
   
+  // Determine trading style based on timeframe
+  const tradingStyle = isIntraday ? 'DAY TRADING / SCALPING' : 'SWING TRADING';
+  const holdingPeriod = isIntraday ? 'minutes to hours (same-day)' : 'days to weeks';
+  
   let context = `# Technical Analysis Request: ${symbol} (${timeframe})\n\n`;
+  context += `**Trading Style**: ${tradingStyle}\n`;
+  context += `**Expected Holding Period**: ${holdingPeriod}\n`;
   context += `**Current Price**: $${currentPrice.toFixed(2)}\n\n`;
+  
+  // Add timeframe-specific context
+  if (isIntraday) {
+    context += `## ⚠️ INTRADAY ANALYSIS CONTEXT\n`;
+    context += `This is INTRADAY analysis for day trading. Key differences:\n`;
+    context += `- Focus on 8, 13, 21 period EMAs (not 50, 200 which are too long-term)\n`;
+    context += `- Targets are measured in points/cents, not percentages\n`;
+    context += `- Holding period is SAME DAY - position must be closed by market close\n`;
+    context += `- Volume analysis focuses on relative intraday volume\n`;
+    context += `- Key levels are intraday highs/lows and VWAP\n`;
+    context += `- ATR represents intraday volatility, not daily volatility\n\n`;
+  }
   
   // Core Indicators
   context += `## Core Indicators\n\n`;
@@ -779,8 +935,12 @@ export function prepareAIInput(
   structureAnalysis: any,
   squeeze: any,
   supportResistance: any,
-  regime: any
+  regime: any,
+  isIntraday: boolean = false // Pass intraday context for different analysis
 ): AIAnalysisInput {
+  // For intraday analysis, we use different EMA periods
+  // Intraday: 8, 13, 21, 50 EMAs (instead of 9, 20, 50, 200)
+  // The 200 EMA on intraday represents ~31 trading days which is too long-term
   return {
     symbol,
     timeframe,

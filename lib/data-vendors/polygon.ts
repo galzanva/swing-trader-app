@@ -255,7 +255,7 @@ export class PolygonClient {
   async getAggregates(
     symbol: string,
     timeframe: "1min" | "5min" | "15min" | "1hour" | "1day" = "1day",
-    limit: number = 500 // Increased for daily data
+    limit?: number // Will be set based on timeframe if not provided
   ): Promise<MarketData> {
     try {
       // Calculate date range - get data up to today
@@ -264,24 +264,45 @@ export class PolygonClient {
       const to = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const from = new Date(to);
       
-      // Adjust date range based on timeframe
+      // Calculate appropriate limits and date ranges for each timeframe
+      // We need at least 200+ bars for reliable technical analysis (indicators need history)
+      // Market hours: ~6.5 hours/day = 390 minutes = 78 5-min bars = 26 15-min bars = 6.5 hourly bars
+      let effectiveLimit = limit;
+      
       switch (timeframe) {
         case "1min":
-          from.setUTCDate(from.getUTCDate() - 7);
+          // 1-min: 390 bars/day, need ~200 bars = 1 day minimum
+          // Request 5 days to be safe (includes weekends/holidays in range)
+          from.setUTCDate(from.getUTCDate() - 10);
+          effectiveLimit = limit ?? 1000; // ~2.5 trading days worth
           break;
         case "5min":
-          from.setUTCDate(from.getUTCDate() - 21);
+          // 5-min: 78 bars/day, need ~200 bars = 3 days minimum  
+          // Request 14 days to be safe
+          from.setUTCDate(from.getUTCDate() - 30);
+          effectiveLimit = limit ?? 1000; // ~12 trading days worth
           break;
         case "15min":
+          // 15-min: 26 bars/day, need ~200 bars = 8 days minimum
+          // Request 30 days to be safe
           from.setUTCDate(from.getUTCDate() - 60);
+          effectiveLimit = limit ?? 1000; // ~38 trading days worth
           break;
         case "1hour":
-          from.setUTCDate(from.getUTCDate() - 120);
+          // 1-hour: 6.5 bars/day, need ~200 bars = 31 days minimum
+          // Request 90 days to be safe
+          from.setUTCDate(from.getUTCDate() - 180);
+          effectiveLimit = limit ?? 1000; // ~154 trading days worth
           break;
         case "1day":
-          from.setUTCFullYear(from.getUTCFullYear() - 2); // 2 years of daily data
+          // Daily: 1 bar/day, need ~200 bars = 200 trading days (~10 months)
+          // Request 2 years to include full history
+          from.setUTCFullYear(from.getUTCFullYear() - 2);
+          effectiveLimit = limit ?? 500; // ~2 years of trading days
           break;
       }
+      
+      console.log(`[Polygon] Timeframe ${timeframe}: requesting ${effectiveLimit} bars from ${Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24))} days`);
 
       const fromStr = from.toISOString().split("T")[0];
       const toStr = to.toISOString().split("T")[0];
@@ -301,7 +322,7 @@ export class PolygonClient {
       // This ensures we always get the latest data even for newer stocks
       const url = `${this.baseUrl}/v2/aggs/ticker/${symbol.toUpperCase()}/range/${
         timeframeMap[timeframe]
-      }/${fromStr}/${toStr}?adjusted=true&sort=desc&limit=${limit}&apiKey=${this.apiKey}`;
+      }/${fromStr}/${toStr}?adjusted=true&sort=desc&limit=${effectiveLimit}&apiKey=${this.apiKey}`;
 
       console.log(`[Polygon] Request URL: ${url.replace(this.apiKey, 'API_KEY_HIDDEN')}`);
       
