@@ -1,16 +1,16 @@
 /**
- * LLM Analyzer - AI-powered analysis generation using OpenAI GPT-4o-mini
+ * LLM Analyzer - AI-powered analysis generation using the configured LLM provider
  */
 
-export class LLMAnalyzer {
-  private apiKey: string;
+import { callLLM } from './client';
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
+export class LLMAnalyzer {
+  constructor(_apiKey?: string) {
+    // API key now resolved from env via lib/llm/config.ts
   }
 
   /**
-   * Generate composite analysis with OpenAI GPT-4o-mini
+   * Generate composite analysis with the configured LLM
    */
   async generateCompositeAnalysis(
     symbol: string,
@@ -52,19 +52,11 @@ export class LLMAnalyzer {
         displayScore  // Pass the display score
       );
 
-      // Call OpenAI API
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert swing trading mentor with expertise in technical analysis and fundamentals. Provide concise, actionable analysis focused on:
+      const result = await callLLM({
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert swing trading mentor with expertise in technical analysis and fundamentals. Provide concise, actionable analysis focused on:
 1. WHY the setup is tradeable (or not) - analyze market structure, not just criteria
 2. SPECIFIC entry tactics and risk management
 3. KEY factors traders should watch
@@ -109,30 +101,23 @@ RATING_ADJUSTMENT: [new_score]/100 [new_rating] - [one sentence reason]
 If you use the structured format above correctly, this line is optional but recommended for validation.
 
 Be direct and practical. Avoid repeating obvious criteria. Focus on insights a trader can act on.`
-            },
-            {
-              role: 'user',
-              content: context
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 800,
-        }),
+          },
+          {
+            role: 'user',
+            content: context
+          }
+        ],
+        temperature: 0.7,
+        maxTokens: 800,
       });
 
-      if (!response.ok) {
-        console.error('[LLM] OpenAI API error:', response.statusText);
-        return this.generateFallbackAnalysis(symbol, timeframe, indicators, compositePattern, score, squeezeAnalysis);
-      }
-
-      const data = await response.json();
-      const analysis = data.choices[0].message.content;
+      const analysis = result.content;
 
       // Parse LLM response
       return this.parseAnalysisResponse(analysis, indicators, squeezeAnalysis, score, compositePattern);
       
-    } catch (error) {
-      console.error('[LLM] Error generating analysis:', error);
+    } catch (error: any) {
+      console.error('[LLM] Error generating analysis:', error?.message ?? error);
       return this.generateFallbackAnalysis(symbol, timeframe, indicators, compositePattern, score, squeezeAnalysis);
     }
   }
@@ -455,19 +440,11 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
         squeezeAnalysis
       );
 
-      // Call OpenAI API
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert swing trading mentor providing UNIFIED, SCORE-DRIVEN analysis. Your job is to synthesize ALL data into actionable guidance.
+      const result = await callLLM({
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert swing trading mentor providing UNIFIED, SCORE-DRIVEN analysis. Your job is to synthesize ALL data into actionable guidance.
 
 **CRITICAL: You will receive a COMBINED SQUEEZE SCORE (0-100) that fuses:**
 - Short Float pressure (days to cover, % of float, short volume)
@@ -513,30 +490,23 @@ Be direct and practical. Avoid repeating obvious criteria. Focus on insights a t
 5. **Provide score-specific tactics** - entry timing, stop placement, position size ALL change with squeeze score
 
 Be direct, analytical, and DYNAMICALLY RESPONSIVE to the unified squeeze score. This score is your PRIMARY conviction driver.`
-            },
-            {
-              role: 'user',
-              content: context
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 1000,
-        }),
+          },
+          {
+            role: 'user',
+            content: context
+          }
+        ],
+        temperature: 0.7,
+        maxTokens: 1000,
       });
 
-      if (!response.ok) {
-        console.error('[LLM] OpenAI API error:', response.statusText);
-        return this.generateFallbackStrategyAnalysis(evaluation, squeezeAnalysis);
-      }
-
-      const data = await response.json();
-      const analysis = data.choices[0].message.content;
+      const analysis = result.content;
 
       // Parse response
       return this.parseStrategyAnalysisResponse(analysis, evaluation, squeezeAnalysis);
       
-    } catch (error) {
-      console.error('[LLM] Error generating strategy analysis:', error);
+    } catch (error: any) {
+      console.error('[LLM] Error generating strategy analysis:', error?.message ?? error);
       return this.generateFallbackStrategyAnalysis(evaluation, squeezeAnalysis);
     }
   }

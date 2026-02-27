@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
+import { callLLM } from '@/lib/llm/client';
+import { isLLMConfigured } from '@/lib/llm/config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,11 +22,10 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = session.user.id;
-    const openaiApiKey = process.env.OPENAI_API_KEY;
 
-    if (!openaiApiKey) {
+    if (!isLLMConfigured()) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'LLM API key not configured' },
         { status: 500 }
       );
     }
@@ -65,19 +66,11 @@ export async function POST(request: NextRequest) {
     // Analyze patterns in winning vs losing trades
     const context = buildAnalysisContext(trades, winningTrades, losingTrades, repeatableSetups, earlyExits);
 
-    // Call OpenAI for pattern analysis
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert trading analyst specializing in identifying patterns and improving trading strategies. 
+    const result = await callLLM({
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert trading analyst specializing in identifying patterns and improving trading strategies. 
 Your goal is to analyze a trader's journal and find:
 1. **Repeated Profitable Setups** - Identify setups that have worked multiple times
 2. **Early Exit Issues** - Flag trades where the user exited too early and left gains on the table
@@ -108,27 +101,17 @@ Format your response in clear sections:
 - **❌ Key Patterns in Losers**
 - **📊 Market Context Insights**
 - **💡 Actionable Recommendations** (with confidence levels: High/Medium/Low)`
-          },
-          {
-            role: 'user',
-            content: context
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1200,
-      }),
+        },
+        {
+          role: 'user',
+          content: context
+        }
+      ],
+      temperature: 0.7,
+      maxTokens: 1200,
     });
 
-    if (!response.ok) {
-      console.error('[Journal Analysis] OpenAI API error:', response.statusText);
-      return NextResponse.json(
-        { error: 'Failed to generate AI analysis' },
-        { status: 500 }
-      );
-    }
-
-    const data = await response.json();
-    const analysis = data.choices[0].message.content;
+    const analysis = result.content;
 
     console.log(`[Journal Analysis] Generated AI analysis successfully`);
 

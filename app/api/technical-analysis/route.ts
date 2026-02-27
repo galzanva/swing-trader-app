@@ -4,10 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { PolygonClient } from "@/lib/data-vendors/polygon";
 import { runTechnicalAnalysis, generateAISummaryPrompt, TechnicalAnalysisReport } from "@/lib/technical-analysis";
 import { generateAITechnicalAnalysis, prepareAIInput, AIAnalysisOutput } from "@/lib/technical-analysis/ai-analyst";
+import { isLLMConfigured, getModelDisplayName } from "@/lib/llm/config";
 
 /**
  * Technical Analysis API - AI-Enhanced Technical Analysis
- * Uses GPT-4o-mini for intelligent interpretation of technical data
+ * Uses the configured LLM for intelligent interpretation of technical data
  * Provides reasoning-backed signal grades, projections, and recommendations
  */
 
@@ -39,9 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for API keys
     const polygonApiKey = process.env.POLYGON_API_KEY;
-    const openaiApiKey = process.env.OPENAI_API_KEY;
 
     if (!polygonApiKey) {
       return NextResponse.json(
@@ -135,9 +134,9 @@ export async function POST(request: Request) {
     let aiSummary = undefined;
     
     if (aiEvaluate) {
-      if (!openaiApiKey) {
+      if (!isLLMConfigured()) {
         return NextResponse.json(
-          { error: "OpenAI API key not configured. AI evaluation requires OPENAI_API_KEY." },
+          { error: "LLM API key not configured. AI evaluation requires an API key for the configured provider." },
           { status: 500 }
         );
       }
@@ -158,7 +157,7 @@ export async function POST(request: Request) {
           isIntraday
         );
         
-        aiAnalysis = await generateAITechnicalAnalysis(aiInput, openaiApiKey, isIntraday);
+        aiAnalysis = await generateAITechnicalAnalysis(aiInput, undefined, isIntraday);
         
         if (aiAnalysis && aiAnalysis.signalStrength) {
           console.log(`[TechnicalAnalysis] AI Evaluation complete:
@@ -237,7 +236,8 @@ export async function POST(request: Request) {
         dataAgeDays: marketData.dataAgeDays,
         barsAnalyzed: marketData.bars.length
       },
-      analysisMode: aiAnalysis ? 'ai-enhanced' : 'technical-only'
+      analysisMode: aiAnalysis ? 'ai-enhanced' : 'technical-only',
+      aiModel: aiAnalysis ? getModelDisplayName() : undefined,
     };
 
     console.log(`[TechnicalAnalysis] Complete for ${symbol} (mode: ${aiAnalysis ? 'AI-enhanced' : 'rule-based'})`);

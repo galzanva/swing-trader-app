@@ -1,9 +1,11 @@
 /**
  * AI Technical Analyst
  * 
- * Replaces hardcoded scoring, projections, and recommendations with
- * GPT-4o-mini analysis that understands market context and provides reasoning.
+ * Uses the configured LLM (via lib/llm) to provide market analysis
+ * with context-aware reasoning.
  */
+
+import { callLLM } from '@/lib/llm/client';
 
 export interface AIAnalysisInput {
   symbol: string;
@@ -633,49 +635,31 @@ Remember: Day trading requires PRECISION. Better to wait for a clear setup than 
 
 export async function generateAITechnicalAnalysis(
   input: AIAnalysisInput,
-  apiKey: string,
+  _apiKey?: string,
   isIntraday: boolean = false
 ): Promise<AIAnalysisOutput | null> {
   try {
     const context = buildAnalysisContext(input, isIntraday);
-    
-    // Use different system prompt for intraday vs swing trading
     const systemPrompt = isIntraday ? AI_INTRADAY_SYSTEM_PROMPT : AI_ANALYST_SYSTEM_PROMPT;
     
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: context }
-        ],
-        temperature: 0.1,  // Low temperature for consistent, deterministic analysis
-        max_tokens: 2500,
-        response_format: { type: 'json_object' }
-      }),
+    const result = await callLLM({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: context }
+      ],
+      temperature: 0.1,
+      maxTokens: 2500,
+      jsonMode: true,
     });
 
-    if (!response.ok) {
-      console.error('[AI Analyst] API error:', response.statusText);
-      return null;
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-    
-    if (!content) {
+    if (!result.content) {
       console.error('[AI Analyst] No content in response');
       return null;
     }
 
     try {
-      const parsed = JSON.parse(content) as AIAnalysisOutput;
-      console.log('[AI Analyst] Successfully generated analysis');
+      const parsed = JSON.parse(result.content) as AIAnalysisOutput;
+      console.log(`[AI Analyst] Successfully generated analysis via ${result.provider}/${result.model}`);
       return parsed;
     } catch (parseError) {
       console.error('[AI Analyst] JSON Parse Error:', parseError);

@@ -70,6 +70,7 @@ interface StrategyAnalysisReport {
     forTrade?: string[];
     againstTrade?: string[];
     aiGenerated?: boolean;
+    aiModel?: string;
   };
   squeezeAnalysis?: {
     shortSqueeze: {
@@ -521,7 +522,7 @@ export default function StrategyAnalysisReportDisplay({ report }: StrategyAnalys
           <h3 className="text-xl font-semibold text-white">🤖 AI Mentor Analysis</h3>
           {report.mentor.aiGenerated && (
             <span className="px-3 py-1 bg-purple-500/20 border border-purple-500/30 rounded-full text-xs font-medium text-purple-300">
-              GPT-4o-mini Powered
+              {report.mentor.aiModel || 'AI'} Powered
             </span>
           )}
         </div>

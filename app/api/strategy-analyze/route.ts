@@ -13,6 +13,7 @@ import { generateFullMentorOutput, generateMarkdownReport } from '@/lib/strategi
 import { evaluateAllStrategiesWithUser } from '@/lib/strategy-builder/orchestrator-integration';
 import { analyzeCombinedSqueeze } from '@/lib/indicators/squeeze';
 import { LLMAnalyzer } from '@/lib/llm/analyzer';
+import { isLLMConfigured, getModelDisplayName } from '@/lib/llm/config';
 
 export async function POST(request: Request) {
   try {
@@ -130,13 +131,12 @@ export async function POST(request: Request) {
     console.log(`[Strategy Analyze] Evaluated strategies: ${evaluation.strategy} - ${evaluation.status}`);
 
     // 6. Generate AI-powered mentor analysis (if OpenAI key available)
-    const openaiApiKey = process.env.OPENAI_API_KEY;
     let aiAnalysis;
     let mentorOutput;
     
-    if (openaiApiKey && (evaluation.status === 'ready' || evaluation.status === 'candidate')) {
+    if (isLLMConfigured() && (evaluation.status === 'ready' || evaluation.status === 'candidate')) {
       try {
-        const llmAnalyzer = new LLMAnalyzer(openaiApiKey);
+        const llmAnalyzer = new LLMAnalyzer();
         aiAnalysis = await llmAnalyzer.generateStrategyAnalysis(
           symbol,
           evaluation,
@@ -170,11 +170,12 @@ export async function POST(request: Request) {
       
       // AI Analysis (if available) or fallback to template
       mentor: aiAnalysis ? {
-        systemMessage: 'AI-powered analysis using GPT-4o-mini',
+        systemMessage: `AI-powered analysis using ${getModelDisplayName()}`,
         explanation: aiAnalysis.mentorNotes,
         forTrade: aiAnalysis.forTrade,
         againstTrade: aiAnalysis.againstTrade,
         aiGenerated: true,
+        aiModel: getModelDisplayName(),
       } : {
         systemMessage: mentorOutput!.systemMessage,
         explanation: mentorOutput!.explanation,

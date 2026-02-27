@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { parseStrategyFromText } from '@/lib/strategy-builder/parser';
 import { parseStrategyWithLLM } from '@/lib/strategy-builder/llm-parser';
+import { isLLMConfigured } from '@/lib/llm/config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,12 +31,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try LLM parser first (if OpenAI key available)
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    
-    if (openaiApiKey) {
+    if (isLLMConfigured()) {
       console.log('[Strategy Parser] Using LLM parser');
-      const llmResult = await parseStrategyWithLLM(text, openaiApiKey);
+      const llmResult = await parseStrategyWithLLM(text);
       
       if (llmResult.success) {
         console.log('[Strategy Parser] LLM parsing succeeded!');
@@ -45,7 +43,7 @@ export async function POST(request: NextRequest) {
       console.warn('[Strategy Parser] LLM parsing failed:', llmResult.errors);
       console.warn('[Strategy Parser] Falling back to deterministic parser');
     } else {
-      console.log('[Strategy Parser] No OpenAI key found, using deterministic parser');
+      console.log('[Strategy Parser] No LLM API key found, using deterministic parser');
     }
 
     // Fallback to deterministic parser

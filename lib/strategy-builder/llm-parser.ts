@@ -1,10 +1,11 @@
 /**
  * LLM-Powered Strategy Parser
  * 
- * Uses OpenAI to convert plain-English strategy descriptions into structured DSL JSON
+ * Uses the configured LLM to convert plain-English strategy descriptions
+ * into structured DSL JSON.
  */
 
-import OpenAI from 'openai';
+import { callLLM } from '@/lib/llm/client';
 import { createDefaultStrategyDsl, validateStrategyDsl, type StrategyDsl } from './dsl-schema';
 
 const SYSTEM_PROMPT = `You are an expert trading strategy parser. Convert plain-English strategy descriptions into structured JSON following this comprehensive schema:
@@ -222,7 +223,7 @@ Output:
 
 export async function parseStrategyWithLLM(
   text: string,
-  openaiApiKey: string
+  _openaiApiKey?: string
 ): Promise<{
   success: boolean;
   dsl?: StrategyDsl;
@@ -231,24 +232,21 @@ export async function parseStrategyWithLLM(
   warnings?: string[];
 }> {
   try {
-    const openai = new OpenAI({ apiKey: openaiApiKey });
-
-    console.log('[LLM Parser] Sending strategy to GPT for parsing...');
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    console.log('[LLM Parser] Sending strategy to LLM for parsing...');
+    const result = await callLLM({
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Parse this strategy:\n\n${text}` },
       ],
-      response_format: { type: 'json_object' },
+      jsonMode: true,
       temperature: 0.1,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = result.content;
     if (!content) {
       return {
         success: false,
-        errors: ['No response from OpenAI'],
+        errors: ['No response from LLM'],
       };
     }
 
@@ -317,19 +315,12 @@ export async function parseStrategyWithLLM(
       warnings: validation.warnings,
     };
   } catch (error: any) {
-    console.error('[LLM Parser] Exception during parsing:', error);
-    console.error('[LLM Parser] Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      response: error.response?.data,
-    });
+    console.error('[LLM Parser] Exception during parsing:', error?.message ?? error);
     
-    // Provide user-friendly error message
     let errorMessage = 'Failed to parse strategy';
-    if (error.message?.includes('API key')) {
-      errorMessage = 'OpenAI API configuration error - please contact support';
-    } else if (error.message?.includes('rate limit')) {
+    if (error.message?.includes('API key') || error.message?.includes('not configured')) {
+      errorMessage = 'LLM API configuration error - please check your API key settings';
+    } else if (error.message?.includes('rate limit') || error.message?.includes('429')) {
       errorMessage = 'Too many requests - please wait a moment and try again';
     } else if (error.message) {
       errorMessage = `Parsing error: ${error.message}`;

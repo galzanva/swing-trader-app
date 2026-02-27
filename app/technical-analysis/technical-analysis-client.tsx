@@ -1158,7 +1158,7 @@ export default function TechnicalAnalysisClient() {
                 <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                   <span className="text-xl">🤖</span> AI Evaluation
                   <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
-                    GPT-4o-mini
+                    {(report as any).aiModel || 'AI'}
                   </span>
                 </h3>
                 

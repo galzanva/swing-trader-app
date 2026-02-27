@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { applyFollowUpAnswer } from '@/lib/strategy-builder/parser';
 import { applyFollowUpAnswerLLM } from '@/lib/strategy-builder/llm-parser';
 import { validateStrategyDsl } from '@/lib/strategy-builder/dsl-schema';
 
@@ -31,11 +30,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Apply follow-up answer (try LLM version if available)
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    const updatedDsl = openaiApiKey 
-      ? applyFollowUpAnswerLLM(dsl, followUp, answer)
-      : applyFollowUpAnswer(dsl, followUp, answer);
+    const updatedDsl = applyFollowUpAnswerLLM(dsl, followUp, answer);
 
     // Validate updated DSL
     const validation = validateStrategyDsl(updatedDsl);

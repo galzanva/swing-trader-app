@@ -32,6 +32,7 @@ function getRecommendationFromScore(score: number, direction: "bullish" | "beari
 }
 import { createRiskManagementPlan, validateRiskReward } from "@/lib/risk/management";
 import { LLMAnalyzer } from "@/lib/llm/analyzer";
+import { isLLMConfigured } from "@/lib/llm/config";
 import { calculateConfirmationEntry } from "@/lib/execution/confirmation-entries";
 import { validateReport, formatQAReport, type AnalysisReportForQA } from "@/lib/validation/qa-checklist";
 import { analyzeCombinedSqueeze } from "@/lib/indicators/squeeze";
@@ -375,10 +376,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for API keys
     const polygonApiKey = process.env.POLYGON_API_KEY;
     const finnhubApiKey = process.env.FINNHUB_API_KEY;
-    const openaiApiKey = process.env.OPENAI_API_KEY;
 
     if (!polygonApiKey) {
       return NextResponse.json(
@@ -775,9 +774,9 @@ export async function POST(request: Request) {
       reason: string;
     } | undefined;
     
-    if (openaiApiKey) {
+    if (isLLMConfigured()) {
       try {
-        const llmAnalyzer = new LLMAnalyzer(openaiApiKey);
+        const llmAnalyzer = new LLMAnalyzer();
         aiAnalysis = await llmAnalyzer.generateCompositeAnalysis(
           symbol,
           timeframe,
