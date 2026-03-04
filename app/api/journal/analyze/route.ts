@@ -30,14 +30,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Journal Analysis] Analyzing trades for user ${userId}`);
+    // Parse optional date range from request body
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+    let periodLabel = 'All Time';
+    try {
+      const body = await request.json();
+      if (body.startDate) startDate = new Date(body.startDate);
+      if (body.endDate) endDate = new Date(body.endDate);
+      if (body.periodLabel) periodLabel = body.periodLabel;
+    } catch {
+      // No body or invalid JSON — analyze all trades
+    }
 
-    // Fetch all closed trades with enriched data for analysis
+    console.log(`[Journal Analysis] Analyzing trades for user ${userId} (period: ${periodLabel})`);
+
+    const dateFilter: any = {};
+    if (startDate) dateFilter.gte = startDate;
+    if (endDate) dateFilter.lte = endDate;
+
     const trades = await prisma.tradeJournal.findMany({
       where: {
         userId,
         isOpen: false,
         returnPct: { not: null },
+        ...(startDate || endDate ? { entryDate: dateFilter } : {}),
       },
       orderBy: {
         entryDate: 'desc',
@@ -46,12 +63,12 @@ export async function POST(request: NextRequest) {
 
     if (trades.length === 0) {
       return NextResponse.json(
-        { error: 'No closed trades found for analysis' },
+        { error: `No closed trades found for ${periodLabel}` },
         { status: 400 }
       );
     }
 
-    console.log(`[Journal Analysis] Analyzing ${trades.length} closed trades`);
+    console.log(`[Journal Analysis] Analyzing ${trades.length} closed trades (${periodLabel})`);
 
     // Build analysis context
     const winningTrades = trades.filter(t => (t.returnPct ?? 0) > 0);
@@ -63,44 +80,51 @@ export async function POST(request: NextRequest) {
     // Detect early exits
     const earlyExits = detectEarlyExits(trades);
 
-    // Analyze patterns in winning vs losing trades
-    const context = buildAnalysisContext(trades, winningTrades, losingTrades, repeatableSetups, earlyExits);
+    const context = buildAnalysisContext(trades, winningTrades, losingTrades, repeatableSetups, earlyExits, periodLabel);
 
     const result = await callLLM({
       messages: [
         {
           role: 'system',
-          content: `You are an expert trading analyst specializing in identifying patterns and improving trading strategies. 
-Your goal is to analyze a trader's journal and find:
-1. **Repeated Profitable Setups** - Identify setups that have worked multiple times
-2. **Early Exit Issues** - Flag trades where the user exited too early and left gains on the table
-3. Common patterns in winning trades (what worked well)
-4. Common patterns in losing trades (what to avoid)
-5. Specific, actionable insights based on market conditions (ATR, RSI, EMA alignment)
+          content: `You are an expert trading mentor writing a detailed performance review of a trader's journal. This is a WRITTEN REPORT — not a conversation. Never ask questions, never offer to do more, never say "if you want" or "I can also". Just deliver the analysis.
 
-🚨 CRITICAL: USE ONLY THE DATA PROVIDED 🚨
-- Each trade shows "Entry: $XX.XX" and "Exit: $XX.XX" - use THESE prices ONLY
-- Do NOT infer prices from notes or other fields
-- Do NOT confuse stop loss/take profit targets with actual entry/exit prices
-- When referencing a trade, cite the EXACT entry and exit prices shown in the data
+## YOUR TASK
+Produce a thorough, data-driven performance report for the period: "${periodLabel}" (${trades.length} closed trades).
 
-Focus on:
-- Repeatable setups with high success rates (format: "This setup has worked X of the last Y times")
-- Early exits where maxPotential R was much higher than realized R
-- Market conditions: High ATR days vs low ATR
-- RSI levels at entry and exit
-- EMA alignment (trend strength)
-- Exit reasons and holding discipline
-- Strategy effectiveness
+## REPORT FORMAT (use these exact sections)
 
-Be specific, data-driven, and actionable. Use beginner-friendly language with confidence indicators.
-Format your response in clear sections:
-- **🎯 Repeat These Setups** (high-confidence patterns to prioritize)
-- **⚠️ Holding Discipline Issues** (early exits that left money on table)
-- **✅ Key Patterns in Winners**
-- **❌ Key Patterns in Losers**
-- **📊 Market Context Insights**
-- **💡 Actionable Recommendations** (with confidence levels: High/Medium/Low)`
+**📊 Period Performance Summary**
+Open with key stats: win rate, average winner vs average loser, best and worst trade, total P/L, average R-multiple. Compare longs vs shorts if both exist.
+
+**🎯 Repeatable Setups That Worked**
+Identify strategy + market condition combos that won consistently. Cite specifics: "EMA Pullback in bullish alignment won 4 of 5 times with avg +3.2% return." If sample is too small, say so explicitly.
+
+**⚠️ Holding Discipline & Exit Analysis**
+Flag trades where maxPotentialR was significantly higher than realizedR — the trader left money on the table. Name the ticker, entry/exit prices, what R was captured vs what was available, and what exit rule would have captured more.
+
+**✅ What Worked Well**
+Patterns across winning trades: which strategies, market conditions (ATR level, RSI zone, EMA alignment), holding periods, and exit reasons led to profits.
+
+**❌ What Did Not Work**
+Patterns across losing trades: common mistakes, bad conditions, premature entries, ignored signals. Be specific — cite tickers and numbers.
+
+**📈 Market Condition Insights**
+Analyze how ATR levels, RSI zones at entry, and EMA alignment correlated with outcomes. Example: "Entries with RSI 40-60 and bullish EMA alignment had 78% win rate vs 33% when RSI > 70."
+
+**💡 Specific Improvements**
+Concrete, numbered action items. Each must be testable:
+  1. "[Action] because [evidence from this data]. Confidence: High/Medium/Low."
+  2. ...
+
+## CRITICAL RULES
+- Use ONLY the data provided. Never invent trades or numbers.
+- Entry/exit prices: use the EXACT "$XX.XX" values shown in each trade.
+- Do NOT confuse stop loss / take profit TARGETS with actual entry/exit prices.
+- Be a mentor: direct, honest, specific. Praise what deserves praise, critique what needs it.
+- Every claim must cite actual trade data (ticker, prices, dates, R-multiples).
+- End with the Improvements section. Do NOT add any follow-up offers, questions, or "let me know if you want" text. The report is complete after Improvements.
+- Confidence legend at the end: "Confidence: High = strong pattern in data (5+ trades); Medium = reasonable signal (3-4 trades); Low = limited sample (1-2 trades)."
+- Max token budget is generous — use it for depth, not filler.`
         },
         {
           role: 'user',
@@ -108,7 +132,7 @@ Format your response in clear sections:
         }
       ],
       temperature: 0.7,
-      maxTokens: 1200,
+      maxTokens: 2500,
     });
 
     const analysis = result.content;
@@ -119,6 +143,7 @@ Format your response in clear sections:
       success: true,
       analysis,
       tradesAnalyzed: trades.length,
+      periodLabel,
       summary: {
         totalTrades: trades.length,
         winningTrades: winningTrades.length,
@@ -282,9 +307,10 @@ function buildAnalysisContext(
   winners: any[],
   losers: any[],
   repeatableSetups: any[],
-  earlyExits: any[]
+  earlyExits: any[],
+  periodLabel: string = 'All Time'
 ): string {
-  let context = `# Trading Journal Analysis\n\n`;
+  let context = `# Trading Journal Analysis — ${periodLabel}\n\n`;
   
   // Repeatable setups section
   if (repeatableSetups.length > 0) {
@@ -484,7 +510,7 @@ function buildAnalysisContext(
   }
 
   context += `\n## Instructions\n`;
-  context += `Based on the data above, identify specific patterns and provide actionable insights to help improve trading performance. Focus on market conditions (ATR, RSI, EMA), strategy effectiveness, and holding period patterns.`;
+  context += `Write the performance report for the "${periodLabel}" period using ONLY the ${allTrades.length} trades above. Cite specific tickers, prices, and R-multiples. End with actionable improvements — do NOT ask follow-up questions or offer additional services.`;
 
   return context;
 }

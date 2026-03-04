@@ -54,7 +54,7 @@ interface SavedReport {
   createdAt: string;
 }
 
-type TimePeriod = 'month' | 'ytd' | '1year' | 'all';
+type TimePeriod = 'week' | 'lastweek' | 'month' | 'lastmonth' | 'ytd' | '1year' | 'all';
 
 export default function JournalClient({ session }: JournalClientProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -137,17 +137,38 @@ export default function JournalClient({ session }: JournalClientProps) {
     const end = now;
 
     switch (period) {
+      case 'week': {
+        const day = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        monday.setHours(0, 0, 0, 0);
+        return { start: monday, end };
+      }
+      case 'lastweek': {
+        const day = now.getDay();
+        const thisMonday = new Date(now);
+        thisMonday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        thisMonday.setHours(0, 0, 0, 0);
+        const lastMonday = new Date(thisMonday);
+        lastMonday.setDate(thisMonday.getDate() - 7);
+        const lastSunday = new Date(thisMonday);
+        lastSunday.setMilliseconds(-1);
+        return { start: lastMonday, end: lastSunday };
+      }
       case 'month':
-        // First day of current month
         return { start: new Date(now.getFullYear(), now.getMonth(), 1), end };
+      case 'lastmonth': {
+        const firstOfLast = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastOfLast = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return { start: firstOfLast, end: lastOfLast };
+      }
       case 'ytd':
-        // Jan 1 of current year
         return { start: new Date(now.getFullYear(), 0, 1), end };
-      case '1year':
-        // 365 days ago
+      case '1year': {
         const oneYearAgo = new Date(now);
         oneYearAgo.setFullYear(now.getFullYear() - 1);
         return { start: oneYearAgo, end };
+      }
       case 'all':
         return { start: null, end };
     }
@@ -357,8 +378,20 @@ export default function JournalClient({ session }: JournalClientProps) {
       setAnalyzing(true);
       setAiAnalysis(null);
 
+      const { start, end } = getDateRange(selectedPeriod);
+      const periodLabels: Record<TimePeriod, string> = {
+        week: 'This Week', lastweek: 'Last Week', month: 'This Month',
+        lastmonth: 'Last Month', ytd: 'YTD', '1year': '1 Year', all: 'All Time',
+      };
+
       const response = await fetch('/api/journal/analyze', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: start?.toISOString() || null,
+          endDate: end.toISOString(),
+          periodLabel: periodLabels[selectedPeriod],
+        }),
       });
 
       const data = await response.json();
@@ -409,7 +442,10 @@ export default function JournalClient({ session }: JournalClientProps) {
             <span className="text-blue-200 text-sm font-medium">Time Period:</span>
             <div className="flex gap-2 flex-wrap">
               {[
+                { value: 'week' as TimePeriod, label: 'This Week' },
+                { value: 'lastweek' as TimePeriod, label: 'Last Week' },
                 { value: 'month' as TimePeriod, label: 'This Month' },
+                { value: 'lastmonth' as TimePeriod, label: 'Last Month' },
                 { value: 'ytd' as TimePeriod, label: 'YTD' },
                 { value: '1year' as TimePeriod, label: '1 Year' },
                 { value: 'all' as TimePeriod, label: 'All Time' },
@@ -487,10 +523,10 @@ export default function JournalClient({ session }: JournalClientProps) {
 
           <button
             onClick={handleAnalyze}
-            disabled={analyzing || trades.length === 0}
+            disabled={analyzing || filteredTrades.length === 0}
             className="px-4 py-2 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-lg font-medium hover:bg-purple-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {analyzing ? '🤖 Analyzing...' : '🤖 AI Analysis'}
+            {analyzing ? '🤖 Analyzing...' : `🤖 AI Analysis (${filteredTrades.length} trades)`}
           </button>
         </div>
 
@@ -788,7 +824,9 @@ export default function JournalClient({ session }: JournalClientProps) {
             <div className="px-6 py-12 text-center text-blue-200">
               {selectedPeriod === 'all'
                 ? 'No trades yet. Click "Add Trade" to get started!'
-                : `No trades found for the selected period (${selectedPeriod === 'month' ? 'This Month' : selectedPeriod === 'ytd' ? 'YTD' : selectedPeriod === '1year' ? '1 Year' : 'All Time'})`}
+                : `No trades found for the selected period (${
+                    { week: 'This Week', lastweek: 'Last Week', month: 'This Month', lastmonth: 'Last Month', ytd: 'YTD', '1year': '1 Year', all: 'All Time' }[selectedPeriod]
+                  })`}
             </div>
           ) : (
             <div className="overflow-x-auto">
