@@ -17,15 +17,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get strategies created count
-    const strategiesCreated = await prisma.userStrategy.count({
-      where: { userId: session.user.id },
-    });
-
-    // Get analyses ran (we'll track this later, for now return 0)
+    // Strategy feature removed - strategiesCreated always 0
+    const strategiesCreated = 0;
     const analysesRan = 0;
-
-    // Get scanners ran (we'll track this later, for now return 0)
     const scannersRan = 0;
 
     return NextResponse.json({

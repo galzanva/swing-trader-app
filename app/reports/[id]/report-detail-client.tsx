@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AnalysisReportDisplay from '../../components/analysis-report-display';
-import StrategyAnalysisReportDisplay from '../../components/strategy-analysis-report-display';
 import TechnicalAnalysisReportDisplay from '../../components/technical-analysis-report-display';
 import type { AnalysisReport } from '../../api/analyze/route';
 import html2canvas from 'html2canvas';
@@ -588,8 +587,6 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         {/* Report Data - Render based on type */}
         {report.type === 'deep-analysis' ? (
           <AnalysisReportDisplay report={report.reportData as AnalysisReport} />
-        ) : report.type === 'strategy-analysis' ? (
-          <StrategyAnalysisReportDisplay report={report.reportData} />
         ) : report.type === 'technical-analysis' ? (
           <TechnicalAnalysisReportDisplay report={report.reportData} />
         ) : (

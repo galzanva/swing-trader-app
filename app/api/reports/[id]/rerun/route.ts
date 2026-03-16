@@ -82,39 +82,10 @@ export async function POST(
         };
       }
     } else if (originalReport.type === "strategy-analysis") {
-      // Call strategy analysis endpoint
-      const response = await fetch(
-        `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/strategy-analyze`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Cookie: request.headers.get("cookie") || "",
-          },
-          body: JSON.stringify({
-            symbol: parameters.symbol,
-            timeframe: parameters.timeframe,
-            strategyId: parameters.strategyId,
-            useCachedData: cachedData !== null,
-            cachedData: cachedData,
-          }),
-        }
+      return NextResponse.json(
+        { error: "Strategy analysis reports can no longer be rerun. This feature has been removed." },
+        { status: 410 }
       );
-
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
-      }
-
-      newReportData = await response.json();
-      
-      // Update cache
-      if (newReportData.cacheableData) {
-        newCachedData = {
-          ...cachedData,
-          ...newReportData.cacheableData,
-          lastUpdated: new Date().toISOString(),
-        };
-      }
     } else if (originalReport.type === "technical-analysis") {
       // Call technical analysis endpoint
       const response = await fetch(

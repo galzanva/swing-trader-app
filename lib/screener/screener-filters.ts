@@ -481,6 +481,19 @@ export interface ScreenerFilters {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const FILTER_PRESETS = {
+  // Pre-market / Day trading - high volume movers
+  preMarketDayTrading: {
+    name: 'Pre-Market / Day Trading',
+    description: 'Unusual volume (5×+), liquid names for pre-market setups',
+    filters: {
+      price: { type: 'price', enabled: true, minPrice: 5, maxPrice: 300 },
+      dollarVolume: { type: 'dollarVolume', enabled: true, minDollarVolume: 20_000_000 },
+      volume: { type: 'volume', enabled: true, minRelativeVolume: 5 },
+      atr: { type: 'atr', enabled: true, minATRPercent: 1, maxATRPercent: 15 },
+      exchange: { type: 'exchange', enabled: true, includeExchanges: ['NYSE', 'NASDAQ', 'AMEX'], excludeETFs: true, excludeADRs: true, excludeWarrants: true },
+    } as ScreenerFilters,
+  },
+
   // Early-stage bullish trend (5-15 day swings)
   earlyBullishTrend: {
     name: 'Early-Stage Bullish Trend',

@@ -558,80 +558,189 @@ If ANY check fails, revise your output before responding.
 /**
  * INTRADAY TRADING SYSTEM PROMPT
  * Specialized for day trading / scalping on timeframes <= 1 hour
+ * DIFFERENT from swing trading: different EMAs, targets, stops, and evaluation criteria
  */
-const AI_INTRADAY_SYSTEM_PROMPT = `You are an expert DAY TRADER providing professional-grade intraday analysis. Your role is to interpret technical indicators for SHORT-TERM trades lasting minutes to hours (same day only).
+const AI_INTRADAY_SYSTEM_PROMPT = `You are an expert DAY TRADER providing professional-grade INTRADAY analysis. Your evaluation philosophy is fundamentally different from a swing trader.
+
+## DAY TRADER vs SWING TRADER MINDSET
+
+**Swing Trader (1D)**: Holds days/weeks, cares about 50/200 EMA, multi-day trends, weekly support/resistance.
+**Day Trader (5m/15m/1h)**: Holds minutes to hours, SAME-DAY only. Cares about 8/13/21 EMA, intraday structure, today's high/low, NOT 50/200 EMA.
 
 ## CRITICAL INTRADAY RULES
 
-1. **TIMEFRAME AWARENESS** - This is INTRADAY analysis:
-   - All trades must be closed by end of day
-   - Ignore long-term indicators (200 EMA is meaningless for 1-hour charts)
-   - Focus on 8, 13, 21 period EMAs for trend structure
-   - ATR represents expected INTRADAY range, not multi-day volatility
+1. **TIMEFRAME-SPECIFIC CONTEXT**
+   - **5min**: Scalping - targets 0.5-1x ATR, stops 0.3-0.5x ATR, hold 15-60 min
+   - **15min**: Day trading - targets 1-1.5x ATR, stops 0.5-0.75x ATR, hold 1-4 hours
+   - **1hour**: Short-term day trade - targets 1-2x ATR, stops 0.75-1x ATR, hold 2-6 hours
+   - **1min**: Ultra-scalping - very tight targets, high frequency
+   - ALL positions must be closed by market close - no overnight holds
 
-2. **INTRADAY-SPECIFIC INDICATORS**
-   - **Key EMAs**: 8 EMA (fast), 13 EMA (medium), 21 EMA (slow) - NOT 50/200
-   - **VWAP**: Volume Weighted Average Price is CRITICAL for intraday - price above VWAP = intraday bullish, below = bearish
-   - **Volume**: Focus on relative volume vs first hour average, not daily Z-score
-   - **ATR**: Use for INTRADAY stop distances and target sizing (typically 0.5x - 1.5x ATR)
+2. **INTRADAY-SPECIFIC INDICATORS (IGNORE SWING INDICATORS)**
+   - **EMAs**: Use 8 (fast), 13 (medium), 21 (slow) - the 50 and 200 EMA in the data are provided but are SECONDARY for intraday; 8/13/21 define structure
+   - **Volume**: Relative volume vs recent bars matters more than daily Z-score
+   - **ATR**: Represents INTRADAY range - use for stops/targets in points/cents, not multi-day volatility
+   - **ADX/DI**: Same interpretation - >25 = trending, <20 = choppy range
 
-3. **INTRADAY TARGETS**
-   - T1: 0.75x - 1x ATR from entry (quick scalp target)
-   - T2: 1.5x - 2x ATR from entry (momentum continuation)
-   - T3: Rarely used - only if clear intraday trend
-   - All targets should be achievable SAME DAY
+3. **INTRADAY TARGETS (TIGHTER THAN SWING)**
+   - T1: 0.5x - 1x ATR (quick scalp)
+   - T2: 1x - 1.5x ATR (momentum)
+   - T3: 1.5x - 2x ATR (extended - rare)
+   - Projection timeframes: "next 30 min", "next 1-2 hours" - NEVER "1-2 weeks"
 
 4. **INTRADAY STOPS**
-   - Tighter than swing: typically 0.5x - 1x ATR
-   - Must account for intraday volatility
-   - Use recent swing high/low for structural stops
+   - Tighter: 0.5x - 1x ATR typical
+   - Use recent swing high/low within the intraday data
 
-5. **INTRADAY CONFIDENCE FACTORS**
-   - Time of day matters: 9:30-10:30 AM = high volatility, 11-2 PM = lunchtime lull, 2-4 PM = afternoon session
-   - Volume profile: High volume = conviction, low volume = avoid
-   - First hour range often defines the day's support/resistance
-
-6. **INTRADAY STRATEGIES**
-   - Breakout: Price breaks above/below intraday range with volume
-   - Pullback: Price retraces to 8/13/21 EMA in established intraday trend
-   - Mean Reversion: Overextended from VWAP, fade back toward it
-   - Range Play: Clear intraday range, buy support / sell resistance
+5. **INTRADAY STRATEGIES**
+   - Intraday Breakout: Break of session high/low with volume
+   - Intraday Pullback: Retrace to 8/13/21 EMA in established intraday trend
+   - Mean Reversion: Fade extended moves back to EMAs
+   - Range: Buy support / sell resistance within today's range
 
 ## MANDATORY INTRADAY GRADE ADJUSTMENTS
 
-- **Low volume bar** (relative to intraday average) → Max grade B
-- **Late in session** (after 3 PM EST) → Reduce confidence by 15%
-- **Lunchtime** (11 AM - 2 PM EST) → Reduce confidence by 10%
-- **Conflicting EMA structure** (8/13/21 not aligned) → Max confidence 55%
-- **Price far from VWAP** (>1.5% for stocks, >0.5% for indices) → Note mean reversion risk
-
-## PROJECTION TIMEFRAMES FOR INTRADAY
-
-- **Bull Case**: Next 1-4 hours (same day)
-- **Base Case**: Next 30min - 2 hours (same day)
-- **Bear Case**: Next 1-4 hours (same day)
-
-Probabilities should reflect same-day likelihood, NOT multi-day.
+- Low relative volume → Max grade B
+- Choppy/range-bound (ADX < 20) → Recommend WAIT, max confidence 55%
+- Conflicting 8/13/21 EMA structure → Max confidence 55%
+- Multiple timeframes conflicting → WAIT
 
 ## OUTPUT FORMAT
 
-Use the SAME JSON structure as swing trading analysis, but with intraday-appropriate:
-- Shorter timeframes in projections ("next 1-2 hours" not "3-5 days")
-- Tighter targets and stops (based on intraday ATR)
-- Strategy names prefixed with "Intraday" (e.g., "Intraday Pullback Long")
-- Holding period always "minutes to hours (same day)"
+Use the SAME JSON structure, but:
+- **timeframe** in projections: "next 30-60 min" (5min), "next 1-2 hours" (15min/1h) - NEVER "1-2 weeks"
+- **strategy**: Prefix with "Intraday" e.g. "Intraday Pullback Long", "Intraday Breakout Short"
+- **targets**: Tighter, ATR-based, same-day achievable
+- **headline/narrative**: Day-trading language ("scalp", "intraday", "session") not swing ("swing", "hold", "week")
 
-## INTRADAY COHERENCE RULES
+## COHERENCE
 
-1. If 8 EMA > 13 EMA > 21 EMA → Intraday BULLISH structure
-2. If 8 EMA < 13 EMA < 21 EMA → Intraday BEARISH structure
-3. Mixed/compressed EMAs → RANGE / WAIT for breakout
-4. Price above VWAP + bullish EMA structure = HIGH PROBABILITY long
-5. Price below VWAP + bearish EMA structure = HIGH PROBABILITY short
-6. Divergence between price and VWAP = mean reversion setup
-
-Remember: Day trading requires PRECISION. Better to wait for a clear setup than force a marginal trade. If EMAs are mixed or price is choppy, recommend WAIT.
+1. 8 EMA > 13 EMA > 21 EMA → Intraday BULLISH
+2. 8 EMA < 13 EMA < 21 EMA → Intraday BEARISH
+3. Mixed EMAs → RANGE / WAIT
+4. Day trading = PRECISION. If unclear, recommend WAIT.
 `;
+
+function scoreToGrade(score: number): AIAnalysisOutput['signalStrength']['grade'] {
+  if (score >= 90) return 'A+';
+  if (score >= 80) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 50) return 'D';
+  return 'F';
+}
+
+/**
+ * Normalize AI response - handles snake_case (signal_strength), numeric scores, and different structures
+ */
+function normalizeAIResponse(parsed: any): AIAnalysisOutput | null {
+  const raw = parsed.analysis ?? parsed;
+  const ssRaw = raw.signalStrength ?? raw.signal_strength ?? raw.SignalStrength;
+  if (ssRaw == null) return null;
+
+  // Handle when signal_strength is a number (LLM returns flat structure)
+  let ss: Record<string, any>;
+  if (typeof ssRaw === 'number') {
+    ss = { overall: ssRaw, grade: scoreToGrade(ssRaw), direction: 'neutral', reasoning: [], breakdown: {} };
+  } else if (typeof ssRaw === 'object') {
+    ss = ssRaw;
+  } else {
+    return null;
+  }
+
+  // Normalize direction - extract bullish/bearish/neutral from strings like "Bullish bias (but RECOMMEND WAIT)"
+  let dir = (ss.direction ?? ss.bias ?? 'neutral');
+  if (typeof dir === 'string') {
+    const d = dir.toLowerCase();
+    dir = d.includes('bullish') ? 'bullish' : d.includes('bearish') ? 'bearish' : 'neutral';
+  }
+
+  const signalStrength = {
+    overall: ss.overall ?? ss.score ?? ss.value ?? 50,
+    grade: (ss.grade ?? ss.letter ?? scoreToGrade(ss.overall ?? ss.score ?? 50)) as AIAnalysisOutput['signalStrength']['grade'],
+    direction: dir as 'bullish' | 'bearish' | 'neutral',
+    reasoning: Array.isArray(ss.reasoning) ? ss.reasoning : (ss.reasoning ? [ss.reasoning] : []),
+    breakdown: ss.breakdown ?? {},
+  };
+
+  const normalizeTarget = (t: any): { price: number; rr: number; probability: number; reasoning: string } => {
+    if (!t || typeof t !== 'object') return { price: 0, rr: 0, probability: 0, reasoning: '' };
+    return {
+      price: t.price ?? t.target ?? 0,
+      rr: t.rr ?? t.risk_reward ?? 0,
+      probability: t.probability ?? t.prob ?? 0,
+      reasoning: t.reasoning ?? t.reason ?? '',
+    };
+  };
+
+  const recRaw = raw.recommendation ?? raw.strategy_recommendation ?? raw.strategyRecommendation;
+  const rec = typeof recRaw === 'string' ? { strategy: recRaw, action: 'wait' } : recRaw;
+  const recTargets = rec?.targets;
+  const recommendation = rec ? {
+    action: (rec.action ?? rec.signal ?? 'wait') as 'long' | 'short' | 'wait',
+    strategy: rec.strategy ?? rec.recommendation ?? (typeof recRaw === 'string' ? recRaw : 'Wait'),
+    confidence: rec.confidence ?? rec.confidence_level ?? 50,
+    confidenceReasoning: rec.confidenceReasoning ?? rec.confidence_reasoning ?? rec.reasoning ?? '',
+    entry: rec.entry ?? { type: 'limit', price: 0, conditions: [] },
+    stopLoss: rec.stopLoss ?? rec.stop_loss ?? { price: 0, riskPercent: 0, reasoning: '' },
+    targets: recTargets ? {
+      t1: normalizeTarget(recTargets.t1 ?? recTargets.target_1),
+      t2: normalizeTarget(recTargets.t2 ?? recTargets.target_2),
+      t3: normalizeTarget(recTargets.t3 ?? recTargets.target_3),
+    } : { t1: { price: 0, rr: 0, probability: 0, reasoning: '' }, t2: { price: 0, rr: 0, probability: 0, reasoning: '' }, t3: { price: 0, rr: 0, probability: 0, reasoning: '' } },
+    invalidation: rec.invalidation ?? '',
+    keyRisks: Array.isArray(rec.keyRisks) ? rec.keyRisks : (rec.key_risks ? (Array.isArray(rec.key_risks) ? rec.key_risks : [rec.key_risks]) : []),
+    keyOpportunities: Array.isArray(rec.keyOpportunities) ? rec.keyOpportunities : (rec.key_opportunities ? (Array.isArray(rec.key_opportunities) ? rec.key_opportunities : [rec.key_opportunities]) : []),
+  } : { action: 'wait' as const, strategy: 'Wait', confidence: 50, confidenceReasoning: '', entry: { type: 'limit' as const, price: 0, conditions: [] }, stopLoss: { price: 0, riskPercent: 0, reasoning: '' }, targets: { t1: { price: 0, rr: 0, probability: 0, reasoning: '' }, t2: { price: 0, rr: 0, probability: 0, reasoning: '' }, t3: { price: 0, rr: 0, probability: 0, reasoning: '' } }, invalidation: '', keyRisks: [], keyOpportunities: [] };
+
+  const normalizeCase = (c: any): { target: number | string; targetLow?: number; targetHigh?: number; probability: number; timeframe: string; reasoning: string } => {
+    if (!c || typeof c !== 'object') return { target: 0, probability: 33, timeframe: '', reasoning: '' };
+    const t = c.target ?? c.target_price ?? c.price ?? 0;
+    const tLow = c.targetLow ?? c.target_low ?? (typeof t === 'number' ? t : undefined);
+    const tHigh = c.targetHigh ?? c.target_high ?? (typeof t === 'number' ? t : undefined);
+    const prob = c.probability ?? c.prob ?? 33;
+    const tf = c.timeframe ?? c.time_frame ?? '';
+    const reason = c.reasoning ?? c.reason ?? '';
+    return {
+      target: typeof t === 'string' ? t : (tLow ?? tHigh ?? t),
+      targetLow: typeof tLow === 'number' ? tLow : undefined,
+      targetHigh: typeof tHigh === 'number' ? tHigh : undefined,
+      probability: typeof prob === 'number' ? prob : 33,
+      timeframe: String(tf),
+      reasoning: String(reason),
+    };
+  };
+
+  const proj = raw.priceProjections ?? raw.projections;
+  const priceProjections = proj ? {
+    bullCase: normalizeCase(proj.bullCase ?? proj.bull_case ?? proj.bull),
+    baseCase: normalizeCase(proj.baseCase ?? proj.base_case ?? proj.base),
+    bearCase: normalizeCase(proj.bearCase ?? proj.bear_case ?? proj.bear),
+    mostLikely: (proj.mostLikely ?? proj.most_likely ?? 'base') as 'bull' | 'base' | 'bear',
+  } : undefined;
+
+  const narrRaw = raw.narrative ?? raw.narrative_summary;
+  const narrative = narrRaw ? (
+    typeof narrRaw === 'string'
+      ? { headline: narrRaw, technicalOutlook: '', keyInsights: [], tradingPlan: '', riskFactors: [], confidenceLevel: 'medium' as const }
+      : {
+          headline: narrRaw.headline ?? narrRaw.summary ?? 'Analysis complete',
+          technicalOutlook: narrRaw.technicalOutlook ?? narrRaw.technical_outlook ?? narrRaw.outlook ?? '',
+          keyInsights: narrRaw.keyInsights ?? narrRaw.key_insights ?? [],
+          tradingPlan: narrRaw.tradingPlan ?? narrRaw.trading_plan ?? '',
+          riskFactors: narrRaw.riskFactors ?? narrRaw.risk_factors ?? [],
+          confidenceLevel: (narrRaw.confidenceLevel ?? narrRaw.confidence_level ?? 'medium') as 'high' | 'medium' | 'low',
+        }
+  ) : undefined;
+
+  return {
+    signalStrength,
+    structureAnalysis: raw.structureAnalysis ?? raw.structure_analysis,
+    priceProjections,
+    recommendation,
+    narrative: narrative ?? { headline: 'Analysis', technicalOutlook: '', keyInsights: [], tradingPlan: '', riskFactors: [], confidenceLevel: 'medium' },
+  } as AIAnalysisOutput;
+}
 
 export async function generateAITechnicalAnalysis(
   input: AIAnalysisInput,
@@ -657,10 +766,26 @@ export async function generateAITechnicalAnalysis(
       return null;
     }
 
+    // Extract JSON from response - reasoning models may wrap in markdown or <think> tags
+    let contentToParse = result.content.trim();
+    const jsonMatch = contentToParse.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      contentToParse = jsonMatch[1].trim();
+    }
+    const thinkEnd = contentToParse.indexOf('</think>');
+    if (thinkEnd !== -1) {
+      contentToParse = contentToParse.slice(thinkEnd + 8).trim();
+    }
+
     try {
-      const parsed = JSON.parse(result.content) as AIAnalysisOutput;
+      const parsed = JSON.parse(contentToParse) as any;
+      const normalized = normalizeAIResponse(parsed);
+      if (!normalized?.signalStrength) {
+        console.error('[AI Analyst] Parsed JSON missing signalStrength after normalize. Top-level keys:', Object.keys(parsed));
+        return null;
+      }
       console.log(`[AI Analyst] Successfully generated analysis via ${result.provider}/${result.model}`);
-      return parsed;
+      return normalized as AIAnalysisOutput;
     } catch (parseError) {
       console.error('[AI Analyst] JSON Parse Error:', parseError);
       return null;
@@ -675,25 +800,42 @@ export async function generateAITechnicalAnalysis(
 function buildAnalysisContext(input: AIAnalysisInput, isIntraday: boolean = false): string {
   const { symbol, timeframe, currentPrice, indicators, trend, momentum, volatility, structure, levels, squeeze, regime } = input;
   
-  // Determine trading style based on timeframe
-  const tradingStyle = isIntraday ? 'DAY TRADING / SCALPING' : 'SWING TRADING';
-  const holdingPeriod = isIntraday ? 'minutes to hours (same-day)' : 'days to weeks';
+  // Determine trading style and holding period by exact timeframe
+  let tradingStyle: string;
+  let holdingPeriod: string;
+  let projectionHint: string;
+  
+  if (isIntraday) {
+    switch (timeframe) {
+      case '1min': tradingStyle = 'ULTRA-SCALPING'; holdingPeriod = 'minutes'; projectionHint = 'next 15-45 min'; break;
+      case '5min': tradingStyle = 'SCALPING / DAY TRADING'; holdingPeriod = '15-60 minutes'; projectionHint = 'next 30-90 min'; break;
+      case '15min': tradingStyle = 'DAY TRADING'; holdingPeriod = '1-4 hours (same day)'; projectionHint = 'next 1-2 hours'; break;
+      case '1hour': tradingStyle = 'SHORT-TERM DAY TRADING'; holdingPeriod = '2-6 hours (same day)'; projectionHint = 'next 2-4 hours'; break;
+      default: tradingStyle = 'DAY TRADING'; holdingPeriod = 'minutes to hours (same day)'; projectionHint = 'next 1-2 hours';
+    }
+  } else {
+    tradingStyle = 'SWING TRADING';
+    holdingPeriod = 'days to weeks';
+    projectionHint = '1-2 weeks';
+  }
   
   let context = `# Technical Analysis Request: ${symbol} (${timeframe})\n\n`;
+  context += `**Chart Timeframe**: ${timeframe}\n`;
   context += `**Trading Style**: ${tradingStyle}\n`;
   context += `**Expected Holding Period**: ${holdingPeriod}\n`;
+  context += `**Projection Timeframe**: ${projectionHint}\n`;
   context += `**Current Price**: $${currentPrice.toFixed(2)}\n\n`;
   
-  // Add timeframe-specific context
+  // Add timeframe-specific context for day trading
   if (isIntraday) {
-    context += `## ⚠️ INTRADAY ANALYSIS CONTEXT\n`;
-    context += `This is INTRADAY analysis for day trading. Key differences:\n`;
-    context += `- Focus on 8, 13, 21 period EMAs (not 50, 200 which are too long-term)\n`;
-    context += `- Targets are measured in points/cents, not percentages\n`;
-    context += `- Holding period is SAME DAY - position must be closed by market close\n`;
-    context += `- Volume analysis focuses on relative intraday volume\n`;
-    context += `- Key levels are intraday highs/lows and VWAP\n`;
-    context += `- ATR represents intraday volatility, not daily volatility\n\n`;
+    context += `## ⚠️ DAY TRADING / INTRADAY CONTEXT (NOT SWING)\n`;
+    context += `You are analyzing a ${timeframe} chart for a DAY TRADER. Evaluate like a day trader would:\n`;
+    context += `- Primary EMAs: 8 (fast), 13 (medium), 21 (slow) - these define intraday structure\n`;
+    context += `- 50/200 EMA are secondary (too slow for this timeframe)\n`;
+    context += `- Targets and stops in ATR multiples - use TIGHTER stops than swing (0.5-1x ATR)\n`;
+    context += `- All projections must be achievable SAME DAY - use "${projectionHint}" in your reasoning\n`;
+    context += `- Strategy names: "Intraday Pullback Long", "Intraday Breakout" etc.\n`;
+    context += `- No "hold for weeks" or "swing" language - this is same-day only\n\n`;
   }
   
   // Core Indicators
@@ -713,14 +855,25 @@ function buildAnalysisContext(input: AIAnalysisInput, isIntraday: boolean = fals
   
   // Trend Analysis
   context += `## Trend Analysis\n\n`;
-  context += `| Timeframe | Direction | Strength |\n`;
-  context += `|-----------|-----------|----------|\n`;
-  context += `| Primary (200-bar) | ${trend.primary.direction} | ${trend.primary.strength.toFixed(0)}% |\n`;
-  context += `| Intermediate (50-bar) | ${trend.intermediate.direction} | ${trend.intermediate.strength.toFixed(0)}% |\n`;
-  context += `| Short-term (20-bar) | ${trend.shortTerm.direction} | ${trend.shortTerm.strength.toFixed(0)}% |\n\n`;
-  context += `**EMA Alignment**: ${trend.emaAlignment}\n`;
-  context += `**EMA Values**: 9(${trend.ema9.toFixed(2)}), 20(${trend.ema20.toFixed(2)}), 50(${trend.ema50.toFixed(2)}), 200(${trend.ema200.toFixed(2)})\n`;
-  context += `**Price vs 200 EMA**: ${trend.priceVsEma200Pct > 0 ? '+' : ''}${trend.priceVsEma200Pct.toFixed(1)}%\n\n`;
+  if (isIntraday) {
+    context += `| Timeframe | Direction | Strength |\n`;
+    context += `|-----------|-----------|----------|\n`;
+    context += `| Short (8-bar) | ${trend.shortTerm.direction} | ${trend.shortTerm.strength.toFixed(0)}% |\n`;
+    context += `| Medium (13-bar) | ${trend.intermediate.direction} | ${trend.intermediate.strength.toFixed(0)}% |\n`;
+    context += `| Longer (21-bar) | ${trend.primary.direction} | ${trend.primary.strength.toFixed(0)}% |\n\n`;
+    context += `**Intraday EMA Alignment (8/13/21)**: ${trend.emaAlignment}\n`;
+    context += `**EMA Values**: 8(${trend.ema9.toFixed(2)}), 13(${trend.ema20.toFixed(2)}), 21(${trend.ema50.toFixed(2)}), 50(${trend.ema200.toFixed(2)})\n`;
+    context += `**Price vs 21 EMA**: ${((currentPrice - trend.ema50) / trend.ema50 * 100).toFixed(1)}%\n\n`;
+  } else {
+    context += `| Timeframe | Direction | Strength |\n`;
+    context += `|-----------|-----------|----------|\n`;
+    context += `| Primary (200-bar) | ${trend.primary.direction} | ${trend.primary.strength.toFixed(0)}% |\n`;
+    context += `| Intermediate (50-bar) | ${trend.intermediate.direction} | ${trend.intermediate.strength.toFixed(0)}% |\n`;
+    context += `| Short-term (20-bar) | ${trend.shortTerm.direction} | ${trend.shortTerm.strength.toFixed(0)}% |\n\n`;
+    context += `**EMA Alignment**: ${trend.emaAlignment}\n`;
+    context += `**EMA Values**: 9(${trend.ema9.toFixed(2)}), 20(${trend.ema20.toFixed(2)}), 50(${trend.ema50.toFixed(2)}), 200(${trend.ema200.toFixed(2)})\n`;
+    context += `**Price vs 200 EMA**: ${trend.priceVsEma200Pct > 0 ? '+' : ''}${trend.priceVsEma200Pct.toFixed(1)}%\n\n`;
+  }
   
   // Momentum
   context += `## Momentum Assessment\n\n`;

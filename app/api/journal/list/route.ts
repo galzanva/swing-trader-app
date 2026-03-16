@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         id: true,
         ticker: true,
         direction: true,
+        tradeType: true,
         entryPrice: true,
         entryDate: true,
         exitPrice: true,

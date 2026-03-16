@@ -30,7 +30,6 @@ export default function Navbar({ session }: NavbarProps) {
       label: '📊 Analysis',
       items: [
         { href: '/technical-analysis', label: '📈 Technical Analysis' },
-        { href: '/strategy-analyze', label: '🎯 Strategy Analysis' },
         { href: '/analyze', label: '🔍 Deep Analysis' },
         { href: '/reports', label: '📂 Saved Reports' },
       ] as NavItem[],
@@ -38,17 +37,17 @@ export default function Navbar({ session }: NavbarProps) {
     tools: {
       label: '🛠️ Tools',
       items: [
-        { href: '/scanner', label: '📊 Market Scanner' },
+        { href: '/scanner', label: '📊 Market Screener' },
         { href: '/trade-calculator', label: '🧮 Trade Calculator' },
       ] as NavItem[],
     },
-    strategies: {
-      label: 'Strategies',
-      href: '/strategies',
-    },
     journal: {
-      label: '📓 Trading Journal',
-      href: '/journal',
+      label: '📓 Journal',
+      items: [
+        { href: '/journal', label: '📓 Trading Journal', exact: true },
+        { href: '/journal/analyses', label: '📝 Journal Analyses' },
+        { href: '/ticker-history', label: '📊 Ticker History' },
+      ] as NavItem[],
     },
   };
 
@@ -184,29 +183,40 @@ export default function Navbar({ session }: NavbarProps) {
               )}
             </div>
 
-            {/* Strategies Link */}
-            <Link
-              href={navItems.strategies.href}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                isActive(navItems.strategies.href)
-                  ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                  : 'text-blue-200 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              {navItems.strategies.label}
-            </Link>
-
-            {/* Trading Journal Link */}
-            <Link
-              href={navItems.journal.href}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                isActive(navItems.journal.href)
-                  ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                  : 'text-blue-200 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              {navItems.journal.label}
-            </Link>
+            {/* Journal Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => handleDropdownToggle('journal')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-1 ${
+                  isAnyItemActive(navItems.journal.items)
+                    ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
+                    : 'text-blue-200 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <span>{navItems.journal.label}</span>
+                <span className={`transform transition-transform ${activeDropdown === 'journal' ? 'rotate-180' : ''}`}>
+                  ▼
+                </span>
+              </button>
+              {activeDropdown === 'journal' && (
+                <div className="absolute top-full left-0 mt-1 w-56 bg-slate-800 border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                  {navItems.journal.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setActiveDropdown(null)}
+                      className={`block px-4 py-3 text-sm transition-all ${
+                        isActive(item.href, item.exact ?? false)
+                          ? 'bg-gradient-to-r from-teal-500/20 to-blue-500/20 text-white border-l-2 border-teal-500'
+                          : 'text-blue-200 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
             </nav>
 
             {/* User Info & Sign Out */}
@@ -376,31 +386,40 @@ export default function Navbar({ session }: NavbarProps) {
                   )}
                 </div>
 
-                {/* Strategies Link */}
-                <Link
-                  href={navItems.strategies.href}
-                  onClick={closeMobileMenu}
-                  className={`block px-4 py-3 rounded-lg text-base font-medium transition-all ${
-                    isActive(navItems.strategies.href)
-                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white'
-                      : 'text-blue-200 hover:bg-white/10'
-                  }`}
-                >
-                  {navItems.strategies.label}
-                </Link>
-
-                {/* Trading Journal Link */}
-                <Link
-                  href={navItems.journal.href}
-                  onClick={closeMobileMenu}
-                  className={`block px-4 py-3 rounded-lg text-base font-medium transition-all ${
-                    isActive(navItems.journal.href)
-                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white'
-                      : 'text-blue-200 hover:bg-white/10'
-                  }`}
-                >
-                  {navItems.journal.label}
-                </Link>
+                {/* Journal Dropdown */}
+                <div>
+                  <button
+                    onClick={() => handleDropdownToggle('journal')}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition-all ${
+                      isAnyItemActive(navItems.journal.items)
+                        ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white'
+                        : 'text-blue-200 hover:bg-white/10'
+                    }`}
+                  >
+                    <span>{navItems.journal.label}</span>
+                    <span className={`transform transition-transform ${activeDropdown === 'journal' ? 'rotate-180' : ''}`}>
+                      ▼
+                    </span>
+                  </button>
+                  {activeDropdown === 'journal' && (
+                    <div className="mt-2 ml-4 space-y-1">
+                      {navItems.journal.items.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={closeMobileMenu}
+                          className={`block px-4 py-3 rounded-lg text-sm transition-all ${
+                            isActive(item.href, item.exact ?? false)
+                              ? 'bg-gradient-to-r from-teal-500/20 to-blue-500/20 text-white border-l-2 border-teal-500'
+                              : 'text-blue-200 hover:bg-white/10'
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </nav>
             </div>
 

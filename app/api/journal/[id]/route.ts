@@ -11,9 +11,10 @@ import { prisma } from '@/lib/db/prisma';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: tradeId } = await params;
     // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -24,7 +25,6 @@ export async function GET(
     }
 
     const userId = session.user.id;
-    const tradeId = params.id;
 
     console.log(`[Journal Detail] Fetching trade ${tradeId} for user ${userId}`);
 
@@ -61,9 +61,10 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: tradeId } = await params;
     // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -74,7 +75,6 @@ export async function DELETE(
     }
 
     const userId = session.user.id;
-    const tradeId = params.id;
 
     console.log(`[Journal Delete] Deleting trade ${tradeId} for user ${userId}`);
 

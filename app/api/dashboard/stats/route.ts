@@ -26,7 +26,6 @@ export async function GET(request: NextRequest) {
       totalReports,
       totalTrades,
       recentTrades,
-      totalStrategies,
       tradeStats
     ] = await Promise.all([
       // Recent saved reports
@@ -67,11 +66,6 @@ export async function GET(request: NextRequest) {
           returnPct: true,
           profitLoss: true
         }
-      }),
-      
-      // Total strategies count
-      prisma.userStrategy.count({
-        where: { userId, isActive: true }
       }),
       
       // Trade performance stats
@@ -126,7 +120,6 @@ export async function GET(request: NextRequest) {
       stats: {
         totalReports,
         totalTrades,
-        totalStrategies,
         winRate: Math.round(winRate),
         avgReturn: tradeStats._avg.returnPct?.toFixed(2) || '0.00',
         avgPL: tradeStats._avg.profitLoss?.toFixed(2) || '0.00',

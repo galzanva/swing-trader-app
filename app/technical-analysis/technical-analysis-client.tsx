@@ -381,7 +381,7 @@ export default function TechnicalAnalysisClient() {
 
       {/* Input Section */}
       <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-blue-100 mb-2">
               Ticker Symbol
@@ -407,14 +407,15 @@ export default function TechnicalAnalysisClient() {
               className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white text-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
               disabled={isLoading}
             >
-              <option value="1day">Daily</option>
-              <option value="1hour">1 Hour</option>
-              <option value="15min">15 Min</option>
-              <option value="5min">5 Min</option>
+              <option value="1day">Daily (Swing)</option>
+              <option value="1hour">1 Hour (Day)</option>
+              <option value="15min">15 Min (Day)</option>
+              <option value="5min">5 Min (Day)</option>
+              <option value="1min">1 Min (Scalp)</option>
             </select>
           </div>
 
-          <div className="flex items-end">
+          <div>
             <button
               onClick={handleAnalyze}
               disabled={isLoading}
@@ -1162,40 +1163,41 @@ export default function TechnicalAnalysisClient() {
                   </span>
                 </h3>
                 
-                <div className="flex flex-col lg:flex-row lg:items-center gap-8">
-                  <DirectionIndicator direction={aiSignal.direction as 'bullish' | 'bearish' | 'neutral'} size="lg" />
-                  <div className="text-center">
-                    <div className="text-sm text-slate-400 mb-1">Signal Grade</div>
-                    <GradeBadge grade={aiSignal.grade} />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-slate-400 mb-1">Strength</div>
-                    <div className="text-3xl font-bold text-white">{aiSignal.overall}</div>
-                    <div className="text-sm text-slate-500">/ 100</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-slate-400 mb-1">Confidence</div>
-                    <div className={`text-xl font-semibold ${
-                      mergedRecommendation.confidence >= 70 ? 'text-emerald-400' :
-                      mergedRecommendation.confidence >= 50 ? 'text-yellow-400' : 'text-red-400'
-                    }`}>
-                      {mergedRecommendation.confidence >= 70 ? 'HIGH' : mergedRecommendation.confidence >= 50 ? 'MEDIUM' : 'LOW'}
-                      <span className="text-sm ml-1 opacity-70">({mergedRecommendation.confidence}%)</span>
-                    </div>
-                  </div>
-                  <div className="text-center">
+                <div className="flex flex-wrap items-center gap-6 md:gap-8">
+                  <div className="flex items-center gap-3">
+                    <DirectionIndicator direction={aiSignal.direction as 'bullish' | 'bearish' | 'neutral'} size="lg" />
                     <SignalBadge signal={aiSignal.direction} size="lg" />
+                  </div>
+                  <div className="flex items-center gap-6 md:gap-8">
+                    <div className="flex flex-col items-center min-w-[60px]">
+                      <div className="text-xs text-slate-400 mb-1">Signal Grade</div>
+                      <GradeBadge grade={aiSignal.grade} />
+                    </div>
+                    <div className="flex flex-col items-center min-w-[60px]">
+                      <div className="text-xs text-slate-400 mb-1">Strength</div>
+                      <div className="text-2xl font-bold text-white">{aiSignal.overall}<span className="text-sm font-normal text-slate-500">/100</span></div>
+                    </div>
+                    <div className="flex flex-col items-center min-w-[80px]">
+                      <div className="text-xs text-slate-400 mb-1">Confidence</div>
+                      <div className={`text-lg font-semibold ${
+                        mergedRecommendation.confidence >= 70 ? 'text-emerald-400' :
+                        mergedRecommendation.confidence >= 50 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {mergedRecommendation.confidence >= 70 ? 'HIGH' : mergedRecommendation.confidence >= 50 ? 'MEDIUM' : 'LOW'}
+                        <span className="text-xs ml-1 opacity-70">({mergedRecommendation.confidence}%)</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
                 {aiSignal.reasoning && aiSignal.reasoning.length > 0 && (
                   <div className="mt-6 pt-4 border-t border-indigo-500/20">
                     <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Reasoning</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+                    <div className="space-y-2">
                       {aiSignal.reasoning.map((reason, i) => (
                         <div key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                          <span className="text-indigo-400 mt-0.5">•</span>
-                          <span>{reason}</span>
+                          <span className="text-indigo-400 shrink-0 mt-0.5">•</span>
+                          <span className="leading-relaxed">{reason}</span>
                         </div>
                       ))}
                     </div>
@@ -1204,21 +1206,25 @@ export default function TechnicalAnalysisClient() {
               </div>
 
               {/* AI Signal Breakdown */}
-              <div className="grid grid-cols-5 gap-4">
-                {Object.entries(aiBreakdown).map(([key, data]) => {
-                  const displayText = (data as any).assessment || (data as any).signal || '';
+              {Object.keys(aiBreakdown || {}).length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {Object.entries(aiBreakdown || {}).map(([key, data]) => {
+                  const d = data as any;
+                  const score = typeof d?.score === 'number' ? d.score : 50;
+                  const displayText = d?.assessment || d?.signal || '';
                   return (
                   <div key={key} className="bg-indigo-900/5 backdrop-blur-lg rounded-xl p-4 border border-indigo-500/20">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-300 capitalize">{key}</span>
-                      <span className="text-xl font-bold text-white">{data.score}</span>
+                      <span className="text-xl font-bold text-white">{score}</span>
                     </div>
-                    <Gauge value={data.score} colorScheme="signal" />
-                    <div className="text-xs text-slate-400 mt-2 leading-relaxed">{displayText}</div>
+                    <Gauge value={score} colorScheme="signal" />
+                    {displayText && <div className="text-xs text-slate-400 mt-2 leading-relaxed line-clamp-3">{displayText}</div>}
                   </div>
                   );
                 })}
               </div>
+              )}
 
               {/* AI Structure Analysis */}
               {report.aiEnhanced!.structureAnalysis && (
@@ -1244,13 +1250,15 @@ export default function TechnicalAnalysisClient() {
               {/* AI Price Projections */}
               {report.aiEnhanced!.priceProjections && (() => {
                 const formatTarget = (target: number | string, targetLow?: number, targetHigh?: number): string => {
-                  if (targetLow !== undefined && targetHigh !== undefined) {
+                  if (targetLow !== undefined && targetHigh !== undefined && (targetLow > 0 || targetHigh > 0)) {
                     return `$${targetLow.toFixed(2)} - $${targetHigh.toFixed(2)}`;
                   }
-                  if (typeof target === 'string') {
+                  if (typeof target === 'string' && target && target !== '0') {
                     return target.startsWith('$') ? target : `$${target}`;
                   }
-                  return `$${target.toFixed(2)}`;
+                  const num = typeof target === 'number' ? target : parseFloat(String(target));
+                  if (num > 0) return `$${num.toFixed(2)}`;
+                  return '—';
                 };
                 
                 const proj = report.aiEnhanced!.priceProjections;
@@ -1345,9 +1353,9 @@ export default function TechnicalAnalysisClient() {
                     <div className="p-4 rounded-xl bg-white/5">
                       <div className="text-sm font-medium text-slate-300 mb-3">Conditions to Watch</div>
                       <div className="space-y-2">
-                        {mergedRecommendation.entry.conditions.map((condition, i) => (
+                        {(mergedRecommendation.entry.conditions?.length ? mergedRecommendation.entry.conditions : [mergedRecommendation.invalidation || 'Wait for clearer setup with volume confirmation'].filter(Boolean)).map((condition, i) => (
                           <div key={i} className="flex items-start gap-2 text-sm">
-                            <span className="text-yellow-400 mt-0.5">→</span>
+                            <span className="text-yellow-400 mt-0.5 shrink-0">→</span>
                             <span className="text-slate-300">{condition}</span>
                           </div>
                         ))}
@@ -1355,11 +1363,18 @@ export default function TechnicalAnalysisClient() {
                     </div>
                     
                     {(() => {
-                      const t1 = mergedRecommendation.targets.t1.price;
-                      const t3 = mergedRecommendation.targets.t3.price;
+                      const t1 = mergedRecommendation.targets?.t1?.price ?? 0;
+                      const t3 = mergedRecommendation.targets?.t3?.price ?? 0;
                       const cp = report.currentPrice;
+                      if (t1 <= 0 && t3 <= 0) {
+                        return (
+                          <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
+                            <span className="font-medium text-yellow-400">Note:</span> No clear trading edge. 
+                            Wait for price to break above resistance or below support with volume confirmation before taking a position.
+                          </div>
+                        );
+                      }
                       let resistance: number, support: number;
-                      
                       if (t1 > cp && t3 < cp) { resistance = t1; support = t3; }
                       else if (t3 > cp && t1 < cp) { resistance = t3; support = t1; }
                       else if (t1 > t3) { resistance = t1; support = t3; }
@@ -1389,8 +1404,8 @@ export default function TechnicalAnalysisClient() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       <div className="p-4 rounded-xl bg-white/5">
                         <div className="text-sm text-slate-400 mb-1">Entry ({mergedRecommendation.entry.type})</div>
-                        <div className="text-2xl font-mono text-white">${mergedRecommendation.entry.price.toFixed(2)}</div>
-                        {mergedRecommendation.entry.conditions.length > 0 && (
+                        <div className="text-2xl font-mono text-white">${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)}</div>
+                        {mergedRecommendation.entry.conditions?.length > 0 && (
                           <div className="text-sm text-slate-400 mt-2">
                             {mergedRecommendation.entry.conditions[0]}
                           </div>
@@ -1398,13 +1413,23 @@ export default function TechnicalAnalysisClient() {
                       </div>
                       <div className="p-4 rounded-xl bg-red-900/20 border border-red-500/20">
                         <div className="text-sm text-red-400 mb-1">Stop Loss</div>
-                        <div className="text-2xl font-mono text-red-400">${mergedRecommendation.stopLoss.price.toFixed(2)}</div>
+                        <div className="text-2xl font-mono text-red-400">${(mergedRecommendation.stopLoss.price || report.currentPrice * 0.93).toFixed(2)}</div>
                         <div className="text-sm text-slate-400 mt-2">
-                          Risk: {mergedRecommendation.stopLoss.riskPercent.toFixed(1)}% • {mergedRecommendation.stopLoss.reason}
+                          Risk: {mergedRecommendation.stopLoss.riskPercent?.toFixed(1) || '—'}% • {mergedRecommendation.stopLoss.reason || 'No trade - reference level only'}
                         </div>
                       </div>
                     </div>
                     
+                    {(() => {
+                      const hasValidTargets = Object.values(mergedRecommendation.targets).some(t => t?.price > 0);
+                      if (!hasValidTargets) {
+                        return (
+                          <div className="p-4 rounded-xl bg-slate-800/50 text-slate-400 text-sm">
+                            No price targets provided — WAIT recommendation. Reference: Entry ${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)}, Invalidation: {mergedRecommendation.invalidation || 'See conditions above'}
+                          </div>
+                        );
+                      }
+                      return (
                     <div>
                       <h4 className={`text-base font-medium mb-3 ${
                         mergedRecommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
@@ -1424,8 +1449,10 @@ export default function TechnicalAnalysisClient() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                          {Object.entries(mergedRecommendation.targets).map(([key, target]) => {
-                            const entryPrice = mergedRecommendation.entry.price;
+                          {Object.entries(mergedRecommendation.targets)
+                            .filter(([, t]) => t?.price > 0)
+                            .map(([key, target]) => {
+                            const entryPrice = mergedRecommendation.entry.price || report.currentPrice;
                             const currentPrice = report.currentPrice;
                             const moveFromEntry = mergedRecommendation.direction === 'long' 
                               ? ((target.price - entryPrice) / entryPrice) * 100
@@ -1450,8 +1477,8 @@ export default function TechnicalAnalysisClient() {
                                   {moveFromCurrent >= 0 ? '+' : ''}{moveFromCurrent.toFixed(2)}%
                                 </span>
                               </td>
-                              <td className="py-3 text-right text-white font-semibold">{target.rr}:1</td>
-                              <td className="py-3 text-right text-slate-400">~{target.probability}%</td>
+                              <td className="py-3 text-right text-white font-semibold">{(target.rr || 0) > 0 ? `${target.rr}:1` : '—'}</td>
+                              <td className="py-3 text-right text-slate-400">{(target.probability || 0) > 0 ? `~${target.probability}%` : '—'}</td>
                             </tr>
                             );
                           })}
@@ -1459,14 +1486,18 @@ export default function TechnicalAnalysisClient() {
                       </table>
                       </div>
                       <div className="mt-3 text-xs text-slate-500 flex flex-wrap items-center gap-4">
-                        <span>• <span className="text-slate-400">From Entry:</span> % move from entry price (${mergedRecommendation.entry.price.toFixed(2)})</span>
+                        <span>• <span className="text-slate-400">From Entry:</span> % move from entry price (${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)})</span>
                         <span>• <span className="text-slate-400">From Current:</span> % move from current price (${report.currentPrice.toFixed(2)})</span>
                       </div>
                     </div>
+                      );
+                    })()}
                     
-                    <div className="mt-4 p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
-                      <span className="font-medium text-slate-300">Invalidation:</span> {mergedRecommendation.invalidation}
-                    </div>
+                    {mergedRecommendation.invalidation && (
+                      <div className="mt-4 p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
+                        <span className="font-medium text-slate-300">Invalidation:</span> {mergedRecommendation.invalidation}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1478,42 +1509,54 @@ export default function TechnicalAnalysisClient() {
                     <span className="text-xl">📋</span> AI Technical Summary
                   </h3>
                   
-                  <div className="text-xl font-medium text-indigo-300 mb-4">
+                  <div className="text-base font-medium text-indigo-300 mb-4 leading-relaxed">
                     {report.aiSummary.headline}
                   </div>
                   
-                  <p className="text-base text-slate-300 leading-relaxed mb-6">
-                    {report.aiSummary.technicalOutlook}
-                  </p>
+                  {report.aiSummary.technicalOutlook && (
+                    <p className="text-sm text-slate-300 leading-relaxed mb-6">
+                      {report.aiSummary.technicalOutlook}
+                    </p>
+                  )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <h4 className="text-base font-medium text-emerald-400 mb-3">Key Insights</h4>
-                      <ul className="space-y-2">
-                        {report.aiSummary.keyInsights.map((insight, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                            <span className="text-emerald-400 mt-0.5">✓</span>
-                            {insight}
-                          </li>
-                        ))}
-                      </ul>
+                      {report.aiSummary.keyInsights?.length > 0 ? (
+                        <ul className="space-y-2">
+                          {report.aiSummary.keyInsights.map((insight, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                              <span className="text-emerald-400 mt-0.5 shrink-0">✓</span>
+                              <span>{insight}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-slate-500 italic">See summary above</p>
+                      )}
                     </div>
                     
                     <div>
                       <h4 className="text-base font-medium text-red-400 mb-3">Risk Factors</h4>
-                      <ul className="space-y-2">
-                        {report.aiSummary.riskFactors.map((risk, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                            <span className="text-red-400 mt-0.5">⚠</span>
-                            {risk}
-                          </li>
-                        ))}
-                      </ul>
+                      {report.aiSummary.riskFactors?.length > 0 ? (
+                        <ul className="space-y-2">
+                          {report.aiSummary.riskFactors.map((risk, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                              <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
+                              <span>{risk}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-slate-500 italic">See summary above</p>
+                      )}
                     </div>
                     
                     <div>
                       <h4 className="text-base font-medium text-indigo-400 mb-3">Trading Plan</h4>
-                      <p className="text-sm text-slate-300 leading-relaxed">{report.aiSummary.tradingPlan}</p>
+                      <p className="text-sm text-slate-300 leading-relaxed">
+                        {report.aiSummary.tradingPlan || 'See recommendation section.'}
+                      </p>
                     </div>
                   </div>
                 </div>

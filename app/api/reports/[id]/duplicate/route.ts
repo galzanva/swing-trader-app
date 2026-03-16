@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
+import type { Prisma } from "@prisma/client";
 
 /**
  * POST /api/reports/[id]/duplicate
@@ -44,16 +45,16 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const newTitle = body.title || `${originalReport.title} (Copy)`;
 
-    // Create duplicate
+    // Create duplicate (cast Json to InputJsonValue for Prisma compatibility)
     const duplicatedReport = await prisma.savedReport.create({
       data: {
         userId: user.id,
         type: originalReport.type,
         title: newTitle,
         description: originalReport.description,
-        parameters: originalReport.parameters,
-        reportData: originalReport.reportData,
-        cachedData: originalReport.cachedData,
+        parameters: originalReport.parameters as Prisma.InputJsonValue,
+        reportData: originalReport.reportData as Prisma.InputJsonValue,
+        cachedData: originalReport.cachedData != null ? (originalReport.cachedData as Prisma.InputJsonValue) : undefined,
         tags: originalReport.tags,
         version: originalReport.version,
         isPinned: false, // Don't duplicate pinned status

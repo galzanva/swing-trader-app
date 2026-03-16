@@ -35,7 +35,6 @@ interface OpenTrade {
 interface DashboardStats {
   totalReports: number;
   totalTrades: number;
-  totalStrategies: number;
   winRate: number;
   avgReturn: string;
   avgPL: string;
@@ -212,11 +211,6 @@ export default function DashboardNewClient({ session }: DashboardNewClientProps)
             <p className="text-xs text-blue-300 mt-1">{stats.todayActivity} today</p>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 backdrop-blur-lg rounded-xl p-4 border border-orange-500/30">
-            <p className="text-orange-200 text-sm mb-1">Active Strategies</p>
-            <p className="text-3xl font-bold text-white">{stats.totalStrategies}</p>
-            <p className="text-xs text-orange-300 mt-1">Custom strategies</p>
-          </div>
         </div>
       )}
 
@@ -587,17 +581,6 @@ export default function DashboardNewClient({ session }: DashboardNewClientProps)
               Market Scanner
             </p>
             <p className="text-xs text-blue-300 mt-1">Find opportunities</p>
-          </Link>
-
-          <Link
-            href="/strategies/manage"
-            className="p-4 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-lg border border-blue-500/30 hover:from-blue-500/30 hover:to-indigo-500/30 transition-all group"
-          >
-            <div className="text-3xl mb-2">🎯</div>
-            <p className="text-white font-semibold group-hover:text-blue-300 transition-colors">
-              Strategies
-            </p>
-            <p className="text-xs text-blue-300 mt-1">Build & manage</p>
           </Link>
 
           <Link

@@ -11,16 +11,17 @@ import { PolygonClient } from '@/lib/data-vendors/polygon';
 import { calculateTechnicalIndicators } from '@/lib/indicators/technical';
 
 interface TradeInput {
-  id?: string; // If updating existing trade
+  id?: string;
   ticker: string;
   direction: 'long' | 'short';
+  tradeType?: 'swing' | 'intraday';
   entryPrice: number;
-  entryDate: string; // ISO string
+  entryDate: string;
   exitPrice?: number;
   exitDate?: string;
   amount: number;
   strategy?: string;
-  analysisReportId?: string; // Link to saved strategy analysis report
+  analysisReportId?: string;
   notes?: string;
   isOpen?: boolean;
   exitReason?: 'hit_target' | 'stopped_out' | 'manual_exit' | 'time_exit';
@@ -292,6 +293,7 @@ export async function POST(request: NextRequest) {
       userId,
       ticker,
       direction: body.direction,
+      tradeType: body.tradeType ?? 'swing',
       entryPrice: body.entryPrice,
       entryDate,
       exitPrice: body.exitPrice ?? null,

@@ -126,8 +126,17 @@ async function callOpenAICompatible(config: LLMConfig, options: LLMCallOptions):
 
   const data = await response.json();
   const choice = data.choices?.[0];
-  const content = choice?.message?.content ?? '';
+  let content = choice?.message?.content ?? '';
   const finishReason = choice?.finish_reason;
+
+  // Reasoning models may return content as array of blocks [{type, text}, ...]
+  // Extract only the final output (skip thinking/reasoning blocks if present)
+  if (Array.isArray(content)) {
+    const textParts = content
+      .filter((b: any) => b.text && (b.type === 'output_text' || b.type === 'text'))
+      .map((b: any) => b.text);
+    content = textParts.join('');
+  }
 
   if (!content) {
     console.error(`[LLM] Empty content from ${config.model}. finish_reason=${finishReason}, refusal=${choice?.message?.refusal ?? 'none'}`);

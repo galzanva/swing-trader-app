@@ -5,7 +5,7 @@
  * and makes them available as named variables for expression evaluation
  */
 
-import type { OHLCV } from '../strategies/types';
+import type { OHLCV } from '@/lib/types/market';
 import { detectAllChartPatterns, type ChartPattern } from './chart-patterns';
 import { detectAllChartPatterns as detectAllV2 } from './chart-patterns-v2';
 

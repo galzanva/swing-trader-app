@@ -10,7 +10,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { PolygonClient } from '@/lib/data-vendors/polygon';
 import { ScreenerEngine, type ScreenerFilters, type ScreenerResult, FILTER_PRESETS } from '@/lib/screener';
-import type { OHLCV } from '@/lib/strategies/types';
+import type { OHLCV } from '@/lib/types/market';
 
 // Extended type for snapshot data (includes extra fields from API)
 interface SnapshotTicker {

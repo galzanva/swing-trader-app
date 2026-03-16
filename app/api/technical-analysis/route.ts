@@ -56,17 +56,17 @@ export async function POST(request: Request) {
     const marketData = await polygonClient.getAggregates(symbol, timeframe as any);
 
     // Minimum bars needed for analysis varies by timeframe
-    // - Daily: 50 bars minimum (allows newer stocks, uses adaptive EMAs)
-    // - Intraday: 30 bars minimum (enough for RSI-14, MACD-26, ADX-14, 21 EMA)
-    // Note: Polygon's free/starter tiers may have limited intraday history
+    // - Daily: 50 bars (swing trading, 200 EMA needs history)
+    // - Intraday: 26 bars minimum (RSI-14, structure analysis needs 20, ~2hrs of 5min data)
+    // Note: Polygon free tier may limit intraday history; 5min typically needs paid plan
     const minBarsRequired: Record<string, number> = {
-      '1min': 30,
-      '5min': 30,
-      '15min': 30,
-      '1hour': 30,
-      '1day': 50  // Reduced from 100 to allow newer stocks
+      '1min': 26,
+      '5min': 26,
+      '15min': 26,
+      '1hour': 26,
+      '1day': 50
     };
-    const requiredBars = minBarsRequired[timeframe] || 30;
+    const requiredBars = minBarsRequired[timeframe] || 26;
     
     // Determine if this is intraday analysis (different trading style)
     const isIntraday = ['1min', '5min', '15min', '1hour'].includes(timeframe);
@@ -74,27 +74,20 @@ export async function POST(request: Request) {
     if (marketData.bars.length < requiredBars) {
       console.warn(`[TechnicalAnalysis] Insufficient data: got ${marketData.bars.length} bars, need ${requiredBars}`);
       
-      // Calculate how much trading time is represented
-      const barsPerDay: Record<string, number> = {
-        '1min': 390,
-        '5min': 78,
-        '15min': 26,
-        '1hour': 7,
-        '1day': 1
-      };
-      const tradingDaysAvailable = Math.round(marketData.bars.length / (barsPerDay[timeframe] || 1));
-      const tradingDaysNeeded = Math.ceil(requiredBars / (barsPerDay[timeframe] || 1));
+      const intradaySuggestion = timeframe === '5min' || timeframe === '1min'
+        ? '5min/1min data often requires a Polygon paid plan. Try 15min or 1hour, or use 1day for swing trading.'
+        : timeframe !== '1day'
+          ? 'Your Polygon plan may have limited intraday history. Try 1day for swing trading analysis.'
+          : 'This stock may be newly listed or have limited trading history.';
       
       return NextResponse.json(
         { 
-          error: `Insufficient data for ${timeframe} analysis. Got ${marketData.bars.length} bars (~${tradingDaysAvailable} trading days), need at least ${requiredBars} bars (~${tradingDaysNeeded} trading days).`,
+          error: `Insufficient data for ${timeframe} analysis. Got ${marketData.bars.length} bars, need at least ${requiredBars}.`,
           details: {
             barsReceived: marketData.bars.length,
             barsRequired: requiredBars,
             timeframe,
-            suggestion: timeframe !== '1day' 
-              ? 'Your Polygon plan may have limited intraday history. Try using the 1day timeframe for more comprehensive analysis.'
-              : 'This stock may be newly listed or have limited trading history.'
+            suggestion: intradaySuggestion
           }
         },
         { status: 400 }
@@ -168,16 +161,19 @@ export async function POST(request: Request) {
           - Headline: ${aiAnalysis.narrative?.headline}
           `);
           
+          const narr = aiAnalysis.narrative;
+          const rec = aiAnalysis.recommendation;
           aiSummary = {
-            headline: aiAnalysis.narrative?.headline || "AI Analysis Available",
-            technicalOutlook: aiAnalysis.narrative?.technicalOutlook || "Detailed analysis provided below.",
-            keyInsights: aiAnalysis.narrative?.keyInsights || [],
-            riskFactors: aiAnalysis.narrative?.riskFactors || [],
-            tradingPlan: aiAnalysis.narrative?.tradingPlan || "See recommendation section.",
-            confidenceLevel: aiAnalysis.narrative?.confidenceLevel || "medium"
+            headline: narr?.headline || "AI Analysis Available",
+            technicalOutlook: narr?.technicalOutlook || (rec?.confidenceReasoning ? `Confidence reasoning: ${rec.confidenceReasoning}` : "Detailed analysis provided below."),
+            keyInsights: (narr?.keyInsights?.length ? narr.keyInsights : (rec?.keyOpportunities?.length ? rec.keyOpportunities : [])) || [],
+            riskFactors: (narr?.riskFactors?.length ? narr.riskFactors : (rec?.keyRisks?.length ? rec.keyRisks : [])) || [],
+            tradingPlan: narr?.tradingPlan || (rec?.invalidation ? `Invalidation: ${rec.invalidation}` : (rec?.confidenceReasoning || "See recommendation section.")),
+            confidenceLevel: narr?.confidenceLevel || "medium"
           };
         } else {
-          console.log(`[TechnicalAnalysis] AI evaluation returned incomplete data`);
+          console.warn(`[TechnicalAnalysis] AI evaluation returned incomplete data (missing signalStrength). Received keys:`,
+            aiAnalysis ? Object.keys(aiAnalysis) : 'null');
           aiAnalysis = null;
         }
       } catch (aiError) {

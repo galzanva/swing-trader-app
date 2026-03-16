@@ -5,7 +5,7 @@
  * Works independently without requiring strategy definitions
  */
 
-import type { OHLCV } from '../strategies/types';
+import type { OHLCV } from '../types/market';
 import type { 
   ScreenerFilters,
   PriceFilter,

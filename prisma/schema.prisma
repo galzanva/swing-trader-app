@@ -27,9 +27,9 @@ model User {
   sessions      Session[]
   scanPresets   ScanPreset[]
   scanRuns      ScanRun[]
-  strategies    UserStrategy[]
   savedReports  SavedReport[]
   tradeJournal  TradeJournal[]
+  journalAnalyses JournalAnalysis[]
   
   @@index([email])
 }
@@ -108,183 +108,6 @@ model ScanRun {
   @@index([status])
 }
 
-// Hybrid Historical Outcome Model
-// Tracks real trade outcomes with multi-horizon and first-touch data
-model StrategyBacktest {
-  id           String   @id @default(cuid())
-  symbol       String
-  timeframe    String   @default("1D")
-  strategy     String
-  signalDate   DateTime
-  
-  // Entry details
-  entry        Float
-  stop         Float
-  direction    String   // long, short
-  
-  // Targets
-  target1      Float
-  target2      Float
-  target3      Float?
-  
-  // Quality metrics at signal time
-  quality      Float
-  viability    Float
-  rrFirst      Float
-  
-  // Multi-horizon outcomes (5d/10d/20d)
-  outcome5d    String?  // hit_t1, hit_t2, hit_t3, stopped_out, still_open
-  outcome10d   String?
-  outcome20d   String?
-  
-  // Path-based first-touch outcome
-  firstTouch   String?  // T1, T2, T3, stop
-  daysHeld     Int?     // Days until first touch
-  
-  // Multi-horizon P&L percentages
-  pnl5d        Float?
-  pnl10d       Float?
-  pnl20d       Float?
-  
-  // Market context
-  spyRegime    String
-  volZ         Float
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
-  @@index([symbol, timeframe])
-  @@index([strategy])
-  @@index([signalDate])
-  @@index([symbol, strategy, signalDate])
-}
-
-// Aggregate statistics cache with multi-horizon data
-model StrategyStats {
-  id            String   @id @default(cuid())
-  symbol        String
-  timeframe     String   @default("1D")
-  strategy      String
-  
-  // Sample count and minimum enforcement
-  sampleCount   Int      @default(0)
-  hasMinSamples Boolean  @default(false) // true if >= 10 samples
-  
-  // Multi-horizon win rates
-  winRate5d     Float    @default(0)
-  winRate10d    Float    @default(0)
-  winRate20d    Float    @default(0)
-  
-  // Multi-horizon average P&L
-  avgPnL5d      Float    @default(0)
-  avgPnL10d     Float    @default(0)
-  avgPnL20d     Float    @default(0)
-  
-  // First-touch distribution
-  firstTouchT1  Int      @default(0)
-  firstTouchT2  Int      @default(0)
-  firstTouchT3  Int      @default(0)
-  firstTouchStop Int     @default(0)
-  avgDaysHeld   Float    @default(0)
-  
-  // Quality flags
-  isWeakHistory Boolean  @default(false) // winRate10d < 0.20 OR avgPnL10d < 0
-  
-  lastUpdated   DateTime @updatedAt
-  
-  @@unique([symbol, timeframe, strategy])
-  @@index([symbol])
-  @@index([strategy])
-  @@index([hasMinSamples])
-}
-
-// User-defined custom strategies
-model UserStrategy {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String   @db.VarChar(100)
-  description String?  @db.Text
-  
-  // Strategy DSL JSON (validated with Zod)
-  dsl         Json
-  
-  // Quick-access fields (denormalized for queries)
-  direction   String   @db.VarChar(10)  // long, short
-  timeframe   String   @db.VarChar(10)  // 1min, 5min, 15min, 1hour, 1day
-  
-  // Status and usage
-  isActive    Boolean  @default(true)
-  priority    Int      @default(0)      // Higher = evaluated first
-  
-  // Metadata
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  lastUsedAt  DateTime?
-  useCount    Int      @default(0)
-  
-  // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  backtests   UserStrategyBacktest[]
-  
-  @@index([userId])
-  @@index([userId, isActive])
-  @@index([priority])
-  @@unique([userId, name])
-}
-
-// Backtest results for user-defined strategies
-model UserStrategyBacktest {
-  id             String   @id @default(cuid())
-  strategyId     String
-  symbol         String
-  timeframe      String   @default("1D")
-  signalDate     DateTime
-  
-  // Entry details
-  entry          Float
-  stop           Float
-  direction      String   // long, short
-  
-  // Targets
-  target1        Float
-  target2        Float?
-  target3        Float?
-  
-  // Quality metrics
-  quality        Float
-  viability      Float
-  rrFirst        Float
-  
-  // Multi-horizon outcomes
-  outcome5d      String?
-  outcome10d     String?
-  outcome20d     String?
-  
-  // First-touch outcome
-  firstTouch     String?  // T1, T2, T3, stop
-  daysHeld       Int?
-  
-  // Multi-horizon P&L
-  pnl5d          Float?
-  pnl10d         Float?
-  pnl20d         Float?
-  
-  // Market context
-  spyRegime      String
-  volZ           Float
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  
-  // Relations
-  strategy       UserStrategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
-  
-  @@index([strategyId])
-  @@index([symbol, timeframe])
-  @@index([signalDate])
-  @@index([strategyId, symbol, signalDate])
-}
-
 // Saved Analysis Reports
 // Stores complete analysis reports with optimization for reruns
 model SavedReport {
@@ -335,6 +158,7 @@ model TradeJournal {
   // User-provided fields (required)
   ticker      String   @db.VarChar(10)
   direction   String   @db.VarChar(10)  // "long" or "short"
+  tradeType   String   @default("swing") @db.VarChar(10) // "swing" or "intraday"
   entryPrice  Float
   entryDate   DateTime
   exitPrice   Float?   // Null if trade is still open
@@ -387,4 +211,24 @@ model TradeJournal {
   @@index([isOpen])
   @@index([analysisReportId])
   @@index([exitReason])
+}
+
+model JournalAnalysis {
+  id              String   @id @default(cuid())
+  userId          String
+  periodLabel     String   @db.VarChar(100)
+  typeFilter      String?  @db.VarChar(10)  // "all" | "intraday" | "swing" - filters used when generated
+  tradesAnalyzed  Int
+  intradayCount   Int      @default(0)
+  swingCount      Int      @default(0)
+  winRate         Float?
+  totalPL         Float?
+  analysis        String   @db.Text
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, typeFilter])
 }
