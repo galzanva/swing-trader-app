@@ -37,6 +37,8 @@ export default function Navbar({ session }: NavbarProps) {
     tools: {
       label: '🛠️ Tools',
       items: [
+        { href: '/day-scanner', label: '🔴 Day Trading Scanner' },
+        { href: '/intraday-analysis', label: '⚡ Intraday Analysis' },
         { href: '/scanner', label: '📊 Market Screener' },
         { href: '/trade-calculator', label: '🧮 Trade Calculator' },
       ] as NavItem[],

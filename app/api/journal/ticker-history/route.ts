@@ -1,7 +1,10 @@
 /**
  * API Route: Ticker History & Wash Sale Tracker
  * GET /api/journal/ticker-history - Get per-ticker performance stats and wash sale info
- * Query params: ?ticker=AAPL (optional - returns all tickers if omitted)
+ *
+ * Query params:
+ *   ?ticker=AAPL  — optional filter to a single ticker
+ *   ?page=1&limit=15 — optional server-side pagination (summary still reflects all tickers)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -142,9 +145,10 @@ export async function GET(request: NextRequest) {
         const sorted = [...recentLosses].sort((a, b) =>
           new Date(b.exitDate!).getTime() - new Date(a.exitDate!).getTime()
         );
-        lastLossDate = sorted[0].exitDate!;
+        const lastExit = sorted[0].exitDate as Date;
+        lastLossDate = lastExit.toISOString();
         lastLossAmount = sorted[0].profitLoss;
-        const daysSinceLoss = Math.floor((now.getTime() - new Date(lastLossDate).getTime()) / (1000 * 60 * 60 * 24));
+        const daysSinceLoss = Math.floor((now.getTime() - lastExit.getTime()) / (1000 * 60 * 60 * 24));
         daysRemaining = Math.max(0, WASH_SALE_DAYS - daysSinceLoss);
       }
 
@@ -193,14 +197,49 @@ export async function GET(request: NextRequest) {
     // Sort by most recent trade first
     tickerStats.sort((a, b) => new Date(b.lastTradeDate).getTime() - new Date(a.lastTradeDate).getTime());
 
+    const summary = {
+      totalTickers: tickerStats.length,
+      tickersWithWashSaleWarning: tickerStats.filter(t => t.washSaleWarning).length,
+      totalPL: parseFloat(tickerStats.reduce((sum, t) => sum + t.totalPL, 0).toFixed(2)),
+    };
+
+    // Optional server-side pagination (same shape as /api/reports)
+    const limitRaw = searchParams.get('limit');
+    const pageRaw = searchParams.get('page');
+    const limit =
+      limitRaw != null && limitRaw !== ''
+        ? Math.min(100, Math.max(1, parseInt(limitRaw, 10) || 20))
+        : null;
+    const requestedPage = Math.max(1, parseInt(pageRaw || '1', 10) || 1);
+
+    let tickersOut = tickerStats;
+    let pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasMore: boolean;
+    } | undefined;
+
+    if (limit != null) {
+      const total = tickerStats.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const page = Math.min(requestedPage, totalPages);
+      tickersOut = tickerStats.slice((page - 1) * limit, page * limit);
+      pagination = {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      };
+    }
+
     return NextResponse.json({
       success: true,
-      tickers: tickerStats,
-      summary: {
-        totalTickers: tickerStats.length,
-        tickersWithWashSaleWarning: tickerStats.filter(t => t.washSaleWarning).length,
-        totalPL: parseFloat(tickerStats.reduce((sum, t) => sum + t.totalPL, 0).toFixed(2)),
-      },
+      tickers: tickersOut,
+      summary,
+      ...(pagination ? { pagination } : {}),
     });
   } catch (error: any) {
     console.error('[Ticker History] Error:', error);

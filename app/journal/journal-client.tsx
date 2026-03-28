@@ -96,6 +96,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'intraday' | 'swing'>('all');
+  const [tradesPage, setTradesPage] = useState(1);
+  const tradesPerPage = 20;
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Form state
@@ -260,6 +262,17 @@ export default function JournalClient({ session }: JournalClientProps) {
 
     return result;
   }, [trades, selectedPeriod, typeFilter]);
+
+  useEffect(() => {
+    setTradesPage(1);
+  }, [selectedPeriod, typeFilter]);
+
+  const tradesTotalPages = Math.max(1, Math.ceil(filteredTrades.length / tradesPerPage));
+  const tradesPageSafe = Math.min(tradesPage, tradesTotalPages);
+  const paginatedTrades = useMemo(() => {
+    const start = (tradesPageSafe - 1) * tradesPerPage;
+    return filteredTrades.slice(start, start + tradesPerPage);
+  }, [filteredTrades, tradesPageSafe, tradesPerPage]);
 
   const filteredClosedCount = useMemo(() =>
     filteredTrades.filter(t => !t.isOpen && t.returnPct !== null).length,
@@ -771,7 +784,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {filteredTrades.map((trade) => (
+                  {paginatedTrades.map((trade) => (
                     <tr key={trade.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm font-medium text-white">{trade.ticker}</div>
@@ -835,6 +848,36 @@ export default function JournalClient({ session }: JournalClientProps) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination — matches reports-style controls */}
+          {!loading && filteredTrades.length > 0 && tradesTotalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-white/10 bg-slate-900/30">
+              <div className="text-blue-200 text-sm">
+                Showing {(tradesPageSafe - 1) * tradesPerPage + 1}–{Math.min(tradesPageSafe * tradesPerPage, filteredTrades.length)} of {filteredTrades.length} trades
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setTradesPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={tradesPageSafe <= 1}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center px-4 py-2 bg-teal-600/20 text-white rounded-lg border border-teal-500/30 text-sm">
+                  Page {tradesPageSafe} of {tradesTotalPages}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setTradesPage(p => Math.min(tradesTotalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={tradesPageSafe >= tradesTotalPages}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

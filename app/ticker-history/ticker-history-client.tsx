@@ -58,6 +58,10 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
   const [selectedTicker, setSelectedTicker] = useState<TickerStats | null>(null);
   const [filterWashSale, setFilterWashSale] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'pl' | 'trades' | 'winrate'>('recent');
+  const [tickerListPage, setTickerListPage] = useState(1);
+  const [tradeDetailPage, setTradeDetailPage] = useState(1);
+  const tickersPerPage = 15;
+  const tradesPerPage = 20;
 
   useEffect(() => { fetchData(); }, []);
 
@@ -87,6 +91,33 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
     }
     return result;
   }, [tickers, search, filterWashSale, sortBy]);
+
+  useEffect(() => {
+    setTickerListPage(1);
+  }, [search, filterWashSale, sortBy]);
+
+  useEffect(() => {
+    setTradeDetailPage(1);
+  }, [selectedTicker?.ticker]);
+
+  const tickerListTotalPages = Math.max(1, Math.ceil(filteredTickers.length / tickersPerPage));
+  const tickerListPageSafe = Math.min(tickerListPage, tickerListTotalPages);
+  const paginatedTickerList = useMemo(() => {
+    const start = (tickerListPageSafe - 1) * tickersPerPage;
+    return filteredTickers.slice(start, start + tickersPerPage);
+  }, [filteredTickers, tickerListPageSafe, tickersPerPage]);
+
+  const tradeDetailTotalPages = selectedTicker
+    ? Math.max(1, Math.ceil(selectedTicker.trades.length / tradesPerPage))
+    : 1;
+  const tradeDetailPageSafe = selectedTicker
+    ? Math.min(tradeDetailPage, tradeDetailTotalPages)
+    : 1;
+  const paginatedDetailTrades = useMemo(() => {
+    if (!selectedTicker) return [];
+    const start = (tradeDetailPageSafe - 1) * tradesPerPage;
+    return selectedTicker.trades.slice(start, start + tradesPerPage);
+  }, [selectedTicker, tradeDetailPageSafe, tradesPerPage]);
 
   const washSaleCount = tickers.filter(t => t.washSaleWarning).length;
   const overallPL = tickers.reduce((sum, t) => sum + t.totalPL, 0);
@@ -293,7 +324,7 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/10">
-                    {selectedTicker.trades.map((trade) => (
+                    {paginatedDetailTrades.map((trade) => (
                       <tr key={trade.id} className="hover:bg-white/5 transition-colors">
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
@@ -343,6 +374,34 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
                   </tbody>
                 </table>
               </div>
+              {selectedTicker.trades.length > tradesPerPage && tradeDetailTotalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-white/10 bg-slate-900/30">
+                  <div className="text-blue-200 text-sm">
+                    Showing {(tradeDetailPageSafe - 1) * tradesPerPage + 1}–{Math.min(tradeDetailPageSafe * tradesPerPage, selectedTicker.trades.length)} of {selectedTicker.trades.length} trades
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setTradeDetailPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      disabled={tradeDetailPageSafe <= 1}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                    >
+                      Previous
+                    </button>
+                    <div className="flex items-center px-4 py-2 bg-teal-600/20 text-white rounded-lg border border-teal-500/30 text-sm">
+                      Page {tradeDetailPageSafe} of {tradeDetailTotalPages}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setTradeDetailPage(p => Math.min(tradeDetailTotalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      disabled={tradeDetailPageSafe >= tradeDetailTotalPages}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -353,7 +412,7 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
                 {search ? `No tickers matching "${search}"` : 'No trades recorded yet. Add trades in your Trading Journal.'}
               </div>
             ) : (
-              filteredTickers.map(t => (
+              paginatedTickerList.map(t => (
                 <button
                   key={t.ticker}
                   onClick={() => setSelectedTicker(t)}
@@ -404,6 +463,35 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
                   )}
                 </button>
               ))
+            )}
+
+            {filteredTickers.length > 0 && tickerListTotalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-xl p-4 mt-4">
+                <div className="text-blue-200 text-sm">
+                  Showing {(tickerListPageSafe - 1) * tickersPerPage + 1}–{Math.min(tickerListPageSafe * tickersPerPage, filteredTickers.length)} of {filteredTickers.length} tickers
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setTickerListPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    disabled={tickerListPageSafe <= 1}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex items-center px-4 py-2 bg-teal-600/20 text-white rounded-lg border border-teal-500/30 text-sm">
+                    Page {tickerListPageSafe} of {tickerListTotalPages}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setTickerListPage(p => Math.min(tickerListTotalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    disabled={tickerListPageSafe >= tickerListTotalPages}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
