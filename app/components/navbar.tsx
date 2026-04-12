@@ -38,6 +38,7 @@ export default function Navbar({ session }: NavbarProps) {
       label: '🛠️ Tools',
       items: [
         { href: '/day-scanner', label: '🔴 Day Trading Scanner' },
+        { href: '/alpaca-scanner', label: '⚡ Alpaca Live Scanner' },
         { href: '/intraday-analysis', label: '⚡ Intraday Analysis' },
         { href: '/scanner', label: '📊 Market Screener' },
         { href: '/trade-calculator', label: '🧮 Trade Calculator' },

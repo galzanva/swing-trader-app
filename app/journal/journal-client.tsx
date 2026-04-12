@@ -96,6 +96,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'intraday' | 'swing'>('all');
+  /** '' = all strategies; otherwise trimmed strategy label (case-insensitive match on trades) */
+  const [strategyFilter, setStrategyFilter] = useState('');
   const [tradesPage, setTradesPage] = useState(1);
   const tradesPerPage = 20;
   const modalRef = useRef<HTMLDivElement>(null);
@@ -190,6 +192,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const tradeDateStr = (isoString: string) => isoString.slice(0, 10);
 
   // Date range returns YYYY-MM-DD strings for comparison (avoids UTC/local mismatch)
+  const normalizeStrategy = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+
   const getDateRange = (period: TimePeriod): { startStr: string | null; endStr: string } => {
     const now = new Date();
     const todayStr = localDateStr(now);
@@ -260,12 +264,27 @@ export default function JournalClient({ session }: JournalClientProps) {
       });
     }
 
+    // Strategy filter (win rate / P&L for this setup only)
+    if (strategyFilter.trim() !== '') {
+      const want = normalizeStrategy(strategyFilter);
+      result = result.filter(trade => normalizeStrategy(trade.strategy) === want);
+    }
+
     return result;
-  }, [trades, selectedPeriod, typeFilter]);
+  }, [trades, selectedPeriod, typeFilter, strategyFilter]);
+
+  const strategyChoices = useMemo(() => {
+    const fromTrades = new Set<string>();
+    for (const t of trades) {
+      const s = (t.strategy ?? '').trim();
+      if (s) fromTrades.add(s);
+    }
+    return [...fromTrades].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [trades]);
 
   useEffect(() => {
     setTradesPage(1);
-  }, [selectedPeriod, typeFilter]);
+  }, [selectedPeriod, typeFilter, strategyFilter]);
 
   const tradesTotalPages = Math.max(1, Math.ceil(filteredTrades.length / tradesPerPage));
   const tradesPageSafe = Math.min(tradesPage, tradesTotalPages);
@@ -444,12 +463,20 @@ export default function JournalClient({ session }: JournalClientProps) {
       const startDate = startStr ? new Date(startStr + 'T00:00:00.000Z').toISOString() : null;
       const endDate = new Date(endStr + 'T23:59:59.999Z').toISOString();
       const typeLabels: Record<string, string> = { all: '', intraday: ' (Day Trades)', swing: ' (Swing Trades)' };
-      const periodLabel = periodLabels[selectedPeriod] + (typeLabels[typeFilter] || '');
+      const stratSuffix =
+        strategyFilter.trim() !== '' ? ` • ${strategyFilter.trim()}` : '';
+      const periodLabel = periodLabels[selectedPeriod] + (typeLabels[typeFilter] || '') + stratSuffix;
 
       const response = await fetch('/api/journal/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate, endDate, periodLabel, typeFilter }),
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          periodLabel,
+          typeFilter,
+          strategyFilter: strategyFilter.trim() || null,
+        }),
       });
 
       clearInterval(stepInterval);
@@ -556,9 +583,9 @@ export default function JournalClient({ session }: JournalClientProps) {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="text-blue-200 text-sm font-medium w-12">Type:</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {([
                 { value: 'all' as const, label: 'All', color: 'from-teal-500 to-blue-500' },
                 { value: 'intraday' as const, label: 'Day Trades', color: 'from-amber-500 to-orange-500' },
@@ -577,11 +604,35 @@ export default function JournalClient({ session }: JournalClientProps) {
               ))}
             </div>
           </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-blue-200 text-sm font-medium w-12 shrink-0">Strategy:</span>
+            <select
+              value={strategyFilter}
+              onChange={e => setStrategyFilter(e.target.value)}
+              className="min-w-[200px] max-w-md px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/40"
+            >
+              <option value="">All strategies</option>
+              {strategyChoices.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            {strategyFilter && (
+              <span className="text-xs text-blue-300">
+                Stats and table show only this strategy in the period above
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Summary Stats */}
         {filteredSummary && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="mb-8">
+            {strategyFilter.trim() !== '' && (
+              <p className="text-sm text-teal-300/90 mb-3">
+                Showing stats for <span className="font-semibold text-teal-200">{strategyFilter.trim()}</span> only (with Period + Type filters above).
+              </p>
+            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Total Trades</div>
               <div className="text-2xl font-bold text-white">{filteredSummary.totalTrades}</div>
@@ -603,6 +654,7 @@ export default function JournalClient({ session }: JournalClientProps) {
               <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgRMultiple !== null ? `${filteredSummary.avgRMultiple}R` : 'N/A'} • {filteredSummary.avgHoldingDays !== null ? `${filteredSummary.avgHoldingDays} days` : 'N/A'}</div>
             </div>
           </div>
+          </div>
         )}
 
         {/* Action Buttons */}
@@ -618,7 +670,9 @@ export default function JournalClient({ session }: JournalClientProps) {
             disabled={analyzing || filteredClosedCount === 0}
             className="px-4 py-2 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-lg font-medium hover:bg-purple-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {analyzing ? 'Analyzing...' : `AI Analysis (${filteredClosedCount} closed ${typeFilter === 'intraday' ? 'day' : typeFilter === 'swing' ? 'swing' : ''} trades)`}
+            {analyzing
+              ? 'Analyzing...'
+              : `AI Analysis (${filteredClosedCount} closed${typeFilter === 'intraday' ? ' day' : typeFilter === 'swing' ? ' swing' : ''} trades${strategyFilter.trim() ? ` · ${strategyFilter.trim()}` : ''})`}
           </button>
           {filteredClosedCount === 0 && filteredTrades.length > 0 && (
             <span className="text-xs text-amber-400 self-center">No closed trades in filter — add exit data or change filters</span>
@@ -762,9 +816,11 @@ export default function JournalClient({ session }: JournalClientProps) {
             <div className="px-6 py-12 text-center text-blue-200">Loading trades...</div>
           ) : filteredTrades.length === 0 ? (
             <div className="px-6 py-12 text-center text-blue-200">
-              {selectedPeriod === 'all'
+              {selectedPeriod === 'all' && !strategyFilter.trim()
                 ? 'No trades yet. Click "Add Trade" to get started!'
-                : `No trades found for the selected period.`}
+                : strategyFilter.trim()
+                  ? `No trades match this period, type, and strategy (“${strategyFilter.trim()}”).`
+                  : 'No trades found for the selected period.'}
             </div>
           ) : (
             <div className="overflow-x-auto">

@@ -91,12 +91,16 @@ export async function POST(request: NextRequest) {
     let endDate: Date | null = null;
     let periodLabel = 'All Time';
     let typeFilter: 'all' | 'intraday' | 'swing' = 'all';
+    let strategyFilter: string | null = null;
     try {
       const body = await request.json();
       if (body.startDate) startDate = new Date(body.startDate);
       if (body.endDate) endDate = new Date(body.endDate);
       if (body.periodLabel) periodLabel = body.periodLabel;
       if (body.typeFilter) typeFilter = body.typeFilter;
+      if (typeof body.strategyFilter === 'string' && body.strategyFilter.trim() !== '') {
+        strategyFilter = body.strategyFilter.trim();
+      }
     } catch { /* */ }
 
     const dateFilter: any = {};
@@ -114,14 +118,22 @@ export async function POST(request: NextRequest) {
     });
 
     // Apply type filter — tradeType is authoritative; use holdingDays only for legacy (null) records
-    const trades = typeFilter === 'all' ? allTrades : allTrades.filter(t => {
+    let trades = typeFilter === 'all' ? allTrades : allTrades.filter(t => {
       const isIntraday = t.tradeType === 'intraday' || (t.tradeType !== 'swing' && (t.holdingDays ?? -1) === 0);
       return typeFilter === 'intraday' ? isIntraday : !isIntraday;
     });
 
+    if (strategyFilter) {
+      const want = strategyFilter.toLowerCase();
+      trades = trades.filter(t => (t.strategy ?? '').trim().toLowerCase() === want);
+    }
+
     if (trades.length === 0) {
       const typeLabel = typeFilter === 'all' ? '' : ` (${typeFilter})`;
-      return NextResponse.json({ error: `No closed${typeLabel} trades found for ${periodLabel}` }, { status: 400 });
+      const stratLabel = strategyFilter ? `, strategy “${strategyFilter}”` : '';
+      return NextResponse.json({
+        error: `No closed${typeLabel} trades found for ${periodLabel}${stratLabel}`,
+      }, { status: 400 });
     }
 
     const intradayTrades = trades.filter(t => t.tradeType === 'intraday' || t.holdingDays === 0);
@@ -160,7 +172,7 @@ export async function POST(request: NextRequest) {
 
     const result = await callLLM({
       messages: [
-        { role: 'system', content: buildSystemPrompt(periodLabel, trades.length, typeLabel, !!priorAnalysis) },
+        { role: 'system', content: buildSystemPrompt(periodLabel, trades.length, typeLabel, !!priorAnalysis, strategyFilter) },
         { role: 'user', content: context },
       ],
       temperature: 0.6,
@@ -177,6 +189,7 @@ export async function POST(request: NextRequest) {
       tradesAnalyzed: trades.length,
       periodLabel,
       typeFilter,
+      strategyFilter,
       summary: {
         totalTrades: trades.length,
         intradayTrades: intradayTrades.length,
@@ -193,11 +206,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildSystemPrompt(periodLabel: string, tradeCount: number, composition: string, hasPrior: boolean): string {
+function buildSystemPrompt(
+  periodLabel: string,
+  tradeCount: number,
+  composition: string,
+  hasPrior: boolean,
+  strategyFilter: string | null,
+): string {
+  const strategyLine = strategyFilter
+    ? `\n**Scope:** Every trade in this sample is tagged with strategy “${strategyFilter}”. Do not discuss other setups.\n`
+    : '';
+
   return `You are an expert trading mentor writing a concise performance review. This is a WRITTEN REPORT — never ask questions or offer follow-ups.
 
 ## TASK
-Performance report for "${periodLabel}" (${tradeCount} closed trades, ${composition}).
+Performance report for "${periodLabel}" (${tradeCount} closed trades, ${composition}).${strategyLine}
 
 ## REPORT SECTIONS (use exactly these headings, keep each focused)
 
