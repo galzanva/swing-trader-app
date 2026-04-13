@@ -123,14 +123,16 @@ export async function POST(request: NextRequest) {
       return typeFilter === 'intraday' ? isIntraday : !isIntraday;
     });
 
-    if (strategyFilter) {
+    if (strategyFilter === '__none__') {
+      trades = trades.filter(t => !t.strategy || !t.strategy.trim());
+    } else if (strategyFilter) {
       const want = strategyFilter.toLowerCase();
       trades = trades.filter(t => (t.strategy ?? '').trim().toLowerCase() === want);
     }
 
     if (trades.length === 0) {
       const typeLabel = typeFilter === 'all' ? '' : ` (${typeFilter})`;
-      const stratLabel = strategyFilter ? `, strategy “${strategyFilter}”` : '';
+      const stratLabel = strategyFilter === '__none__' ? ', No Strategy' : strategyFilter ? `, strategy “${strategyFilter}”` : '';
       return NextResponse.json({
         error: `No closed${typeLabel} trades found for ${periodLabel}${stratLabel}`,
       }, { status: 400 });
@@ -213,9 +215,11 @@ function buildSystemPrompt(
   hasPrior: boolean,
   strategyFilter: string | null,
 ): string {
-  const strategyLine = strategyFilter
-    ? `\n**Scope:** Every trade in this sample is tagged with strategy “${strategyFilter}”. Do not discuss other setups.\n`
-    : '';
+  const strategyLine = strategyFilter === '__none__'
+    ? `\n**Scope:** Every trade in this sample has NO assigned strategy. Analyze patterns and suggest which strategy categories these trades might belong to.\n`
+    : strategyFilter
+      ? `\n**Scope:** Every trade in this sample is tagged with strategy “${strategyFilter}”. Do not discuss other setups.\n`
+      : '';
 
   return `You are an expert trading mentor writing a concise performance review. This is a WRITTEN REPORT — never ask questions or offer follow-ups.
 

@@ -30,6 +30,8 @@ model User {
   savedReports  SavedReport[]
   tradeJournal  TradeJournal[]
   journalAnalyses JournalAnalysis[]
+  strategies    Strategy[]
+  webullConnection WebullConnection?
   
   @@index([email])
 }
@@ -165,8 +167,17 @@ model TradeJournal {
   exitDate    DateTime?
   amount      Float    // Dollar amount in the trade
   
+  // Time-of-day for intraday precision (HH:MM:SS format, e.g. "09:32:15")
+  entryTime   String?  @db.VarChar(12)
+  exitTime    String?  @db.VarChar(12)
+  
+  // Import source tracking
+  source          String  @default("manual") @db.VarChar(20)  // "manual" | "webull"
+  externalOrderId String? @db.VarChar(100) // Webull order ID for deduplication
+
   // User-provided fields (optional)
   strategy    String?  @db.VarChar(100)  // Strategy name or "Other"
+  strategyId  String?                     // FK to Strategy model
   notes       String?  @db.Text          // Free-text notes for AI analysis
   isOpen      Boolean  @default(false)   // Is trade still open?
   exitReason  String?  @db.VarChar(20)   // hit_target, stopped_out, manual_exit, time_exit
@@ -178,9 +189,25 @@ model TradeJournal {
   profitLoss  Float?   // P/L in dollars
   maxPotentialR Float? // Maximum R multiple achieved post-entry (for early exit detection)
   
+  // Webull-specific enrichment
+  filledQty       Float?   // Actual filled quantity from broker
+  avgFillPrice    Float?   // Average fill price from broker
+  orderType       String?  @db.VarChar(30)  // MARKET, LIMIT, STOP_LOSS, etc.
+  instrumentType  String?  @db.VarChar(20)  // EQUITY, OPTION, CRYPTO
+  
   // Linked analysis report (auto-populated if analysis exists within ±3 days)
   analysisReportId String? // Links to SavedReport for strategy feedback loop
   
+  // Ticker snapshot data (populated via Finnhub/Polygon on save or enrichment)
+  sector          String?  @db.VarChar(100)
+  industry        String?  @db.VarChar(100)
+  marketCap       Float?            // in millions
+  floatShares     Float?            // in millions
+  sharesOutstanding Float?          // in millions
+  shortPercent    Float?            // short interest as % of float
+  avgVolume       Float?            // average daily volume
+  beta            Float?
+
   // Enriched market data (populated on save)
   entryOHLC   Json?    // {open, high, low, close, volume} for entry date
   exitOHLC    Json?    // {open, high, low, close, volume} for exit date
@@ -200,17 +227,57 @@ model TradeJournal {
   updatedAt   DateTime @updatedAt
   
   // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   analysisReport SavedReport? @relation(fields: [analysisReportId], references: [id], onDelete: SetNull)
+  strategyRef    Strategy?    @relation(fields: [strategyId], references: [id], onDelete: SetNull)
   
+  @@unique([userId, externalOrderId])
   @@index([userId])
   @@index([userId, createdAt])
   @@index([ticker])
   @@index([strategy])
+  @@index([strategyId])
   @@index([direction])
   @@index([isOpen])
+  @@index([source])
   @@index([analysisReportId])
   @@index([exitReason])
+}
+
+// Reusable trading strategies with descriptions and criteria
+model Strategy {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  criteria    Json?    // { entry_rules: [], exit_rules: [], indicators: [], timeframes: [] }
+  tradeType   String   @default("intraday") @db.VarChar(10) // "intraday" | "swing" | "both"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades TradeJournal[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// Webull API connection credentials and token state
+model WebullConnection {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  accountId       String?  @db.VarChar(50)
+  accessToken     String?  @db.Text
+  tokenStatus     String?  @db.VarChar(20) // PENDING, NORMAL, INVALID, EXPIRED
+  tokenExpiresAt  DateTime?
+  host            String   @default("api.webull.com") @db.VarChar(100)
+  lastSyncAt      DateTime?
+  lastSyncCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model JournalAnalysis {

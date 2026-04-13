@@ -48,8 +48,11 @@ export default function Navbar({ session }: NavbarProps) {
       label: '📓 Journal',
       items: [
         { href: '/journal', label: '📓 Trading Journal', exact: true },
-        { href: '/journal/analyses', label: '📝 Journal Analyses' },
-        { href: '/ticker-history', label: '📊 Ticker History' },
+        { href: '/analytics', label: '📊 Trade Analytics' },
+        { href: '/strategies', label: '🎯 Strategies' },
+        { href: '/webull-trades', label: '🔗 Webull Import' },
+        { href: '/journal/analyses', label: '📝 AI Analyses' },
+        { href: '/ticker-history', label: '📈 Ticker History' },
       ] as NavItem[],
     },
   };

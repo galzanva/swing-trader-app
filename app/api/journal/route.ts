@@ -19,6 +19,8 @@ interface TradeInput {
   entryDate: string;
   exitPrice?: number;
   exitDate?: string;
+  entryTime?: string;
+  exitTime?: string;
   amount: number;
   strategy?: string;
   analysisReportId?: string;
@@ -298,6 +300,8 @@ export async function POST(request: NextRequest) {
       entryDate,
       exitPrice: body.exitPrice ?? null,
       exitDate: exitDate,
+      entryTime: body.entryTime ?? null,
+      exitTime: body.exitTime ?? null,
       amount: body.amount,
       strategy: body.strategy ?? null,
       notes: body.notes ?? null,

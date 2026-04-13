@@ -13,6 +13,8 @@ interface Trade {
   entryDate: string;
   exitPrice: number | null;
   exitDate: string | null;
+  entryTime: string | null;
+  exitTime: string | null;
   amount: number;
   strategy: string | null;
   notes: string | null;
@@ -23,6 +25,8 @@ interface Trade {
   holdingDays: number | null;
   profitLoss: number | null;
   analysisReportId: string | null;
+  source: string;
+  externalOrderId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +102,9 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [typeFilter, setTypeFilter] = useState<'all' | 'intraday' | 'swing'>('all');
   /** '' = all strategies; otherwise trimmed strategy label (case-insensitive match on trades) */
   const [strategyFilter, setStrategyFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'webull'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [tradesPage, setTradesPage] = useState(1);
   const tradesPerPage = 20;
   const modalRef = useRef<HTMLDivElement>(null);
@@ -113,6 +120,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   });
   const [exitPrice, setExitPrice] = useState('');
   const [exitDate, setExitDate] = useState('');
+  const [entryTimeForm, setEntryTimeForm] = useState('');
+  const [exitTimeForm, setExitTimeForm] = useState('');
   const [amount, setAmount] = useState('');
   const [strategy, setStrategy] = useState('');
   const [selectedReportId, setSelectedReportId] = useState('');
@@ -120,17 +129,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [exitReason, setExitReason] = useState('');
 
-  const strategyOptions = [
-    'EMA Pullback',
-    'Breakout',
-    'Reversal',
-    'Momentum',
-    'Squeeze Play',
-    'Gap & Go',
-    'VWAP Bounce',
-    'Scalp',
-    'Other',
-  ];
+  // Strategies from DB
+  const [dbStrategies, setDbStrategies] = useState<{ id: string; name: string; tradeType: string }[]>([]);
 
   const exitReasonOptions = [
     { value: 'hit_target', label: 'Hit Target' },
@@ -139,7 +139,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     { value: 'time_exit', label: 'Time-Based Exit' },
   ];
 
-  useEffect(() => { fetchTrades(); fetchSavedAnalyses(); }, []);
+  useEffect(() => { fetchTrades(); fetchSavedAnalyses(); fetchStrategies(); }, []);
 
   // Close modal on outside click
   useEffect(() => {
@@ -193,6 +193,8 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   // Date range returns YYYY-MM-DD strings for comparison (avoids UTC/local mismatch)
   const normalizeStrategy = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  const strategyFilterLabel = strategyFilter === '__none__' ? 'No Strategy' : strategyFilter.trim();
+  const hasStrategyFilter = strategyFilter !== '';
 
   const getDateRange = (period: TimePeriod): { startStr: string | null; endStr: string } => {
     const now = new Date();
@@ -265,26 +267,41 @@ export default function JournalClient({ session }: JournalClientProps) {
     }
 
     // Strategy filter (win rate / P&L for this setup only)
-    if (strategyFilter.trim() !== '') {
+    if (strategyFilter === '__none__') {
+      result = result.filter(trade => !trade.strategy || !trade.strategy.trim());
+    } else if (strategyFilter.trim() !== '') {
       const want = normalizeStrategy(strategyFilter);
       result = result.filter(trade => normalizeStrategy(trade.strategy) === want);
     }
 
+    // Source filter
+    if (sourceFilter !== 'all') {
+      result = result.filter(trade => (trade.source || 'manual') === sourceFilter);
+    }
+
     return result;
-  }, [trades, selectedPeriod, typeFilter, strategyFilter]);
+  }, [trades, selectedPeriod, typeFilter, strategyFilter, sourceFilter]);
+
+  const hasTradesWithNoStrategy = useMemo(() =>
+    trades.some(t => !t.strategy || !t.strategy.trim()),
+  [trades]);
 
   const strategyChoices = useMemo(() => {
-    const fromTrades = new Set<string>();
+    const all = new Set<string>();
     for (const t of trades) {
       const s = (t.strategy ?? '').trim();
-      if (s) fromTrades.add(s);
+      if (s) all.add(s);
     }
-    return [...fromTrades].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  }, [trades]);
+    for (const s of dbStrategies) {
+      all.add(s.name);
+    }
+    return [...all].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [trades, dbStrategies]);
 
   useEffect(() => {
     setTradesPage(1);
-  }, [selectedPeriod, typeFilter, strategyFilter]);
+    setSelectedIds(new Set());
+  }, [selectedPeriod, typeFilter, strategyFilter, sourceFilter]);
 
   const tradesTotalPages = Math.max(1, Math.ceil(filteredTrades.length / tradesPerPage));
   const tradesPageSafe = Math.min(tradesPage, tradesTotalPages);
@@ -310,8 +327,6 @@ export default function JournalClient({ session }: JournalClientProps) {
     const totalPL = closedTrades.reduce((sum, t) => sum + (t.profitLoss ?? 0), 0);
     const avgPL = totalClosed > 0 ? totalPL / totalClosed : 0;
     const avgReturn = totalClosed > 0 ? closedTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalClosed : 0;
-    const rTrades = closedTrades.filter(t => t.rMultiple !== null);
-    const avgRMultiple = rTrades.length > 0 ? rTrades.reduce((sum, t) => sum + (t.rMultiple ?? 0), 0) / rTrades.length : null;
     const dTrades = closedTrades.filter(t => t.holdingDays !== null);
     const avgHoldingDays = dTrades.length > 0 ? dTrades.reduce((sum, t) => sum + (t.holdingDays ?? 0), 0) / dTrades.length : null;
     return {
@@ -320,7 +335,6 @@ export default function JournalClient({ session }: JournalClientProps) {
       totalPL: parseFloat(totalPL.toFixed(2)),
       avgPL: parseFloat(avgPL.toFixed(2)),
       avgReturn: parseFloat(avgReturn.toFixed(2)),
-      avgRMultiple: avgRMultiple !== null ? parseFloat(avgRMultiple.toFixed(2)) : null,
       avgHoldingDays: avgHoldingDays !== null ? parseFloat(avgHoldingDays.toFixed(1)) : null,
     };
   }, [filteredTrades]);
@@ -335,6 +349,14 @@ export default function JournalClient({ session }: JournalClientProps) {
     } catch { alert('Failed to fetch trades'); } finally { setLoading(false); }
   };
 
+  const fetchStrategies = async () => {
+    try {
+      const res = await fetch('/api/strategies');
+      const data = await res.json();
+      if (data.success) setDbStrategies(data.strategies.filter((s: { isActive: boolean }) => s.isActive));
+    } catch { /* silent */ }
+  };
+
   const closeModal = () => {
     setShowModal(false);
     setEditingTrade(null);
@@ -343,6 +365,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const openAddModal = () => {
     resetForm();
     setEditingTrade(null);
+    fetchStrategies();
     setShowModal(true);
   };
 
@@ -378,6 +401,8 @@ export default function JournalClient({ session }: JournalClientProps) {
         entryDate,
         exitPrice: exitPrice ? parseFloat(exitPrice) : undefined,
         exitDate: effectiveExitDate || undefined,
+        entryTime: entryTimeForm || undefined,
+        exitTime: exitTimeForm || undefined,
         amount: parseFloat(amount),
         strategy: strategy || undefined,
         analysisReportId: selectedReportId || undefined,
@@ -407,11 +432,13 @@ export default function JournalClient({ session }: JournalClientProps) {
     setTicker(''); setDirection('long'); setTradeType('intraday');
     setEntryPrice(''); setEntryDate(localDateStr());
     setExitPrice(''); setExitDate(''); setAmount('');
+    setEntryTimeForm(''); setExitTimeForm('');
     setStrategy(''); setSelectedReportId(''); setNotes('');
     setIsOpen(false); setExitReason('');
   };
 
   const handleEdit = (trade: Trade) => {
+    fetchStrategies();
     setEditingTrade(trade);
     setTicker(trade.ticker);
     setDirection(trade.direction);
@@ -420,6 +447,8 @@ export default function JournalClient({ session }: JournalClientProps) {
     setEntryDate(trade.entryDate.split('T')[0]);
     setExitPrice(trade.exitPrice?.toString() || '');
     setExitDate(trade.exitDate ? trade.exitDate.split('T')[0] : '');
+    setEntryTimeForm(trade.entryTime || '');
+    setExitTimeForm(trade.exitTime || '');
     setAmount(trade.amount.toString());
     setStrategy(trade.strategy || '');
     setSelectedReportId(trade.analysisReportId || '');
@@ -437,6 +466,42 @@ export default function JournalClient({ session }: JournalClientProps) {
       if (data.success) fetchTrades();
       else alert('Error deleting trade: ' + data.error);
     } catch { alert('Failed to delete trade'); }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const pageIds = paginatedTrades.map(t => t.id);
+    const allSelected = pageIds.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      pageIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected trade(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.all(
+        Array.from(selectedIds).map(id =>
+          fetch(`/api/journal/${id}`, { method: 'DELETE' }).then(r => r.json())
+        )
+      );
+      const failed = results.filter(r => !r.success).length;
+      if (failed > 0) alert(`${failed} trade(s) failed to delete.`);
+      setSelectedIds(new Set());
+      fetchTrades();
+    } catch { alert('Failed to delete trades'); }
+    setBulkDeleting(false);
   };
 
   const fetchSavedAnalyses = async () => {
@@ -463,8 +528,7 @@ export default function JournalClient({ session }: JournalClientProps) {
       const startDate = startStr ? new Date(startStr + 'T00:00:00.000Z').toISOString() : null;
       const endDate = new Date(endStr + 'T23:59:59.999Z').toISOString();
       const typeLabels: Record<string, string> = { all: '', intraday: ' (Day Trades)', swing: ' (Swing Trades)' };
-      const stratSuffix =
-        strategyFilter.trim() !== '' ? ` • ${strategyFilter.trim()}` : '';
+      const stratSuffix = hasStrategyFilter ? ` • ${strategyFilterLabel}` : '';
       const periodLabel = periodLabels[selectedPeriod] + (typeLabels[typeFilter] || '') + stratSuffix;
 
       const response = await fetch('/api/journal/analyze', {
@@ -475,7 +539,7 @@ export default function JournalClient({ session }: JournalClientProps) {
           endDate,
           periodLabel,
           typeFilter,
-          strategyFilter: strategyFilter.trim() || null,
+          strategyFilter: strategyFilter === '__none__' ? '__none__' : (strategyFilter.trim() || null),
         }),
       });
 
@@ -612,6 +676,9 @@ export default function JournalClient({ session }: JournalClientProps) {
               className="min-w-[200px] max-w-md px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/40"
             >
               <option value="">All strategies</option>
+              {hasTradesWithNoStrategy && (
+                <option value="__none__">No Strategy</option>
+              )}
               {strategyChoices.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -622,14 +689,35 @@ export default function JournalClient({ session }: JournalClientProps) {
               </span>
             )}
           </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-blue-200 text-sm font-medium w-12 shrink-0">Source:</span>
+            <div className="flex gap-2 flex-wrap">
+              {([
+                { value: 'all' as const, label: 'All Sources' },
+                { value: 'manual' as const, label: 'Manual' },
+                { value: 'webull' as const, label: 'Webull' },
+              ]).map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSourceFilter(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${sourceFilter === opt.value
+                    ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
+                    : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                    }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Summary Stats */}
         {filteredSummary && (
           <div className="mb-8">
-            {strategyFilter.trim() !== '' && (
+            {hasStrategyFilter && (
               <p className="text-sm text-teal-300/90 mb-3">
-                Showing stats for <span className="font-semibold text-teal-200">{strategyFilter.trim()}</span> only (with Period + Type filters above).
+                Showing stats for <span className="font-semibold text-teal-200">{strategyFilterLabel}</span> only (with Period + Type filters above).
               </p>
             )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -651,7 +739,7 @@ export default function JournalClient({ session }: JournalClientProps) {
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Avg Return</div>
               <div className={`text-2xl font-bold ${filteredSummary.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>{filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%</div>
-              <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgRMultiple !== null ? `${filteredSummary.avgRMultiple}R` : 'N/A'} • {filteredSummary.avgHoldingDays !== null ? `${filteredSummary.avgHoldingDays} days` : 'N/A'}</div>
+              <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgHoldingDays !== null ? `Avg hold ${filteredSummary.avgHoldingDays} days` : '—'}</div>
             </div>
           </div>
           </div>
@@ -672,7 +760,7 @@ export default function JournalClient({ session }: JournalClientProps) {
           >
             {analyzing
               ? 'Analyzing...'
-              : `AI Analysis (${filteredClosedCount} closed${typeFilter === 'intraday' ? ' day' : typeFilter === 'swing' ? ' swing' : ''} trades${strategyFilter.trim() ? ` · ${strategyFilter.trim()}` : ''})`}
+              : `AI Analysis (${filteredClosedCount} closed${typeFilter === 'intraday' ? ' day' : typeFilter === 'swing' ? ' swing' : ''} trades${hasStrategyFilter ? ` · ${strategyFilterLabel}` : ''})`}
           </button>
           {filteredClosedCount === 0 && filteredTrades.length > 0 && (
             <span className="text-xs text-amber-400 self-center">No closed trades in filter — add exit data or change filters</span>
@@ -808,18 +896,36 @@ export default function JournalClient({ session }: JournalClientProps) {
 
         {/* Trades List */}
         <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-white/10">
+          <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
             <h2 className="text-xl font-bold text-white">Your Trades</h2>
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-blue-200">{selectedIds.size} selected</span>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  {bulkDeleting ? 'Deleting...' : `Delete ${selectedIds.size}`}
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
             <div className="px-6 py-12 text-center text-blue-200">Loading trades...</div>
           ) : filteredTrades.length === 0 ? (
             <div className="px-6 py-12 text-center text-blue-200">
-              {selectedPeriod === 'all' && !strategyFilter.trim()
+              {selectedPeriod === 'all' && !hasStrategyFilter
                 ? 'No trades yet. Click "Add Trade" to get started!'
-                : strategyFilter.trim()
-                  ? `No trades match this period, type, and strategy (“${strategyFilter.trim()}”).`
+                : hasStrategyFilter
+                  ? `No trades match this period, type, and strategy (“${strategyFilterLabel}”).`
                   : 'No trades found for the selected period.'}
             </div>
           ) : (
@@ -827,6 +933,14 @@ export default function JournalClient({ session }: JournalClientProps) {
               <table className="w-full">
                 <thead className="bg-slate-900/50">
                   <tr>
+                    <th className="pl-4 pr-1 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={paginatedTrades.length > 0 && paginatedTrades.every(t => selectedIds.has(t.id))}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Ticker</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Type</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Dir</th>
@@ -834,17 +948,32 @@ export default function JournalClient({ session }: JournalClientProps) {
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Exit</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Return</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">P/L</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">R</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Strategy</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-blue-200 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
                   {paginatedTrades.map((trade) => (
-                    <tr key={trade.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={trade.id} className={`hover:bg-white/5 transition-colors ${selectedIds.has(trade.id) ? 'bg-teal-500/5' : ''}`}>
+                      <td className="pl-4 pr-1 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(trade.id)}
+                          onChange={() => toggleSelect(trade.id)}
+                          className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm font-medium text-white">{trade.ticker}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-white">{trade.ticker}</span>
+                          {(trade.source || 'manual') === 'webull' && (
+                            <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded bg-purple-500/20 text-purple-300 uppercase">WB</span>
+                          )}
+                        </div>
                         {trade.isOpen && <div className="text-xs text-green-400">Open</div>}
+                        {trade.entryTime && (
+                          <div className="text-[10px] text-blue-400/50">{trade.entryTime.slice(0, 5)}{trade.exitTime ? ` → ${trade.exitTime.slice(0, 5)}` : ''}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
@@ -886,9 +1015,6 @@ export default function JournalClient({ session }: JournalClientProps) {
                             {formatCurrency(trade.profitLoss)}
                           </div>
                         ) : (<div className="text-sm text-blue-300">—</div>)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm text-white">{trade.rMultiple !== null ? `${trade.rMultiple.toFixed(2)}R` : '—'}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm text-blue-200 max-w-[120px] truncate">{trade.strategy || '—'}</div>
@@ -945,9 +1071,16 @@ export default function JournalClient({ session }: JournalClientProps) {
           <div ref={modalRef} className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900 z-10">
-              <h2 className="text-xl font-bold text-white">
-                {editingTrade ? 'Edit Trade' : 'Add New Trade'}
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-white">
+                  {editingTrade ? 'Edit Trade' : 'Add New Trade'}
+                </h2>
+                {editingTrade && (editingTrade.source || 'manual') === 'webull' && (
+                  <span className="inline-flex px-2 py-0.5 text-[10px] font-bold rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    WEBULL IMPORT
+                  </span>
+                )}
+              </div>
               <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none transition-colors">&times;</button>
             </div>
 
@@ -1021,11 +1154,30 @@ export default function JournalClient({ session }: JournalClientProps) {
                 </div>
               </div>
 
+              {/* Entry / Exit Times */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-1">Entry Time</label>
+                  <input type="time" step="1" value={entryTimeForm}
+                    onChange={(e) => setEntryTimeForm(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-blue-400/60 mt-1">Optional — for intraday precision</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-blue-200 mb-1">Exit Time</label>
+                  <input type="time" step="1" value={exitTimeForm}
+                    onChange={(e) => setExitTimeForm(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
               {/* Intraday info banner */}
               {isIntraday && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm">
                   <span className="shrink-0">⚡</span>
-                  <span>Intraday trade — exit date auto-set to entry date. No "open trade" needed.</span>
+                  <span>Intraday trade — exit date auto-set to entry date. No &quot;open trade&quot; needed.</span>
                 </div>
               )}
 
@@ -1110,12 +1262,22 @@ export default function JournalClient({ session }: JournalClientProps) {
 
               {/* Strategy */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-1">Strategy</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-blue-200">Strategy</label>
+                  <a href="/strategies" target="_blank" rel="noopener noreferrer"
+                    className="text-[10px] text-teal-400 hover:text-teal-300 transition-colors">
+                    Manage Strategies →
+                  </a>
+                </div>
                 <select value={strategy} onChange={(e) => setStrategy(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
                 >
                   <option value="">Select a strategy...</option>
-                  {strategyOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  {dbStrategies.length > 0 && (
+                    <optgroup label="Your Strategies">
+                      {dbStrategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
