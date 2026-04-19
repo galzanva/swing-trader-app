@@ -448,23 +448,23 @@ export default function AlpacaScannerClient() {
   }, []);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 pt-24 pb-12">
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-blue-50 flex items-center gap-3">
-            ⚡ Alpaca Real-Time Scanner
+          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+            Alpaca Real-Time Scanner
             {isLive && (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-green-400">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-profit">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-profit opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-profit" />
                 </span>
                 LIVE
               </span>
             )}
           </h1>
-          <p className="text-blue-300/70 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             WebSocket-powered real-time market data from Alpaca (IEX feed)
           </p>
         </div>
@@ -473,25 +473,25 @@ export default function AlpacaScannerClient() {
           {isScanning || isLive ? (
             <button
               onClick={stopScan}
-              className="px-5 py-2.5 bg-red-500/80 hover:bg-red-500 text-white font-semibold rounded-lg transition-all"
+              className="px-5 py-2.5 bg-loss/80 hover:bg-loss text-white font-semibold rounded-lg transition-all"
             >
-              ■ Stop
+              Stop
             </button>
           ) : (
             <button
               onClick={() => { setAutoReconnect(true); startScan(); }}
-              className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-white font-semibold rounded-lg transition-all shadow-lg shadow-teal-500/20"
+              className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white font-semibold rounded-lg transition-all"
             >
-              ▶ Start Scanner
+              Start Scanner
             </button>
           )}
           <button
             onClick={() => setShowSettings(!showSettings)}
             className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
-              showSettings ? 'bg-blue-600 text-white' : 'bg-slate-800/60 text-blue-300 hover:bg-slate-700/60'
+              showSettings ? 'bg-accent text-white' : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
             }`}
           >
-            ⚙ Settings
+            Settings
           </button>
         </div>
       </div>
@@ -506,8 +506,8 @@ export default function AlpacaScannerClient() {
               onClick={() => setSelectedPreset(i)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 selectedPreset === i
-                  ? 'bg-teal-500/30 border border-teal-400/60 text-teal-300'
-                  : 'bg-slate-800/40 border border-white/5 text-blue-300/80 hover:bg-slate-700/40'
+                  ? 'bg-accent text-white'
+                  : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
               }`}
             >
               {p.label}
@@ -517,7 +517,7 @@ export default function AlpacaScannerClient() {
 
         {/* Settings panel */}
         {showSettings && (
-          <div className="bg-slate-800/40 border border-white/10 rounded-xl p-5">
+          <div className="bg-surface-1 border border-border rounded-xl p-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'Min Change %', key: 'minChangePercent' },
@@ -530,27 +530,27 @@ export default function AlpacaScannerClient() {
                 { label: 'Max Price ($)', key: 'maxPrice' },
               ].map(({ label, key }) => (
                 <div key={key}>
-                  <label className="text-xs text-blue-300/70 mb-1 block">{label}</label>
+                  <label className="text-xs text-text-muted mb-1 block">{label}</label>
                   <input
                     type="number"
                     value={criteria[key as keyof Criteria]}
                     onChange={e => updateCriteria({ [key]: Number(e.target.value) } as Partial<Criteria>)}
-                    className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                   />
                 </div>
               ))}
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex items-center gap-2 text-sm text-blue-300/80 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
                 <input
                   type="checkbox"
                   checked={autoReconnect}
                   onChange={e => setAutoReconnect(e.target.checked)}
-                  className="rounded border-white/20 bg-slate-900/50"
+                  className="rounded border-border bg-surface-2"
                 />
                 Auto-reconnect (keeps streaming after timeout)
               </label>
-              <p className="text-xs text-blue-400/50">
+              <p className="text-xs text-text-muted">
                 Per-preset thresholds, sort order, and this option are saved in this browser.
               </p>
             </div>
@@ -560,16 +560,16 @@ export default function AlpacaScannerClient() {
 
       {/* Progress */}
       {progress && (isScanning || progress.percent < 100) && (
-        <div className="mb-6 bg-slate-800/40 border border-white/10 rounded-xl p-4">
+        <div className="mb-6 bg-surface-1 border border-border rounded-xl p-4">
           <div className="flex items-center gap-3 mb-2">
             {isScanning && (
-              <div className="w-5 h-5 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             )}
-            <span className="text-sm text-blue-200">{progress.step}</span>
+            <span className="text-sm text-text-secondary">{progress.step}</span>
           </div>
-          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full transition-all duration-500"
+              className="h-full bg-accent rounded-full transition-all duration-500"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
@@ -579,17 +579,17 @@ export default function AlpacaScannerClient() {
       {/* Summary bar */}
       {sortedResults.length > 0 && (
         <div className="mb-4 flex items-center gap-6 flex-wrap text-sm">
-          <span className="text-blue-100 font-semibold">{sortedResults.length} stocks found</span>
-          {isLive && <span className="text-green-400">🟢 Streaming {liveSymbols.length} tickers</span>}
-          {connectionCount > 1 && <span className="text-blue-400/60">Reconnected {connectionCount - 1}×</span>}
-          <div className="ml-auto flex items-center gap-2 text-blue-300/70 text-xs">
+          <span className="text-text-primary font-semibold">{sortedResults.length} stocks found</span>
+          {isLive && <span className="text-profit">Streaming {liveSymbols.length} tickers</span>}
+          {connectionCount > 1 && <span className="text-text-muted">Reconnected {connectionCount - 1}x</span>}
+          <div className="ml-auto flex items-center gap-2 text-text-muted text-xs">
             <span>Sort:</span>
             {(['changePercent', 'volume', 'relativeVolume', 'floatShares', 'price'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSortBy(s)}
                 className={`px-2 py-1 rounded transition-all ${
-                  sortBy === s ? 'bg-teal-500/30 text-teal-300' : 'hover:bg-slate-700/40'
+                  sortBy === s ? 'bg-accent text-white' : 'hover:bg-surface-3'
                 }`}
               >
                 {s === 'changePercent' ? '% Change' : s === 'relativeVolume' ? 'RVol' : s === 'floatShares' ? 'Float' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -601,9 +601,9 @@ export default function AlpacaScannerClient() {
 
       {/* Results table */}
       {sortedResults.length > 0 && (
-        <div className="bg-slate-800/30 border border-white/10 rounded-xl overflow-hidden">
+        <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
           {/* Header */}
-          <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-3 text-xs font-semibold text-blue-300/60 uppercase tracking-wider border-b border-white/5 bg-slate-800/40">
+          <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-border bg-surface-2">
             <div className="col-span-2">Ticker</div>
             <div className="col-span-1 text-right">Price</div>
             <div className="col-span-1 text-right">Change</div>
@@ -625,162 +625,162 @@ export default function AlpacaScannerClient() {
                 {/* Row */}
                 <div
                   onClick={() => setExpandedTicker(isExpanded ? null : r.ticker)}
-                  className={`grid grid-cols-12 gap-2 px-4 py-3 cursor-pointer transition-all border-b border-white/5 hover:bg-white/5 ${
-                    flash === 'up' ? 'bg-green-500/10' : flash === 'down' ? 'bg-red-500/10' : ''
-                  } ${isExpanded ? 'bg-slate-700/30' : ''}`}
+                  className={`grid grid-cols-12 gap-2 px-4 py-3 cursor-pointer transition-all border-b border-border hover:bg-card-hover ${
+                    flash === 'up' ? 'bg-profit/10' : flash === 'down' ? 'bg-loss/10' : ''
+                  } ${isExpanded ? 'bg-surface-2' : ''}`}
                 >
                   {/* Ticker */}
                   <div className="col-span-2 flex items-center gap-2">
-                    <span className="font-bold text-blue-50 text-sm">{r.ticker}</span>
+                    <span className="font-bold text-text-primary text-sm">{r.ticker}</span>
                     {isLive && liveSymbols.includes(r.ticker) && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-profit animate-pulse" />
                     )}
                   </div>
 
                   {/* Price */}
                   <div className={`col-span-1 text-right font-mono text-sm ${
-                    flash === 'up' ? 'text-green-400' : flash === 'down' ? 'text-red-400' : 'text-blue-100'
+                    flash === 'up' ? 'text-profit' : flash === 'down' ? 'text-loss' : 'text-text-primary'
                   }`}>
                     ${r.price.toFixed(2)}
                   </div>
 
                   {/* Change */}
-                  <div className={`col-span-1 text-right text-sm ${r.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <div className={`col-span-1 text-right text-sm ${r.change >= 0 ? 'text-profit' : 'text-loss'}`}>
                     {r.change >= 0 ? '+' : ''}{r.change.toFixed(2)}
                   </div>
 
                   {/* % Change */}
                   <div className="col-span-1 text-right">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
-                      r.changePercent >= 30 ? 'bg-green-500/30 text-green-300' :
-                      r.changePercent >= 15 ? 'bg-green-500/20 text-green-400' :
-                      'bg-green-500/10 text-green-400'
+                      r.changePercent >= 30 ? 'bg-profit/30 text-profit' :
+                      r.changePercent >= 15 ? 'bg-profit/20 text-profit' :
+                      'bg-profit/10 text-profit'
                     }`}>
                       +{r.changePercent.toFixed(1)}%
                     </span>
                   </div>
 
                   {/* Volume */}
-                  <div className="col-span-1 text-right text-sm text-blue-200">{formatVolume(r.volume)}</div>
+                  <div className="col-span-1 text-right text-sm text-text-secondary">{formatVolume(r.volume)}</div>
 
                   {/* RVol */}
                   <div className="col-span-1 text-right">
                     <span className={`text-sm font-medium ${
                       r.relativeVolume >= 10 ? 'text-orange-400' :
                       r.relativeVolume >= 5 ? 'text-yellow-400' :
-                      'text-blue-300'
+                      'text-text-secondary'
                     }`}>
                       {r.relativeVolume.toFixed(1)}x
                     </span>
                   </div>
 
                   {/* Float */}
-                  <div className="col-span-1 text-right text-sm text-blue-300">{formatFloat(r.floatShares)}</div>
+                  <div className="col-span-1 text-right text-sm text-text-secondary">{formatFloat(r.floatShares)}</div>
 
                   {/* VWAP */}
-                  <div className="col-span-1 text-right text-sm text-blue-300/80">
+                  <div className="col-span-1 text-right text-sm text-text-muted">
                     {r.vwap > 0 ? `$${r.vwap.toFixed(2)}` : '—'}
                   </div>
 
                   {/* Day Range */}
-                  <div className="col-span-1 text-right text-xs text-blue-300/60">
+                  <div className="col-span-1 text-right text-xs text-text-muted">
                     {r.low.toFixed(2)} – {r.high.toFixed(2)}
                   </div>
 
                   {/* Updated */}
-                  <div className="col-span-2 text-right text-xs text-blue-400/50">
+                  <div className="col-span-2 text-right text-xs text-text-muted">
                     {timeSince(r.lastUpdate)}
                   </div>
                 </div>
 
                 {/* Expanded details */}
                 {isExpanded && (
-                  <div className="border-b border-white/5 bg-slate-800/50 p-4">
+                  <div className="border-b border-border bg-surface-2 p-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {/* Info */}
-                      <div className="bg-slate-900/40 rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-blue-300/60 uppercase mb-2">Company Info</h4>
-                        <p className="text-sm text-blue-100">{r.name}</p>
-                        {r.industry && <p className="text-xs text-blue-300/60 mt-1">{r.industry}</p>}
+                      <div className="bg-surface-3 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-text-muted uppercase mb-2">Company Info</h4>
+                        <p className="text-sm text-text-primary">{r.name}</p>
+                        {r.industry && <p className="text-xs text-text-muted mt-1">{r.industry}</p>}
                         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                           <div>
-                            <span className="text-blue-400/60">Open:</span>{' '}
-                            <span className="text-blue-100">${r.open.toFixed(2)}</span>
+                            <span className="text-text-muted">Open:</span>{' '}
+                            <span className="text-text-primary">${r.open.toFixed(2)}</span>
                           </div>
                           <div>
-                            <span className="text-blue-400/60">Prev Close:</span>{' '}
-                            <span className="text-blue-100">${r.prevClose.toFixed(2)}</span>
+                            <span className="text-text-muted">Prev Close:</span>{' '}
+                            <span className="text-text-primary">${r.prevClose.toFixed(2)}</span>
                           </div>
                           <div>
-                            <span className="text-blue-400/60">Day High:</span>{' '}
-                            <span className="text-green-400">${r.high.toFixed(2)}</span>
+                            <span className="text-text-muted">Day High:</span>{' '}
+                            <span className="text-profit">${r.high.toFixed(2)}</span>
                           </div>
                           <div>
-                            <span className="text-blue-400/60">Day Low:</span>{' '}
-                            <span className="text-red-400">${r.low.toFixed(2)}</span>
+                            <span className="text-text-muted">Day Low:</span>{' '}
+                            <span className="text-loss">${r.low.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Volume */}
-                      <div className="bg-slate-900/40 rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-blue-300/60 uppercase mb-2">Volume & Float</h4>
+                      <div className="bg-surface-3 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-text-muted uppercase mb-2">Volume & Float</h4>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-blue-400/60">Volume</span>
-                            <span className="text-blue-100 font-medium">{formatVolume(r.volume)}</span>
+                            <span className="text-text-muted">Volume</span>
+                            <span className="text-text-primary font-medium">{formatVolume(r.volume)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-blue-400/60">Relative Vol</span>
-                            <span className={`font-medium ${r.relativeVolume >= 5 ? 'text-orange-400' : 'text-blue-100'}`}>
-                              {r.relativeVolume.toFixed(1)}× avg
+                            <span className="text-text-muted">Relative Vol</span>
+                            <span className={`font-medium ${r.relativeVolume >= 5 ? 'text-orange-400' : 'text-text-primary'}`}>
+                              {r.relativeVolume.toFixed(1)}x avg
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-blue-400/60">VWAP</span>
-                            <span className="text-blue-100">${r.vwap > 0 ? r.vwap.toFixed(2) : '—'}</span>
+                            <span className="text-text-muted">VWAP</span>
+                            <span className="text-text-primary">${r.vwap > 0 ? r.vwap.toFixed(2) : '—'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-blue-400/60">Float</span>
-                            <span className="text-blue-100">{formatFloat(r.floatShares)}</span>
+                            <span className="text-text-muted">Float</span>
+                            <span className="text-text-primary">{formatFloat(r.floatShares)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-blue-400/60">Shares Out</span>
-                            <span className="text-blue-100">{r.sharesOutstanding ? formatFloat(r.sharesOutstanding) : '—'}</span>
+                            <span className="text-text-muted">Shares Out</span>
+                            <span className="text-text-primary">{r.sharesOutstanding ? formatFloat(r.sharesOutstanding) : '—'}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Latest Bar */}
-                      <div className="bg-slate-900/40 rounded-lg p-3">
-                        <h4 className="text-xs font-semibold text-blue-300/60 uppercase mb-2">
+                      <div className="bg-surface-3 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-text-muted uppercase mb-2">
                           Latest Minute Bar
                           {isLive && liveSymbols.includes(r.ticker) && (
-                            <span className="ml-2 text-green-400 normal-case">● live</span>
+                            <span className="ml-2 text-profit normal-case">● live</span>
                           )}
                         </h4>
                         {(() => {
                           const bar = liveBars.get(r.ticker) || r.minuteBar;
-                          if (!bar) return <p className="text-xs text-blue-400/50">No bar data yet</p>;
+                          if (!bar) return <p className="text-xs text-text-muted">No bar data yet</p>;
                           return (
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
-                                <span className="text-blue-400/60">O / H / L / C</span>
-                                <span className="text-blue-100 font-mono">
+                                <span className="text-text-muted">O / H / L / C</span>
+                                <span className="text-text-primary font-mono">
                                   {bar.open.toFixed(2)} / {bar.high.toFixed(2)} / {bar.low.toFixed(2)} / {bar.close.toFixed(2)}
                                 </span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-blue-400/60">Bar Volume</span>
-                                <span className="text-blue-100">{formatVolume(bar.volume)}</span>
+                                <span className="text-text-muted">Bar Volume</span>
+                                <span className="text-text-primary">{formatVolume(bar.volume)}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-blue-400/60">Bar VWAP</span>
-                                <span className="text-blue-100">${bar.vwap?.toFixed(2) ?? '—'}</span>
+                                <span className="text-text-muted">Bar VWAP</span>
+                                <span className="text-text-primary">${bar.vwap?.toFixed(2) ?? '—'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-blue-400/60">Time</span>
-                                <span className="text-blue-100">{new Date(bar.timestamp).toLocaleTimeString()}</span>
+                                <span className="text-text-muted">Time</span>
+                                <span className="text-text-primary">{new Date(bar.timestamp).toLocaleTimeString()}</span>
                               </div>
                             </div>
                           );
@@ -788,9 +788,9 @@ export default function AlpacaScannerClient() {
                         <div className="mt-3 flex gap-2">
                           <Link
                             href={`/technical-analysis?symbol=${r.ticker}`}
-                            className="text-xs px-3 py-1.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg transition-all"
+                            className="text-xs px-3 py-1.5 bg-accent/20 text-accent hover:bg-accent/30 rounded-lg transition-all"
                           >
-                            📊 Technical Analysis
+                            Technical Analysis
                           </Link>
                         </div>
                       </div>
@@ -805,21 +805,21 @@ export default function AlpacaScannerClient() {
 
       {/* Live Trade Feed */}
       {isLive && recentTrades.length > 0 && (
-        <div className="mt-6 bg-slate-800/30 border border-white/10 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/5 bg-slate-800/40 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-blue-200 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        <div className="mt-6 bg-surface-1 border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-surface-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-secondary flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-profit animate-pulse" />
               Live Trade Feed
             </h3>
-            <span className="text-xs text-blue-400/50">{recentTrades.length} recent trades</span>
+            <span className="text-xs text-text-muted">{recentTrades.length} recent trades</span>
           </div>
-          <div className="max-h-48 overflow-y-auto divide-y divide-white/5">
+          <div className="max-h-48 overflow-y-auto divide-y divide-border">
             {recentTrades.slice(0, 20).map((t, i) => (
               <div key={i} className="px-4 py-1.5 flex items-center gap-4 text-xs">
-                <span className="font-bold text-blue-100 w-16">{t.ticker}</span>
-                <span className="text-blue-200 font-mono w-20 text-right">${t.price.toFixed(2)}</span>
-                <span className="text-blue-300/60 w-16 text-right">{t.size} shs</span>
-                <span className="text-blue-400/40 ml-auto">{new Date(t.timestamp).toLocaleTimeString()}</span>
+                <span className="font-bold text-text-primary w-16">{t.ticker}</span>
+                <span className="text-text-secondary font-mono w-20 text-right">${t.price.toFixed(2)}</span>
+                <span className="text-text-muted w-16 text-right">{t.size} shs</span>
+                <span className="text-text-muted ml-auto">{new Date(t.timestamp).toLocaleTimeString()}</span>
               </div>
             ))}
           </div>
@@ -828,18 +828,17 @@ export default function AlpacaScannerClient() {
 
       {/* Empty state */}
       {!isScanning && sortedResults.length === 0 && !progress && (
-        <div className="text-center py-20 bg-slate-800/20 border border-white/5 rounded-xl">
-          <div className="text-5xl mb-4">⚡</div>
-          <h3 className="text-xl font-semibold text-blue-100 mb-2">Alpaca Real-Time Scanner</h3>
-          <p className="text-blue-300/60 text-sm max-w-md mx-auto mb-6">
+        <div className="text-center py-20 bg-surface-1 border border-border rounded-xl">
+          <h3 className="text-xl font-semibold text-text-primary mb-2">Alpaca Real-Time Scanner</h3>
+          <p className="text-text-muted text-sm max-w-md mx-auto mb-6">
             Connect to Alpaca&apos;s WebSocket feed for real-time market data.
             Discover momentum gappers, low-float runners, and catalyst gainers as they happen.
           </p>
           <button
             onClick={() => { setAutoReconnect(true); startScan(); }}
-            className="px-6 py-3 bg-teal-500 hover:bg-teal-400 text-white font-semibold rounded-lg transition-all shadow-lg shadow-teal-500/20"
+            className="px-6 py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-lg transition-all"
           >
-            ▶ Start Scanner
+            Start Scanner
           </button>
         </div>
       )}
@@ -851,47 +850,47 @@ export default function AlpacaScannerClient() {
           return (
             <div
               key={r.ticker}
-              className={`bg-slate-800/40 border border-white/10 rounded-xl p-4 transition-all ${
-                flash === 'up' ? 'border-green-400/30' : flash === 'down' ? 'border-red-400/30' : ''
+              className={`bg-surface-1 border border-border rounded-xl p-4 transition-all ${
+                flash === 'up' ? 'border-profit/30' : flash === 'down' ? 'border-loss/30' : ''
               }`}
             >
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-blue-50">{r.ticker}</span>
+                    <span className="font-bold text-text-primary">{r.ticker}</span>
                     {isLive && liveSymbols.includes(r.ticker) && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-profit animate-pulse" />
                     )}
                   </div>
-                  <span className="text-xs text-blue-300/60">{r.name}</span>
+                  <span className="text-xs text-text-muted">{r.name}</span>
                 </div>
                 <div className="text-right">
-                  <div className={`font-mono font-bold ${flash === 'up' ? 'text-green-400' : flash === 'down' ? 'text-red-400' : 'text-blue-100'}`}>
+                  <div className={`font-mono font-bold ${flash === 'up' ? 'text-profit' : flash === 'down' ? 'text-loss' : 'text-text-primary'}`}>
                     ${r.price.toFixed(2)}
                   </div>
-                  <span className="text-xs font-bold text-green-400">+{r.changePercent.toFixed(1)}%</span>
+                  <span className="text-xs font-bold text-profit">+{r.changePercent.toFixed(1)}%</span>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <span className="text-blue-400/60">Vol</span>
-                  <span className="ml-1 text-blue-100">{formatVolume(r.volume)}</span>
+                  <span className="text-text-muted">Vol</span>
+                  <span className="ml-1 text-text-primary">{formatVolume(r.volume)}</span>
                 </div>
                 <div>
-                  <span className="text-blue-400/60">RVol</span>
-                  <span className={`ml-1 ${r.relativeVolume >= 5 ? 'text-orange-400' : 'text-blue-100'}`}>
+                  <span className="text-text-muted">RVol</span>
+                  <span className={`ml-1 ${r.relativeVolume >= 5 ? 'text-orange-400' : 'text-text-primary'}`}>
                     {r.relativeVolume.toFixed(1)}x
                   </span>
                 </div>
                 <div>
-                  <span className="text-blue-400/60">Float</span>
-                  <span className="ml-1 text-blue-100">{formatFloat(r.floatShares)}</span>
+                  <span className="text-text-muted">Float</span>
+                  <span className="ml-1 text-text-primary">{formatFloat(r.floatShares)}</span>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
-    </main>
+    </div>
   );
 }

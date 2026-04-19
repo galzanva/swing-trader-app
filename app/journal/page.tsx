@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import AppShell from '../components/app-shell';
 import JournalClient from './journal-client';
 
 export default async function JournalPage() {
@@ -10,6 +11,9 @@ export default async function JournalPage() {
     redirect('/login');
   }
 
-  return <JournalClient session={session} />;
+  return (
+    <AppShell session={session}>
+      <JournalClient session={session} />
+    </AppShell>
+  );
 }
-

@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import AppShell from '../../components/app-shell';
 import AnalysesClient from './analyses-client';
 
 export default async function AnalysesPage() {
@@ -8,5 +9,10 @@ export default async function AnalysesPage() {
   if (!session?.user) {
     redirect('/login');
   }
-  return <AnalysesClient session={session} />;
+
+  return (
+    <AppShell session={session}>
+      <AnalysesClient session={session} />
+    </AppShell>
+  );
 }

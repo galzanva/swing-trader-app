@@ -30,54 +30,39 @@ function LoginForm() {
         return;
       }
 
-      // Redirect to the callback URL or home
       const callbackUrl = searchParams.get("callbackUrl") || "/";
       router.push(callbackUrl);
       router.refresh();
-    } catch (error) {
+    } catch {
       setError("An error occurred. Please try again.");
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {/* Logo/Brand Section */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-400 to-blue-500 mb-4 shadow-lg shadow-teal-500/50">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-              />
-            </svg>
+    <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+      <div className="max-w-sm w-full">
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent mb-4">
+            <span className="text-white font-bold text-lg">TJ</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Trader Journey</h1>
-          <p className="text-blue-200">Your trading workspace</p>
+          <h1 className="text-2xl font-semibold text-text-primary">Trader Journey</h1>
+          <p className="text-text-secondary text-sm mt-1">Sign in to your account</p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
-          <h2 className="text-2xl font-semibold text-white mb-6">Sign In</h2>
-
+        {/* Card */}
+        <div className="bg-surface-1 rounded-xl p-6 border border-border">
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200 text-sm">
+            <div className="mb-4 p-3 rounded-lg bg-loss/10 border border-loss/20 text-loss text-sm">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-blue-100 mb-2">
-                Email Address
+              <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-1.5">
+                Email
               </label>
               <input
                 id="email"
@@ -85,14 +70,15 @@ function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-blue-200/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition-all"
+                className="w-full px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-text-primary placeholder-text-muted
+                           focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent transition-all text-sm"
                 placeholder="you@example.com"
                 disabled={isLoading}
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-blue-100 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-1.5">
                 Password
               </label>
               <input
@@ -101,7 +87,8 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-blue-200/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition-all"
+                className="w-full px-3 py-2.5 rounded-lg bg-surface-2 border border-border text-text-primary placeholder-text-muted
+                           focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent transition-all text-sm"
                 placeholder="••••••••"
                 disabled={isLoading}
               />
@@ -110,22 +97,17 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 text-white font-semibold rounded-lg shadow-lg shadow-teal-500/30 hover:shadow-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2.5 px-4 bg-accent hover:bg-accent-hover text-white font-medium rounded-lg
+                         focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all
+                         disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <p className="text-sm text-blue-200/70 text-center">
-              Secure authentication powered by NextAuth
-            </p>
-          </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-blue-200/50 text-sm mt-8">
-          © 2026 Trader Journey. All rights reserved.
+        <p className="text-center text-text-muted text-xs mt-6">
+          &copy; 2026 Trader Journey
         </p>
       </div>
     </div>
@@ -136,8 +118,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
-          <p className="text-blue-200">Loading…</p>
+        <div className="min-h-screen bg-bg flex items-center justify-center">
+          <p className="text-text-secondary">Loading…</p>
         </div>
       }
     >

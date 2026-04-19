@@ -96,21 +96,6 @@ export default function ReportsClient() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'deep-analysis':
-        return '🔍';
-      case 'strategy-analysis':
-        return '🎯';
-      case 'backtest':
-        return '📊';
-      case 'technical-analysis':
-        return '📈';
-      default:
-        return '📄';
-    }
-  };
-
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'deep-analysis':
@@ -127,21 +112,21 @@ export default function ReportsClient() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">📂 Saved Reports</h1>
-        <p className="text-blue-200">
+        <h1 className="text-3xl font-bold text-text-primary mb-2">Saved Reports</h1>
+        <p className="text-text-secondary">
           Access your saved analysis reports. Rerun, compare, or export them anytime.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 mb-6">
+      <div className="bg-surface-1 rounded-xl p-6 border border-border mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Search */}
           <div>
-            <label className="block text-sm font-medium text-blue-200 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Search
             </label>
             <input
@@ -149,19 +134,19 @@ export default function ReportsClient() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title or description..."
-              className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-4 py-2 bg-surface-2 border border-border text-text-primary placeholder-text-muted rounded-lg focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
           </div>
 
           {/* Type Filter */}
           <div>
-            <label className="block text-sm font-medium text-blue-200 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Report Type
             </label>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-4 py-2 bg-surface-2 border border-border text-text-primary rounded-lg focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             >
               <option value="">All Types</option>
               <option value="deep-analysis">Legacy (deep analysis)</option>
@@ -172,7 +157,7 @@ export default function ReportsClient() {
 
           {/* Tag Filter */}
           <div>
-            <label className="block text-sm font-medium text-blue-200 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Tag Filter
             </label>
             <input
@@ -180,13 +165,13 @@ export default function ReportsClient() {
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
               placeholder="Filter by tag..."
-              className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-4 py-2 bg-surface-2 border border-border text-text-primary placeholder-text-muted rounded-lg focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
           </div>
 
           {/* Pinned Only */}
           <div>
-            <label className="block text-sm font-medium text-blue-200 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Filters
             </label>
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -194,9 +179,9 @@ export default function ReportsClient() {
                 type="checkbox"
                 checked={showPinnedOnly}
                 onChange={(e) => setShowPinnedOnly(e.target.checked)}
-                className="w-5 h-5 rounded border-white/20 bg-white/10 text-teal-500 focus:ring-2 focus:ring-teal-500"
+                className="w-5 h-5 rounded border-border bg-surface-2 text-accent focus:ring-2 focus:ring-accent"
               />
-              <span className="text-white">Pinned only</span>
+              <span className="text-text-primary">Pinned only</span>
             </label>
           </div>
         </div>
@@ -204,8 +189,8 @@ export default function ReportsClient() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 mb-6">
-          <p className="text-red-300">{error}</p>
+        <div className="bg-loss/10 border border-loss/30 rounded-lg p-4 mb-6">
+          <p className="text-loss">{error}</p>
         </div>
       )}
 
@@ -213,7 +198,7 @@ export default function ReportsClient() {
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <svg
-            className="animate-spin h-8 w-8 text-teal-500"
+            className="animate-spin h-8 w-8 text-accent"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -237,17 +222,16 @@ export default function ReportsClient() {
 
       {/* Reports List */}
       {!isLoading && reports.length === 0 && (
-        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-12 border border-white/10 text-center">
-          <div className="text-6xl mb-4">📂</div>
-          <h3 className="text-xl font-bold text-white mb-2">No reports found</h3>
-          <p className="text-blue-200 mb-6">
+        <div className="bg-surface-1 rounded-xl p-12 border border-border text-center">
+          <h3 className="text-xl font-bold text-text-primary mb-2">No reports found</h3>
+          <p className="text-text-secondary mb-6">
             {searchQuery || typeFilter || tagFilter || showPinnedOnly
               ? 'Try adjusting your filters or search query'
               : 'Start by running an analysis and saving the report'}
           </p>
           <Link
             href="/technical-analysis"
-            className="inline-block px-6 py-3 bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all shadow-lg"
+            className="inline-block px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-hover transition-all"
           >
             Open Technical Analysis
           </Link>
@@ -261,28 +245,27 @@ export default function ReportsClient() {
               <Link
                 key={report.id}
                 href={`/reports/${report.id}`}
-                className="block bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 hover:border-teal-500/50 hover:bg-white/10 transition-all"
+                className="block bg-surface-1 rounded-xl p-6 border border-border hover:border-border-hover hover:bg-surface-2 transition-all"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-3xl">{getTypeIcon(report.type)}</span>
                       <div>
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
                           {report.title}
                           {report.isPinned && (
-                            <span className="text-yellow-400" title="Pinned">
-                              📌
-                            </span>
+                            <svg className="w-4 h-4 text-accent" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 2a.75.75 0 01.59.29l2.5 3.2a.75.75 0 01-.59 1.21H11v4.5h1.5a.75.75 0 01.59 1.21l-2.5 3.2a.75.75 0 01-1.18 0l-2.5-3.2A.75.75 0 017.5 11.2H9v-4.5H7.5a.75.75 0 01-.59-1.21l2.5-3.2A.75.75 0 0110 2z" />
+                            </svg>
                           )}
                         </h3>
-                        <p className="text-sm text-blue-300">
+                        <p className="text-sm text-text-muted">
                           {getTypeLabel(report.type)}
                         </p>
                       </div>
                     </div>
                     {report.description && (
-                      <p className="text-blue-200 text-sm mb-3">
+                      <p className="text-text-secondary text-sm mb-3">
                         {report.description}
                       </p>
                     )}
@@ -290,13 +273,13 @@ export default function ReportsClient() {
                       {report.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full border border-blue-500/30"
+                          className="px-2 py-1 bg-surface-3 text-text-secondary text-xs rounded-full border border-border"
                         >
                           {tag}
                         </span>
                       ))}
                     </div>
-                    <div className="text-xs text-blue-300 space-y-1">
+                    <div className="text-xs text-text-muted space-y-1">
                       <div>
                         Created: {new Date(report.createdAt).toLocaleDateString()}
                       </div>
@@ -316,7 +299,7 @@ export default function ReportsClient() {
                   </div>
                   <div>
                     <svg
-                      className="w-6 h-6 text-blue-300"
+                      className="w-6 h-6 text-text-muted"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -336,25 +319,25 @@ export default function ReportsClient() {
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white/5 backdrop-blur-lg rounded-xl p-4 border border-white/10">
-              <div className="text-blue-200 text-sm">
+            <div className="flex items-center justify-between bg-surface-1 rounded-xl p-4 border border-border">
+              <div className="text-text-secondary text-sm">
                 Showing {reports.length} of {pagination.total} reports
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => handlePageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300"
+                  className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-all"
                 >
                   Previous
                 </button>
-                <div className="flex items-center px-4 py-2 bg-teal-600/20 text-white rounded-lg border border-teal-500/30">
+                <div className="flex items-center px-4 py-2 bg-accent/10 text-accent rounded-lg border border-accent/30 text-sm">
                   Page {pagination.page} of {pagination.totalPages}
                 </div>
                 <button
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={!pagination.hasMore}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300"
+                  className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-all"
                 >
                   Next
                 </button>
@@ -366,4 +349,3 @@ export default function ReportsClient() {
     </div>
   );
 }
-

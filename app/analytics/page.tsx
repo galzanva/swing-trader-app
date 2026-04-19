@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
-import Navbar from '../components/navbar';
+import AppShell from '../components/app-shell';
 import AnalyticsClient from './analytics-client';
 
 export const metadata: Metadata = {
@@ -15,9 +15,8 @@ export default async function AnalyticsPage() {
   if (!session) redirect('/login');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      <Navbar session={session} />
+    <AppShell session={session}>
       <AnalyticsClient />
-    </div>
+    </AppShell>
   );
 }

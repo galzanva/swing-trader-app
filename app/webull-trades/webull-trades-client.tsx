@@ -143,18 +143,18 @@ export default function WebullTradesClient() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto px-4 pt-24 pb-12">
+    <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-blue-50 mb-1">Webull Trade Import</h1>
-        <p className="text-blue-300/70 text-sm">
+        <h1 className="text-2xl font-bold text-text-primary mb-1">Webull Trade Import</h1>
+        <p className="text-text-muted text-sm">
           Connect to your Webull account and import filled trades into your Trading Journal automatically.
         </p>
       </div>
 
       {/* Status Card */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6 mb-6">
-        <h2 className="text-lg font-semibold text-blue-100 mb-4">Connection Status</h2>
+      <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Connection Status</h2>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <StatusItem
@@ -182,11 +182,11 @@ export default function WebullTradesClient() {
 
         {/* Environment selector */}
         <div className="flex items-center gap-3 mb-4">
-          <label className="text-sm text-blue-300/70">Environment:</label>
+          <label className="text-sm text-text-muted">Environment:</label>
           <select
             value={host}
             onChange={e => setHost(e.target.value)}
-            className="px-3 py-1.5 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500"
+            className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
           >
             <option value="api.webull.com">Production (api.webull.com)</option>
             <option value="us-openapi-alb.uat.webullbroker.com">Test (UAT)</option>
@@ -195,18 +195,18 @@ export default function WebullTradesClient() {
       </div>
 
       {/* Step 1: Test Connection */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6 mb-6">
+      <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-blue-100">Step 1: Test Connection</h3>
-            <p className="text-xs text-blue-300/60 mt-1">
+            <h3 className="text-base font-semibold text-text-primary">Step 1: Test Connection</h3>
+            <p className="text-xs text-text-muted mt-1">
               Verifies your WEBULL_API_KEY and WEBULL_API_SECRET from .env
             </p>
           </div>
           <button
             onClick={handleTestConnection}
             disabled={loading}
-            className="px-5 py-2 bg-teal-500 hover:bg-teal-400 disabled:bg-slate-600 text-white font-medium rounded-lg text-sm transition-all"
+            className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-all"
           >
             {loading && step === 'testing' ? 'Testing...' : 'Test Connection'}
           </button>
@@ -214,11 +214,11 @@ export default function WebullTradesClient() {
 
         {accounts.length > 0 && (
           <div className="mt-3">
-            <label className="text-sm text-blue-300/70 block mb-1">Select Account:</label>
+            <label className="text-sm text-text-muted block mb-1">Select Account:</label>
             <select
               value={selectedAccountId}
               onChange={e => setSelectedAccountId(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500 min-w-[300px]"
+              className="px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent min-w-[300px]"
             >
               {accounts.map((a: any) => (
                 <option key={a.account_id} value={a.account_id}>
@@ -231,11 +231,11 @@ export default function WebullTradesClient() {
       </div>
 
       {/* Step 2: 2FA Token (if needed) */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6 mb-6">
+      <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-blue-100">Step 2: Access Token (2FA) — <span className="text-blue-400/70 font-normal">Optional</span></h3>
-            <p className="text-xs text-blue-300/60 mt-1">
+            <h3 className="text-base font-semibold text-text-primary">Step 2: Access Token (2FA) — <span className="text-text-muted font-normal">Optional</span></h3>
+            <p className="text-xs text-text-muted mt-1">
               Only needed if your Webull account has 2FA enabled. If you can already import trades without it, skip this step entirely.
             </p>
           </div>
@@ -243,14 +243,14 @@ export default function WebullTradesClient() {
             <button
               onClick={handleCreateToken}
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white font-medium rounded-lg text-sm transition-all"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-all"
             >
               Create Token
             </button>
             <button
               onClick={handleCheckToken}
               disabled={loading}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-600 text-blue-200 font-medium rounded-lg text-sm transition-all"
+              className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed font-medium rounded-lg text-sm transition-all"
             >
               Check Status
             </button>
@@ -262,18 +262,18 @@ export default function WebullTradesClient() {
           </div>
         )}
         {status?.tokenStatus === 'NORMAL' && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-sm text-green-300">
+          <div className="bg-profit/10 border border-profit/30 rounded-lg p-3 text-sm text-profit">
             Token is active and valid. You can now sync trades.
           </div>
         )}
       </div>
 
       {/* Step 3: Sync Trades */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6 mb-6">
+      <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-blue-100">Step 3: Import Trades</h3>
-            <p className="text-xs text-blue-300/60 mt-1">
+            <h3 className="text-base font-semibold text-text-primary">Step 3: Import Trades</h3>
+            <p className="text-xs text-text-muted mt-1">
               Fetch filled orders from Webull, pair BUY/SELL into trades, and save to your journal.
               Duplicates are automatically skipped.
             </p>
@@ -281,7 +281,7 @@ export default function WebullTradesClient() {
           <button
             onClick={handleSync}
             disabled={loading || !selectedAccountId}
-            className="px-5 py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 text-white font-medium rounded-lg text-sm transition-all"
+            className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-all"
           >
             {loading && step === 'syncing' ? 'Importing...' : 'Import Trades'}
           </button>
@@ -290,24 +290,24 @@ export default function WebullTradesClient() {
         {/* Date range */}
         <div className="flex items-center gap-4 flex-wrap">
           <div>
-            <label className="text-xs text-blue-300/60 block mb-1">From</label>
+            <label className="text-xs text-text-muted block mb-1">From</label>
             <input
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500"
+              className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
           </div>
           <div>
-            <label className="text-xs text-blue-300/60 block mb-1">To</label>
+            <label className="text-xs text-text-muted block mb-1">To</label>
             <input
               type="date"
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500"
+              className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
             />
           </div>
-          <div className="text-xs text-blue-400/50 self-end pb-1">
+          <div className="text-xs text-text-muted self-end pb-1">
             Webull allows up to 2 years of history
           </div>
         </div>
@@ -317,18 +317,18 @@ export default function WebullTradesClient() {
               type="checkbox"
               checked={forceUpdate}
               onChange={e => setForceUpdate(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30"
+              className="w-3.5 h-3.5 rounded border-border bg-surface-2 text-accent focus:ring-accent/30"
             />
-            <span className="text-xs text-blue-300/70">Update existing Webull trades (fix times / trade type for previously imported)</span>
+            <span className="text-xs text-text-muted">Update existing Webull trades (fix times / trade type for previously imported)</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={mergeManual}
               onChange={e => setMergeManual(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30"
+              className="w-3.5 h-3.5 rounded border-border bg-surface-2 text-accent focus:ring-accent/30"
             />
-            <span className="text-xs text-blue-300/70">
+            <span className="text-xs text-text-muted">
               Merge with manual entries — match by ticker, date &amp; prices; keeps your strategy, notes, exit reason &amp; R
             </span>
           </label>
@@ -337,20 +337,20 @@ export default function WebullTradesClient() {
 
       {/* Messages */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
-          <p className="text-sm text-red-300">{error}</p>
+        <div className="bg-loss/10 border border-loss/30 rounded-xl p-4 mb-6">
+          <p className="text-sm text-loss">{error}</p>
         </div>
       )}
       {message && !error && (
-        <div className="bg-teal-500/10 border border-teal-500/30 rounded-xl p-4 mb-6">
-          <p className="text-sm text-teal-300">{message}</p>
+        <div className="bg-profit/10 border border-profit/30 rounded-xl p-4 mb-6">
+          <p className="text-sm text-profit">{message}</p>
         </div>
       )}
 
       {/* Sync Summary */}
       {syncSummary && (
-        <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6 mb-6">
-          <h3 className="text-base font-semibold text-blue-100 mb-4">Import Summary</h3>
+        <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
+          <h3 className="text-base font-semibold text-text-primary mb-4">Import Summary</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <SummaryItem label="Total Filled Orders" value={syncSummary.totalOrders} />
             <SummaryItem label="Paired into Trades" value={syncSummary.pairedTrades} />
@@ -369,7 +369,7 @@ export default function WebullTradesClient() {
             <div className="mt-4">
               <Link
                 href="/journal"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 rounded-lg text-sm transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-accent/20 text-accent hover:bg-accent/30 rounded-lg text-sm transition-all"
               >
                 View in Trading Journal →
               </Link>
@@ -379,52 +379,52 @@ export default function WebullTradesClient() {
       )}
 
       {/* Info */}
-      <div className="bg-slate-800/20 border border-white/5 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-blue-200 mb-3">How it works</h3>
-        <ul className="space-y-2 text-xs text-blue-300/60">
+      <div className="bg-surface-1 border border-border rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-text-secondary mb-3">How it works</h3>
+        <ul className="space-y-2 text-xs text-text-muted">
           <li>
-            <strong className="text-blue-200">BUY + SELL pairing:</strong> Filled orders are matched by symbol chronologically.
+            <strong className="text-text-secondary">BUY + SELL pairing:</strong> Filled orders are matched by symbol chronologically.
             Each BUY is paired with the next SELL to create a complete trade entry.
           </li>
           <li>
-            <strong className="text-blue-200">Intraday detection:</strong> If entry and exit happen on the same day, the trade is marked as &quot;intraday&quot;
+            <strong className="text-text-secondary">Intraday detection:</strong> If entry and exit happen on the same day, the trade is marked as &quot;intraday&quot;
             and actual fill times are preserved. Swing trades default to 9:30 AM / 4:00 PM ET.
           </li>
           <li>
-            <strong className="text-blue-200">Deduplication:</strong> Each trade is tagged with a unique Webull order ID pair.
+            <strong className="text-text-secondary">Deduplication:</strong> Each trade is tagged with a unique Webull order ID pair.
             Re-syncing the same date range won&apos;t create duplicates.
           </li>
           <li>
-            <strong className="text-blue-200">Manual notes:</strong> After import, you can add notes, strategies, and exit reasons
+            <strong className="text-text-secondary">Manual notes:</strong> After import, you can add notes, strategies, and exit reasons
             to any trade in the Trading Journal.
           </li>
           <li>
-            <strong className="text-blue-200">Source tagging:</strong> Imported trades are tagged as source: &quot;webull&quot; so they&apos;re
+            <strong className="text-text-secondary">Source tagging:</strong> Imported trades are tagged as source: &quot;webull&quot; so they&apos;re
             distinct from manually entered trades.
           </li>
         </ul>
       </div>
-    </main>
+    </div>
   );
 }
 
 function StatusItem({ label, value, ok, extra }: { label: string; value: string; ok: boolean; extra?: string }) {
   return (
-    <div className="bg-slate-900/40 rounded-lg p-3">
-      <div className="text-xs text-blue-400/60 mb-1">{label}</div>
-      <div className={`text-sm font-medium ${ok ? 'text-green-400' : 'text-blue-200/60'}`}>
+    <div className="bg-surface-2 rounded-lg p-3">
+      <div className="text-xs text-text-muted mb-1">{label}</div>
+      <div className={`text-sm font-medium ${ok ? 'text-profit' : 'text-text-muted'}`}>
         {ok ? '●' : '○'} {value}
       </div>
-      {extra && <div className="text-xs text-blue-400/50 mt-0.5">{extra}</div>}
+      {extra && <div className="text-xs text-text-muted mt-0.5">{extra}</div>}
     </div>
   );
 }
 
 function SummaryItem({ label, value, highlight }: { label: string; value: number | string; highlight?: boolean }) {
   return (
-    <div className="bg-slate-900/40 rounded-lg p-3">
-      <div className="text-xs text-blue-400/60 mb-1">{label}</div>
-      <div className={`text-lg font-bold ${highlight ? 'text-teal-400' : 'text-blue-100'}`}>
+    <div className="bg-surface-2 rounded-lg p-3">
+      <div className="text-xs text-text-muted mb-1">{label}</div>
+      <div className={`text-lg font-bold ${highlight ? 'text-accent' : 'text-text-primary'}`}>
         {value}
       </div>
     </div>

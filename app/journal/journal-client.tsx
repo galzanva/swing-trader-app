@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Session } from 'next-auth';
-import Navbar from '../components/navbar';
 import type { Trade } from './journal-types';
 import TradeDetailDrawer from './trade-detail-drawer';
 import { formatJournalStoredDate } from '@/lib/trade-dates';
@@ -717,20 +716,17 @@ export default function JournalClient({ session }: JournalClientProps) {
   const isIntraday = tradeType === 'intraday';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-900 to-slate-900">
-      <Navbar session={session} />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Trading Journal</h1>
-          <p className="text-blue-200">Track your trades and discover patterns with AI analysis</p>
+          <h1 className="text-4xl font-bold text-text-primary mb-2">Trading Journal</h1>
+          <p className="text-text-secondary">Track your trades and discover patterns with AI analysis</p>
         </div>
 
         {/* Filters */}
         <div className="mb-6 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-blue-200 text-sm font-medium w-12">Period:</span>
+            <span className="text-text-secondary text-sm font-medium w-12">Period:</span>
             <div className="flex gap-2 flex-wrap">
               {([
                 { value: 'today' as TimePeriod, label: 'Today' },
@@ -747,8 +743,8 @@ export default function JournalClient({ session }: JournalClientProps) {
                   key={period.value}
                   onClick={() => setSelectedPeriod(period.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedPeriod === period.value
-                    ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                    : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                    ? 'bg-accent text-white'
+                    : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
                     }`}
                 >
                   {period.label}
@@ -757,19 +753,19 @@ export default function JournalClient({ session }: JournalClientProps) {
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-blue-200 text-sm font-medium w-12">Type:</span>
+            <span className="text-text-secondary text-sm font-medium w-12">Type:</span>
             <div className="flex gap-2 flex-wrap">
               {([
-                { value: 'all' as const, label: 'All', color: 'from-teal-500 to-blue-500' },
-                { value: 'intraday' as const, label: 'Day Trades', color: 'from-amber-500 to-orange-500' },
-                { value: 'swing' as const, label: 'Swing Trades', color: 'from-blue-500 to-indigo-500' },
+                { value: 'all' as const, label: 'All' },
+                { value: 'intraday' as const, label: 'Day Trades' },
+                { value: 'swing' as const, label: 'Swing Trades' },
               ]).map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => setTypeFilter(opt.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${typeFilter === opt.value
-                    ? `bg-gradient-to-r ${opt.color} text-white shadow-lg`
-                    : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                    ? 'bg-accent text-white'
+                    : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
                     }`}
                 >
                   {opt.label}
@@ -778,11 +774,11 @@ export default function JournalClient({ session }: JournalClientProps) {
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-blue-200 text-sm font-medium w-12 shrink-0">Strategy:</span>
+            <span className="text-text-secondary text-sm font-medium w-12 shrink-0">Strategy:</span>
             <select
               value={strategyFilter}
               onChange={e => setStrategyFilter(e.target.value)}
-              className="min-w-[200px] max-w-md px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/40"
+              className="min-w-[200px] max-w-md px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             >
               <option value="">All strategies</option>
               {hasTradesWithNoStrategy && (
@@ -793,13 +789,13 @@ export default function JournalClient({ session }: JournalClientProps) {
               ))}
             </select>
             {strategyFilter && (
-              <span className="text-xs text-blue-300">
+              <span className="text-xs text-text-muted">
                 Stats and table show only this strategy in the period above
               </span>
             )}
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-blue-200 text-sm font-medium w-12 shrink-0">Source:</span>
+            <span className="text-text-secondary text-sm font-medium w-12 shrink-0">Source:</span>
             <div className="flex gap-2 flex-wrap">
               {([
                 { value: 'all' as const, label: 'All Sources' },
@@ -810,8 +806,8 @@ export default function JournalClient({ session }: JournalClientProps) {
                   key={opt.value}
                   onClick={() => setSourceFilter(opt.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${sourceFilter === opt.value
-                    ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                    : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                    ? 'bg-accent text-white'
+                    : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
                     }`}
                 >
                   {opt.label}
@@ -825,30 +821,30 @@ export default function JournalClient({ session }: JournalClientProps) {
         {filteredSummary && (
           <div className="mb-8">
             {hasStrategyFilter && (
-              <p className="text-sm text-teal-300/90 mb-3">
-                Showing stats for <span className="font-semibold text-teal-200">{strategyFilterLabel}</span> only (with Period + Type filters above).
+              <p className="text-sm text-text-secondary mb-3">
+                Showing stats for <span className="font-semibold text-text-primary">{strategyFilterLabel}</span> only (with Period + Type filters above).
               </p>
             )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
-              <div className="text-blue-200 text-sm mb-1">Total Trades</div>
-              <div className="text-2xl font-bold text-white">{filteredSummary.totalTrades}</div>
-              <div className="text-xs text-blue-300 mt-1">{filteredSummary.totalOpen} open, {filteredSummary.totalClosed} closed</div>
+            <div className="bg-surface-1 border border-border rounded-xl p-4">
+              <div className="text-text-secondary text-sm mb-1">Total Trades</div>
+              <div className="text-2xl font-bold text-text-primary">{filteredSummary.totalTrades}</div>
+              <div className="text-xs text-text-muted mt-1">{filteredSummary.totalOpen} open, {filteredSummary.totalClosed} closed</div>
             </div>
-            <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
-              <div className="text-blue-200 text-sm mb-1">Win Rate</div>
-              <div className={`text-2xl font-bold ${filteredSummary.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>{filteredSummary.winRate}%</div>
-              <div className="text-xs text-blue-300 mt-1">{filteredSummary.winningTrades}W / {filteredSummary.losingTrades}L</div>
+            <div className="bg-surface-1 border border-border rounded-xl p-4">
+              <div className="text-text-secondary text-sm mb-1">Win Rate</div>
+              <div className={`text-2xl font-bold ${filteredSummary.winRate >= 50 ? 'text-profit' : 'text-loss'}`}>{filteredSummary.winRate}%</div>
+              <div className="text-xs text-text-muted mt-1">{filteredSummary.winningTrades}W / {filteredSummary.losingTrades}L</div>
             </div>
-            <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
-              <div className="text-blue-200 text-sm mb-1">Total P/L</div>
-              <div className={`text-2xl font-bold ${filteredSummary.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCurrency(filteredSummary.totalPL)}</div>
-              <div className="text-xs text-blue-300 mt-1">Avg: {formatCurrency(filteredSummary.avgPL)}</div>
+            <div className="bg-surface-1 border border-border rounded-xl p-4">
+              <div className="text-text-secondary text-sm mb-1">Total P/L</div>
+              <div className={`text-2xl font-bold ${filteredSummary.totalPL >= 0 ? 'text-profit' : 'text-loss'}`}>{formatCurrency(filteredSummary.totalPL)}</div>
+              <div className="text-xs text-text-muted mt-1">Avg: {formatCurrency(filteredSummary.avgPL)}</div>
             </div>
-            <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
-              <div className="text-blue-200 text-sm mb-1">Avg Return</div>
-              <div className={`text-2xl font-bold ${filteredSummary.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>{filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%</div>
-              <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgHoldDetail}</div>
+            <div className="bg-surface-1 border border-border rounded-xl p-4">
+              <div className="text-text-secondary text-sm mb-1">Avg Return</div>
+              <div className={`text-2xl font-bold ${filteredSummary.avgReturn >= 0 ? 'text-profit' : 'text-loss'}`}>{filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%</div>
+              <div className="text-xs text-text-muted mt-1">{filteredSummary.avgHoldDetail}</div>
             </div>
           </div>
           </div>
@@ -858,7 +854,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         <div className="flex flex-wrap gap-3 mb-6">
           <button
             onClick={openAddModal}
-            className="px-4 py-2 bg-gradient-to-r from-teal-500 to-blue-500 text-white rounded-lg font-medium hover:from-teal-600 hover:to-blue-600 transition-all"
+            className="px-4 py-2 bg-accent text-white rounded-lg font-medium hover:bg-accent-hover transition-all"
           >
             + Add Trade
           </button>
@@ -866,27 +862,27 @@ export default function JournalClient({ session }: JournalClientProps) {
             type="button"
             onClick={() => void handleRehydrateOhlc()}
             disabled={rehydratingOhlc || filteredTrades.length === 0}
-            className="px-4 py-2 bg-slate-700/60 border border-cyan-500/25 text-cyan-200 rounded-lg font-medium hover:bg-slate-600/60 transition-all disabled:opacity-45 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-surface-2 border border-border text-text-secondary rounded-lg font-medium hover:bg-surface-3 transition-all disabled:opacity-45 disabled:cursor-not-allowed"
             title="Re-run Polygon for trades matching Period, Type, Strategy, and Source filters (not the whole journal)"
           >
-            {rehydratingOhlc ? 'Refreshing…' : `Refresh OHLC (${filteredTrades.length})`}
+            {rehydratingOhlc ? 'Refreshing...' : `Refresh OHLC (${filteredTrades.length})`}
           </button>
           <button
             onClick={handleAnalyze}
             disabled={analyzing || filteredClosedCount === 0}
-            className="px-4 py-2 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-lg font-medium hover:bg-purple-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-surface-2 border border-border text-text-secondary rounded-lg font-medium hover:bg-surface-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {analyzing
               ? 'Analyzing...'
               : `AI Analysis (${filteredClosedCount} closed${typeFilter === 'intraday' ? ' day' : typeFilter === 'swing' ? ' swing' : ''} trades${hasStrategyFilter ? ` · ${strategyFilterLabel}` : ''})`}
           </button>
           {filteredClosedCount === 0 && filteredTrades.length > 0 && (
-            <span className="text-xs text-amber-400 self-center">No closed trades in filter — add exit data or change filters</span>
+            <span className="text-xs text-text-muted self-center">No closed trades in filter -- add exit data or change filters</span>
           )}
           {savedAnalyses.length > 0 && (
             <button
               onClick={() => setShowSavedAnalyses(!showSavedAnalyses)}
-              className="px-4 py-2 bg-slate-700/50 border border-white/10 text-blue-200 rounded-lg font-medium hover:bg-slate-600/50 transition-all"
+              className="px-4 py-2 bg-surface-2 border border-border text-text-secondary rounded-lg font-medium hover:bg-surface-3 transition-all"
             >
               {showSavedAnalyses ? 'Hide' : 'View'} Past Analyses ({savedAnalyses.length})
             </button>
@@ -895,8 +891,8 @@ export default function JournalClient({ session }: JournalClientProps) {
 
         {/* Analysis Progress Bar */}
         {analyzing && (
-          <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-bold text-white mb-4">Generating AI Analysis...</h3>
+          <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-bold text-text-primary mb-4">Generating AI Analysis...</h3>
             <div className="space-y-3">
               {ANALYSIS_STEPS.map((step, i) => {
                 const isActive = i === analysisStep;
@@ -904,26 +900,26 @@ export default function JournalClient({ session }: JournalClientProps) {
                 return (
                   <div key={i} className="flex items-center gap-3">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                      isDone ? 'bg-green-500 text-white' : isActive ? 'bg-purple-500 text-white animate-pulse' : 'bg-slate-700 text-slate-500'
+                      isDone ? 'bg-accent text-white' : isActive ? 'bg-surface-4 text-text-primary animate-pulse' : 'bg-surface-2 text-text-muted'
                     }`}>
                       {isDone ? (
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                       ) : isActive ? (
-                        <div className="w-2.5 h-2.5 bg-white rounded-full" />
+                        <div className="w-2.5 h-2.5 bg-text-primary rounded-full" />
                       ) : (
-                        <div className="w-2 h-2 bg-slate-600 rounded-full" />
+                        <div className="w-2 h-2 bg-surface-4 rounded-full" />
                       )}
                     </div>
-                    <span className={`text-sm transition-all ${isDone ? 'text-green-400' : isActive ? 'text-white font-medium' : 'text-slate-500'}`}>
+                    <span className={`text-sm transition-all ${isDone ? 'text-accent' : isActive ? 'text-text-primary font-medium' : 'text-text-muted'}`}>
                       {step}
                     </span>
                   </div>
                 );
               })}
             </div>
-            <div className="mt-4 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div className="mt-4 h-1.5 bg-surface-2 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-1000"
+                className="h-full bg-accent rounded-full transition-all duration-1000"
                 style={{ width: `${((analysisStep + 1) / ANALYSIS_STEPS.length) * 100}%` }}
               />
             </div>
@@ -932,12 +928,12 @@ export default function JournalClient({ session }: JournalClientProps) {
 
         {/* AI Analysis Result */}
         {aiAnalysis && !analyzing && (
-          <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-6 mb-6">
+          <div className="bg-surface-1 border border-border rounded-xl p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-bold text-white">AI Performance Report</h2>
+                <h2 className="text-lg font-bold text-text-primary">AI Performance Report</h2>
                 {aiAnalysisMeta && (
-                  <p className="text-xs text-blue-300 mt-1">
+                  <p className="text-xs text-text-muted mt-1">
                     {aiAnalysisMeta.periodLabel} &middot; {aiAnalysisMeta.tradesAnalyzed} trades
                     {aiAnalysisMeta.intradayCount > 0 && ` (${aiAnalysisMeta.intradayCount} day`}{aiAnalysisMeta.intradayCount > 0 && aiAnalysisMeta.swingCount > 0 ? ', ' : aiAnalysisMeta.intradayCount > 0 ? ')' : ''}
                     {aiAnalysisMeta.swingCount > 0 && `${aiAnalysisMeta.intradayCount > 0 ? '' : ' ('}${aiAnalysisMeta.swingCount} swing)`}
@@ -949,7 +945,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                   <button
                     onClick={handleSaveAnalysis}
                     disabled={savingAnalysis}
-                    className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-1.5"
                   >
                     {savingAnalysis ? (
                       <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Saving...</>
@@ -958,30 +954,30 @@ export default function JournalClient({ session }: JournalClientProps) {
                     )}
                   </button>
                 )}
-                <button onClick={() => { setAiAnalysis(null); setAiAnalysisMeta(null); }} className="text-purple-300 hover:text-white transition-colors text-xl leading-none">&times;</button>
+                <button onClick={() => { setAiAnalysis(null); setAiAnalysisMeta(null); }} className="text-text-muted hover:text-text-primary transition-colors text-xl leading-none">&times;</button>
               </div>
             </div>
-            <div className="prose prose-invert prose-sm max-w-none text-blue-100 leading-relaxed whitespace-pre-wrap">{aiAnalysis}</div>
+            <div className="prose prose-invert prose-sm max-w-none text-text-secondary leading-relaxed whitespace-pre-wrap">{aiAnalysis}</div>
           </div>
         )}
 
-        {/* Saved Analyses (inline preview — full list on /journal/analyses) */}
+        {/* Saved Analyses (inline preview -- full list on /journal/analyses) */}
         {showSavedAnalyses && savedAnalyses.length > 0 && (
-          <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg mb-6 overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Past Analyses</h2>
-              <a href="/journal/analyses" className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors">View All &rarr;</a>
+          <div className="bg-surface-1 border border-border rounded-xl mb-6 overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-bold text-text-primary">Past Analyses</h2>
+              <a href="/journal/analyses" className="text-accent hover:text-accent-hover text-sm font-medium transition-colors">View All &rarr;</a>
             </div>
-            <div className="divide-y divide-white/10 max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {savedAnalyses.slice(0, 10).map(a => (
-                <div key={a.id} className="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition-colors group">
+                <div key={a.id} className="flex items-center justify-between px-6 py-3 hover:bg-card-hover transition-colors group">
                   <button
                     onClick={() => { setAiAnalysis(a.analysis); setAiAnalysisMeta(null); setShowSavedAnalyses(false); }}
                     className="flex-1 text-left"
                   >
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-white font-medium text-sm">{a.periodLabel}</span>
-                      <span className="text-blue-300 text-xs">
+                      <span className="text-text-primary font-medium text-sm">{a.periodLabel}</span>
+                      <span className="text-text-muted text-xs">
                         {a.tradesAnalyzed} trades
                         {a.intradayCount > 0 && ` · ${a.intradayCount} day`}
                         {a.swingCount > 0 && ` · ${a.swingCount} swing`}
@@ -989,19 +985,19 @@ export default function JournalClient({ session }: JournalClientProps) {
                     </div>
                     <div className="flex items-center gap-3 text-xs mt-0.5">
                       {a.winRate !== null && (
-                        <span className={a.winRate >= 50 ? 'text-green-400' : 'text-red-400'}>{a.winRate}% WR</span>
+                        <span className={a.winRate >= 50 ? 'text-profit' : 'text-loss'}>{a.winRate}% WR</span>
                       )}
                       {a.totalPL !== null && (
-                        <span className={a.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}>{formatCurrency(a.totalPL)}</span>
+                        <span className={a.totalPL >= 0 ? 'text-profit' : 'text-loss'}>{formatCurrency(a.totalPL)}</span>
                       )}
-                      <span className="text-blue-400">
+                      <span className="text-text-muted">
                         {new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </button>
                   <button
                     onClick={() => handleDeleteAnalysis(a.id)}
-                    className="ml-3 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    className="ml-3 text-text-muted hover:text-loss opacity-0 group-hover:opacity-100 transition-all"
                     title="Delete"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -1013,22 +1009,22 @@ export default function JournalClient({ session }: JournalClientProps) {
         )}
 
         {/* Trades List */}
-        <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Your Trades</h2>
+        <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <h2 className="text-xl font-bold text-text-primary">Your Trades</h2>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-blue-200">{selectedIds.size} selected</span>
+                <span className="text-sm text-text-secondary">{selectedIds.size} selected</span>
                 <button
                   onClick={() => setSelectedIds(new Set())}
-                  className="text-xs text-blue-400 hover:text-blue-300"
+                  className="text-xs text-accent hover:text-accent-hover"
                 >
                   Clear
                 </button>
                 <button
                   onClick={handleBulkDelete}
                   disabled={bulkDeleting}
-                  className="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-loss/10 hover:bg-loss/20 disabled:opacity-50 text-loss text-xs font-medium rounded-lg transition-colors"
                 >
                   {bulkDeleting ? 'Deleting...' : `Delete ${selectedIds.size}`}
                 </button>
@@ -1037,107 +1033,103 @@ export default function JournalClient({ session }: JournalClientProps) {
           </div>
 
           {loading ? (
-            <div className="px-6 py-12 text-center text-blue-200">Loading trades...</div>
+            <div className="px-6 py-12 text-center text-text-secondary">Loading trades...</div>
           ) : filteredTrades.length === 0 ? (
-            <div className="px-6 py-12 text-center text-blue-200">
+            <div className="px-6 py-12 text-center text-text-secondary">
               {selectedPeriod === 'all' && !hasStrategyFilter
                 ? 'No trades yet. Click "Add Trade" to get started!'
                 : hasStrategyFilter
-                  ? `No trades match this period, type, and strategy (“${strategyFilterLabel}”).`
+                  ? `No trades match this period, type, and strategy ("${strategyFilterLabel}").`
                   : 'No trades found for the selected period.'}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-slate-900/50">
+                <thead className="bg-surface-1">
                   <tr>
                     <th className="pl-4 pr-1 py-3 w-8">
                       <input
                         type="checkbox"
                         checked={paginatedTrades.length > 0 && paginatedTrades.every(t => selectedIds.has(t.id))}
                         onChange={toggleSelectAll}
-                        className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-border bg-surface-2 text-accent focus:ring-accent/30 cursor-pointer"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Ticker</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Dir</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Entry</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Exit</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Return</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">P/L</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase tracking-wider">Strategy</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-blue-200 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Ticker</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Dir</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Entry</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Exit</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Return</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">P/L</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Strategy</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody>
                   {paginatedTrades.map((trade) => (
-                    <tr key={trade.id} className={`hover:bg-white/5 transition-colors ${selectedIds.has(trade.id) ? 'bg-teal-500/5' : ''}`}>
+                    <tr key={trade.id} className={`border-b border-border hover:bg-card-hover transition-colors ${selectedIds.has(trade.id) ? 'bg-accent/5' : ''}`}>
                       <td className="pl-4 pr-1 py-3 w-8">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(trade.id)}
                           onChange={() => toggleSelect(trade.id)}
-                          className="w-3.5 h-3.5 rounded border-blue-400/40 bg-slate-700 text-teal-500 focus:ring-teal-500/30 cursor-pointer"
+                          className="w-3.5 h-3.5 rounded border-border bg-surface-2 text-accent focus:ring-accent/30 cursor-pointer"
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-white">{trade.ticker}</span>
+                          <span className="text-sm font-medium text-text-primary">{trade.ticker}</span>
                           {(trade.source || 'manual') === 'webull' && (
-                            <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded bg-purple-500/20 text-purple-300 uppercase">WB</span>
+                            <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded bg-surface-3 text-text-secondary uppercase">WB</span>
                           )}
                         </div>
-                        {trade.isOpen && <div className="text-xs text-green-400">Open</div>}
+                        {trade.isOpen && <div className="text-xs text-profit">Open</div>}
                         {trade.entryTime && (
-                          <div className="text-[10px] text-blue-400/50">{trade.entryTime.slice(0, 5)}{trade.exitTime ? ` → ${trade.exitTime.slice(0, 5)}` : ''}</div>
+                          <div className="text-[10px] text-text-muted">{trade.entryTime.slice(0, 5)}{trade.exitTime ? ` → ${trade.exitTime.slice(0, 5)}` : ''}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
-                          (trade.tradeType || (trade.holdingDays === 0 ? 'intraday' : 'swing')) === 'intraday'
-                            ? 'bg-amber-500/20 text-amber-300'
-                            : 'bg-blue-500/20 text-blue-300'
-                        }`}>
+                        <span className="inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full bg-surface-3 text-text-secondary">
                           {(trade.tradeType || (trade.holdingDays === 0 ? 'intraday' : 'swing')) === 'intraday' ? 'DAY' : 'SWING'}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${trade.direction === 'long'
-                          ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                          ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss'}`}>
                           {trade.direction.toUpperCase()}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm text-white">${trade.entryPrice.toFixed(2)}</div>
-                        <div className="text-xs text-blue-300">{formatJournalStoredDate(trade.entryDate)}</div>
+                        <div className="text-sm text-text-primary">${trade.entryPrice.toFixed(2)}</div>
+                        <div className="text-xs text-text-muted">{formatJournalStoredDate(trade.entryDate)}</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {trade.exitPrice ? (
                           <>
-                            <div className="text-sm text-white">${trade.exitPrice.toFixed(2)}</div>
-                            {trade.exitDate && <div className="text-xs text-blue-300">{formatJournalStoredDate(trade.exitDate)}</div>}
+                            <div className="text-sm text-text-primary">${trade.exitPrice.toFixed(2)}</div>
+                            {trade.exitDate && <div className="text-xs text-text-muted">{formatJournalStoredDate(trade.exitDate)}</div>}
                           </>
-                        ) : (<div className="text-sm text-blue-300">—</div>)}
+                        ) : (<div className="text-sm text-text-muted">—</div>)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {trade.returnPct !== null ? (
-                          <div className={`text-sm font-semibold ${trade.returnPct > 0 ? 'text-green-400' : trade.returnPct < 0 ? 'text-red-400' : 'text-blue-300'}`}>
+                          <div className={`text-sm font-semibold ${trade.returnPct > 0 ? 'text-profit' : trade.returnPct < 0 ? 'text-loss' : 'text-text-muted'}`}>
                             {trade.returnPct > 0 ? '+' : ''}{trade.returnPct.toFixed(2)}%
                           </div>
-                        ) : (<div className="text-sm text-blue-300">—</div>)}
+                        ) : (<div className="text-sm text-text-muted">—</div>)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {trade.profitLoss !== null ? (
-                          <div className={`text-sm font-semibold ${trade.profitLoss > 0 ? 'text-green-400' : trade.profitLoss < 0 ? 'text-red-400' : 'text-blue-300'}`}>
+                          <div className={`text-sm font-semibold ${trade.profitLoss > 0 ? 'text-profit' : trade.profitLoss < 0 ? 'text-loss' : 'text-text-muted'}`}>
                             {formatCurrency(trade.profitLoss)}
                           </div>
-                        ) : (<div className="text-sm text-blue-300">—</div>)}
+                        ) : (<div className="text-sm text-text-muted">—</div>)}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm text-blue-200 max-w-[120px] truncate">{trade.strategy || '—'}</div>
+                        <div className="text-sm text-text-secondary max-w-[120px] truncate">{trade.strategy || '—'}</div>
                         {trade.notes && (
-                          <div className="text-xs text-blue-300 max-w-[120px] truncate mt-0.5" title={trade.notes}>{trade.notes}</div>
+                          <div className="text-xs text-text-muted max-w-[120px] truncate mt-0.5" title={trade.notes}>{trade.notes}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
@@ -1145,14 +1137,14 @@ export default function JournalClient({ session }: JournalClientProps) {
                           <button
                             type="button"
                             onClick={() => setViewTradeId(trade.id)}
-                            className="text-teal-400 hover:text-teal-300 font-medium"
+                            className="text-accent hover:text-accent-hover font-medium"
                           >
                             View
                           </button>
-                          <button type="button" onClick={() => handleEdit(trade)} className="text-blue-400 hover:text-blue-300">
+                          <button type="button" onClick={() => handleEdit(trade)} className="text-text-secondary hover:text-text-primary">
                             Edit
                           </button>
-                          <button type="button" onClick={() => void handleDelete(trade.id)} className="text-red-400 hover:text-red-300">
+                          <button type="button" onClick={() => void handleDelete(trade.id)} className="text-loss hover:text-loss">
                             Delete
                           </button>
                         </div>
@@ -1164,10 +1156,10 @@ export default function JournalClient({ session }: JournalClientProps) {
             </div>
           )}
 
-          {/* Pagination — matches reports-style controls */}
+          {/* Pagination */}
           {!loading && filteredTrades.length > 0 && tradesTotalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-white/10 bg-slate-900/30">
-              <div className="text-blue-200 text-sm">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-border bg-surface-1">
+              <div className="text-text-secondary text-sm">
                 Showing {(tradesPageSafe - 1) * tradesPerPage + 1}–{Math.min(tradesPageSafe * tradesPerPage, filteredTrades.length)} of {filteredTrades.length} trades
               </div>
               <div className="flex gap-2">
@@ -1175,18 +1167,18 @@ export default function JournalClient({ session }: JournalClientProps) {
                   type="button"
                   onClick={() => { setTradesPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                   disabled={tradesPageSafe <= 1}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                  className="px-4 py-2 bg-surface-2 hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed text-text-secondary rounded-lg transition-all text-sm border border-border"
                 >
                   Previous
                 </button>
-                <div className="flex items-center px-4 py-2 bg-teal-600/20 text-white rounded-lg border border-teal-500/30 text-sm">
+                <div className="flex items-center px-4 py-2 bg-accent text-white rounded-lg text-sm">
                   Page {tradesPageSafe} of {tradesTotalPages}
                 </div>
                 <button
                   type="button"
                   onClick={() => { setTradesPage(p => Math.min(tradesTotalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                   disabled={tradesPageSafe >= tradesTotalPages}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:cursor-not-allowed text-white rounded-lg transition-all disabled:text-blue-300 text-sm"
+                  className="px-4 py-2 bg-surface-2 hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed text-text-secondary rounded-lg transition-all text-sm border border-border"
                 >
                   Next
                 </button>
@@ -1194,7 +1186,6 @@ export default function JournalClient({ session }: JournalClientProps) {
             </div>
           )}
         </div>
-      </main>
 
       <TradeDetailDrawer
         tradeId={viewTradeId}
@@ -1208,21 +1199,21 @@ export default function JournalClient({ session }: JournalClientProps) {
 
       {/* ==================== MODAL FORM ==================== */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div ref={modalRef} className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div ref={modalRef} className="bg-surface-1 border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900 z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface-1 z-10 rounded-t-xl">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-text-primary">
                   {editingTrade ? 'Edit Trade' : 'Add New Trade'}
                 </h2>
                 {editingTrade && (editingTrade.source || 'manual') === 'webull' && (
-                  <span className="inline-flex px-2 py-0.5 text-[10px] font-bold rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  <span className="inline-flex px-2 py-0.5 text-[10px] font-bold rounded bg-surface-3 text-text-secondary border border-border">
                     WEBULL IMPORT
                   </span>
                 )}
               </div>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white text-2xl leading-none transition-colors">&times;</button>
+              <button onClick={closeModal} className="text-text-muted hover:text-text-primary text-2xl leading-none transition-colors">&times;</button>
             </div>
 
             {/* Modal Body */}
@@ -1230,17 +1221,17 @@ export default function JournalClient({ session }: JournalClientProps) {
               {/* Row 1: Ticker, Trade Type, Direction */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Ticker *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Ticker *</label>
                   <input
                     type="text" value={ticker}
                     onChange={(e) => setTicker(e.target.value.toUpperCase())}
                     placeholder="AAPL"
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500 uppercase font-mono"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent uppercase font-mono"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Trade Type *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Trade Type *</label>
                   <select
                     value={tradeType}
                     onChange={(e) => {
@@ -1248,18 +1239,18 @@ export default function JournalClient({ session }: JournalClientProps) {
                       setTradeType(val);
                       if (val === 'intraday') { setIsOpen(false); setExitDate(''); }
                     }}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   >
                     <option value="swing">Swing Trade</option>
                     <option value="intraday">Intraday / Day Trade</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Direction *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Direction *</label>
                   <select
                     value={direction}
                     onChange={(e) => setDirection(e.target.value as 'long' | 'short')}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   >
                     <option value="long">Long</option>
                     <option value="short">Short</option>
@@ -1270,26 +1261,26 @@ export default function JournalClient({ session }: JournalClientProps) {
               {/* Row 2: Entry Price, Entry Date, Amount */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Entry Price *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Entry Price *</label>
                   <input type="number" step="0.01" value={entryPrice}
                     onChange={(e) => setEntryPrice(e.target.value)} placeholder="150.00"
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Entry Date *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Entry Date *</label>
                   <input type="date" value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Amount ($) *</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Amount ($) *</label>
                   <input type="number" step="0.01" value={amount}
                     onChange={(e) => setAmount(e.target.value)} placeholder="1000"
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                     required
                   />
                 </div>
@@ -1298,27 +1289,27 @@ export default function JournalClient({ session }: JournalClientProps) {
               {/* Entry / Exit Times */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Entry Time</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Entry Time</label>
                   <input type="time" step="1" value={entryTimeForm}
                     onChange={(e) => setEntryTimeForm(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   />
-                  <p className="text-xs text-blue-400/60 mt-1">Optional — for intraday precision</p>
+                  <p className="text-xs text-text-muted mt-1">Optional -- for intraday precision</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Exit Time</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Exit Time</label>
                   <input type="time" step="1" value={exitTimeForm}
                     onChange={(e) => setExitTimeForm(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   />
                 </div>
               </div>
 
               {/* Intraday info banner */}
               {isIntraday && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm">
-                  <span className="shrink-0">⚡</span>
-                  <span>Intraday trade — exit date auto-set to entry date. No &quot;open trade&quot; needed.</span>
+                <div className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-secondary text-sm">
+                  <span className="shrink-0 text-text-muted">*</span>
+                  <span>Intraday trade -- exit date auto-set to entry date. No &quot;open trade&quot; needed.</span>
                 </div>
               )}
 
@@ -1327,9 +1318,9 @@ export default function JournalClient({ session }: JournalClientProps) {
                 <div className="flex items-center space-x-2">
                   <input type="checkbox" id="isOpen" checked={isOpen}
                     onChange={(e) => setIsOpen(e.target.checked)}
-                    className="w-4 h-4 rounded border-white/10 bg-slate-800 text-blue-500 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-border bg-surface-2 text-accent focus:ring-accent"
                   />
-                  <label htmlFor="isOpen" className="text-sm text-blue-200">Trade is still open</label>
+                  <label htmlFor="isOpen" className="text-sm text-text-secondary">Trade is still open</label>
                 </div>
               )}
 
@@ -1337,26 +1328,26 @@ export default function JournalClient({ session }: JournalClientProps) {
               {(isIntraday || !isOpen) && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-blue-200 mb-1">
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
                       Exit Price {!isIntraday && !isOpen ? '*' : ''}
                     </label>
                     <input type="number" step="0.01" value={exitPrice}
                       onChange={(e) => setExitPrice(e.target.value)} placeholder="155.00"
-                      className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                       required={!isIntraday ? !isOpen : false}
                     />
                     {isIntraday && !exitPrice && (
-                      <p className="text-xs text-blue-400 mt-1">Leave empty if still in trade</p>
+                      <p className="text-xs text-text-muted mt-1">Leave empty if still in trade</p>
                     )}
                   </div>
 
                   {/* Exit Date - only for swing trades */}
                   {!isIntraday && (
                     <div>
-                      <label className="block text-sm font-medium text-blue-200 mb-1">Exit Date *</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-1">Exit Date *</label>
                       <input type="date" value={exitDate}
                         onChange={(e) => setExitDate(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                         required={!isOpen}
                       />
                     </div>
@@ -1367,9 +1358,9 @@ export default function JournalClient({ session }: JournalClientProps) {
               {/* Exit Reason - shown when closed */}
               {((isIntraday && exitPrice) || (!isIntraday && !isOpen)) && (
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-1">Exit Reason</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Exit Reason</label>
                   <select value={exitReason} onChange={(e) => setExitReason(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   >
                     <option value="">Select exit reason...</option>
                     {exitReasonOptions.map(opt => (
@@ -1381,9 +1372,9 @@ export default function JournalClient({ session }: JournalClientProps) {
 
               {/* Link to Saved Report */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-1">Link to Analysis Report</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Link to Analysis Report</label>
                 <select value={selectedReportId} onChange={(e) => setSelectedReportId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   disabled={!ticker || loadingReports}
                 >
                   <option value="">None</option>
@@ -1398,20 +1389,20 @@ export default function JournalClient({ session }: JournalClientProps) {
                     </optgroup>
                   )}
                 </select>
-                {!ticker && <p className="text-xs text-blue-400 mt-1">Enter a ticker to see available reports</p>}
+                {!ticker && <p className="text-xs text-text-muted mt-1">Enter a ticker to see available reports</p>}
               </div>
 
               {/* Strategy */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium text-blue-200">Strategy</label>
+                  <label className="block text-sm font-medium text-text-secondary">Strategy</label>
                   <a href="/strategies" target="_blank" rel="noopener noreferrer"
-                    className="text-[10px] text-teal-400 hover:text-teal-300 transition-colors">
+                    className="text-[10px] text-accent hover:text-accent-hover transition-colors">
                     Manage Strategies →
                   </a>
                 </div>
                 <select value={strategy} onChange={(e) => setStrategy(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 >
                   <option value="">Select a strategy...</option>
                   {dbStrategies.length > 0 && (
@@ -1424,22 +1415,22 @@ export default function JournalClient({ session }: JournalClientProps) {
 
               {/* Notes */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Notes</label>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
                   placeholder="What was your thesis? How did it play out?"
                   rows={2}
-                  className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
                 />
               </div>
 
               {/* Submit */}
-              <div className="flex justify-end gap-3 pt-2 border-t border-white/10">
+              <div className="flex justify-end gap-3 pt-2 border-t border-border">
                 <button type="button" onClick={closeModal}
-                  className="px-5 py-2 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-600 transition-all">
+                  className="px-5 py-2 bg-surface-2 text-text-secondary border border-border rounded-lg font-medium hover:bg-surface-3 transition-all">
                   Cancel
                 </button>
                 <button type="submit" disabled={saving}
-                  className="px-5 py-2 bg-gradient-to-r from-teal-500 to-blue-500 text-white rounded-lg font-medium hover:from-teal-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="px-5 py-2 bg-accent text-white rounded-lg font-medium hover:bg-accent-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   {saving ? 'Saving...' : editingTrade ? 'Update Trade' : 'Add Trade'}
                 </button>
               </div>

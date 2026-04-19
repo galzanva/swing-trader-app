@@ -87,17 +87,17 @@ function Gauge({
   
   let colorClass = '';
   if (colorScheme === 'rsi') {
-    colorClass = value > 70 ? 'bg-red-500' : value > 50 ? 'bg-green-500' : value > 30 ? 'bg-yellow-500' : 'bg-green-500';
+    colorClass = value > 70 ? 'bg-loss' : value > 50 ? 'bg-profit' : value > 30 ? 'bg-yellow-500' : 'bg-profit';
   } else if (colorScheme === 'signal') {
-    colorClass = value >= 70 ? 'bg-emerald-500' : value >= 50 ? 'bg-blue-500' : value >= 30 ? 'bg-yellow-500' : 'bg-red-500';
+    colorClass = value >= 70 ? 'bg-profit' : value >= 50 ? 'bg-accent' : value >= 30 ? 'bg-yellow-500' : 'bg-loss';
   } else if (colorScheme === 'momentum') {
-    colorClass = value > 0 ? 'bg-emerald-500' : 'bg-red-500';
+    colorClass = value > 0 ? 'bg-profit' : 'bg-loss';
   } else {
-    colorClass = 'bg-blue-500';
+    colorClass = 'bg-accent';
   }
   
   return (
-    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+    <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
       <div 
         className={`h-full ${colorClass} transition-all duration-500`}
         style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
@@ -108,30 +108,30 @@ function Gauge({
 
 function SignalBadge({ signal, size = 'md' }: { signal: string; size?: 'sm' | 'md' | 'lg' }) {
   const colorMap: Record<string, string> = {
-    'overbought': 'bg-red-500/20 text-red-400 border-red-500/30',
-    'bullish': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    'neutral': 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-    'bearish': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    'oversold': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    'strong': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    'moderate': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    'weak': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    'no-trend': 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-    'high': 'bg-red-500/20 text-red-400 border-red-500/30',
-    'normal': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    'low': 'bg-green-500/20 text-green-400 border-green-500/30',
-    'expanding': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    'contracting': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    'rising': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    'falling': 'bg-red-500/20 text-red-400 border-red-500/30',
-    'flat': 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+    'overbought': 'bg-loss/10 text-loss',
+    'bullish': 'bg-profit/10 text-profit',
+    'neutral': 'bg-surface-3 text-text-secondary',
+    'bearish': 'bg-loss/10 text-loss',
+    'oversold': 'bg-profit/10 text-profit',
+    'strong': 'bg-profit/10 text-profit',
+    'moderate': 'bg-accent/10 text-accent',
+    'weak': 'bg-yellow-500/10 text-yellow-500',
+    'no-trend': 'bg-surface-3 text-text-secondary',
+    'high': 'bg-loss/10 text-loss',
+    'normal': 'bg-accent/10 text-accent',
+    'low': 'bg-profit/10 text-profit',
+    'expanding': 'bg-loss/10 text-loss',
+    'contracting': 'bg-accent/10 text-accent',
+    'rising': 'bg-profit/10 text-profit',
+    'falling': 'bg-loss/10 text-loss',
+    'flat': 'bg-surface-3 text-text-secondary',
   };
   
   const classes = colorMap[signal.toLowerCase()] || colorMap['neutral'];
   const sizeClasses = size === 'lg' ? 'px-3 py-1 text-sm' : size === 'md' ? 'px-2.5 py-0.5 text-xs' : 'px-2 py-0.5 text-xs';
   
   return (
-    <span className={`${classes} ${sizeClasses} border rounded-full font-medium capitalize whitespace-nowrap`}>
+    <span className={`${classes} ${sizeClasses} rounded-full font-medium capitalize whitespace-nowrap`}>
       {signal}
     </span>
   );
@@ -139,9 +139,9 @@ function SignalBadge({ signal, size = 'md' }: { signal: string; size?: 'sm' | 'm
 
 function DirectionIndicator({ direction, size = 'md' }: { direction: 'bullish' | 'bearish' | 'neutral'; size?: 'sm' | 'md' | 'lg' }) {
   const colors = {
-    bullish: 'bg-emerald-500 text-white',
-    bearish: 'bg-red-500 text-white',
-    neutral: 'bg-slate-500 text-white'
+    bullish: 'bg-profit text-white',
+    bearish: 'bg-loss text-white',
+    neutral: 'bg-surface-4 text-text-secondary'
   };
   
   const sizes = {
@@ -165,16 +165,16 @@ function DirectionIndicator({ direction, size = 'md' }: { direction: 'bullish' |
 
 function GradeBadge({ grade }: { grade: string }) {
   const colorMap: Record<string, string> = {
-    'A+': 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/30',
-    'A': 'bg-gradient-to-r from-emerald-600 to-green-500 text-white shadow-green-500/30',
-    'B': 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-blue-500/30',
-    'C': 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-yellow-500/30',
-    'D': 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/30',
-    'F': 'bg-gradient-to-r from-red-600 to-red-800 text-white shadow-red-500/30',
+    'A+': 'bg-profit/10 text-profit',
+    'A': 'bg-profit/10 text-profit',
+    'B': 'bg-accent/10 text-accent',
+    'C': 'bg-yellow-500/10 text-yellow-500',
+    'D': 'bg-loss/10 text-loss',
+    'F': 'bg-loss/10 text-loss',
   };
   
   return (
-    <div className={`${colorMap[grade] || colorMap['C']} px-4 py-2 rounded-lg text-2xl font-black shadow-lg`}>
+    <div className={`${colorMap[grade] || colorMap['C']} px-4 py-2 rounded-lg text-2xl font-black`}>
       {grade}
     </div>
   );
@@ -190,11 +190,11 @@ function IndicatorRow({ label, value, signal, valueColor, onHelpClick }: {
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center gap-1.5">
-        <span className="text-sm text-slate-300">{label}</span>
+        <span className="text-sm text-text-secondary">{label}</span>
         {onHelpClick && (
           <button
             onClick={onHelpClick}
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all"
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all"
             title={`Learn about ${label}`}
           >
             <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -204,7 +204,7 @@ function IndicatorRow({ label, value, signal, valueColor, onHelpClick }: {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <span className={`font-mono text-base ${valueColor || 'text-white'}`}>
+        <span className={`font-mono text-base ${valueColor || 'text-text-primary'}`}>
           {typeof value === 'number' ? value.toFixed(2) : value}
         </span>
         {signal && <SignalBadge signal={signal} />}
@@ -369,21 +369,18 @@ export default function TechnicalAnalysisClient() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center gap-4">
-        <div className="text-4xl">📊</div>
-        <div>
-          <h1 className="text-3xl font-bold text-white">Technical Analysis</h1>
-          <p className="text-blue-200 mt-1">
-            Pure technical indicator and pattern analysis
-          </p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-text-primary">Technical Analysis</h1>
+        <p className="text-text-secondary mt-1">
+          Pure technical indicator and pattern analysis
+        </p>
       </div>
 
       {/* Input Section */}
-      <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+      <div className="bg-surface-1 rounded-xl p-6 border border-border">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-blue-100 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Ticker Symbol
             </label>
             <input
@@ -391,20 +388,20 @@ export default function TechnicalAnalysisClient() {
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               placeholder="e.g., AAPL, TSLA, SPY"
-              className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white text-lg placeholder-blue-200/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent uppercase font-mono"
+              className="w-full px-4 py-3 rounded-lg bg-surface-2 border border-border text-text-primary text-lg placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent uppercase font-mono"
               disabled={isLoading}
               onKeyPress={(e) => e.key === "Enter" && handleAnalyze()}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-blue-100 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Timeframe
             </label>
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white text-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
+              className="w-full px-4 py-3 rounded-lg bg-surface-2 border border-border text-text-primary text-lg focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
               disabled={isLoading}
             >
               <option value="1day">Daily (Swing)</option>
@@ -419,7 +416,7 @@ export default function TechnicalAnalysisClient() {
             <button
               onClick={handleAnalyze}
               disabled={isLoading}
-              className="w-full px-6 py-3 bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 text-white text-lg font-semibold rounded-xl shadow-lg shadow-teal-500/30 hover:shadow-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-accent hover:bg-accent-hover text-white text-lg font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -434,7 +431,7 @@ export default function TechnicalAnalysisClient() {
         </div>
 
         {error && (
-          <div className="mt-4 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-200">
+          <div className="mt-4 p-4 rounded-lg bg-loss/10 border border-loss/30 text-loss">
             {error}
           </div>
         )}
@@ -442,10 +439,10 @@ export default function TechnicalAnalysisClient() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 border border-white/20 text-center">
-          <div className="inline-block w-16 h-16 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin mb-4"></div>
-          <p className="text-white text-xl">Analyzing {symbol}...</p>
-          <p className="text-blue-200 mt-2">
+        <div className="bg-surface-1 rounded-xl p-12 border border-border text-center">
+          <div className="inline-block w-16 h-16 border-4 border-accent/30 border-t-accent rounded-full animate-spin mb-4"></div>
+          <p className="text-text-primary text-xl">Analyzing {symbol}...</p>
+          <p className="text-text-secondary mt-2">
             Calculating indicators, detecting patterns, analyzing structure...
           </p>
         </div>
@@ -456,21 +453,21 @@ export default function TechnicalAnalysisClient() {
         <div className="space-y-6">
           
           {/* ==================== HEADER ==================== */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+          <div className="bg-surface-1 rounded-xl p-6 border border-border">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold text-white">{report.symbol}</h2>
-                  <span className="text-slate-400">{report.marketData.name}</span>
-                  <span className="bg-slate-600/30 text-slate-300 px-2 py-0.5 text-xs rounded-full font-mono">{report.timeframe}</span>
+                  <h2 className="text-2xl font-bold text-text-primary">{report.symbol}</h2>
+                  <span className="text-text-muted">{report.marketData.name}</span>
+                  <span className="bg-surface-3 text-text-secondary px-2 py-0.5 text-xs rounded-full font-mono">{report.timeframe}</span>
                   {report.aiEnhanced && (
-                    <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
+                    <span className="bg-accent/10 text-accent px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider">
                       AI Evaluated
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-1">
-                  <span className="text-3xl font-bold text-white">${report.currentPrice.toFixed(2)}</span>
+                  <span className="text-3xl font-bold text-text-primary">${report.currentPrice.toFixed(2)}</span>
                 </div>
               </div>
               
@@ -478,15 +475,15 @@ export default function TechnicalAnalysisClient() {
                 <button
                   onClick={handleSaveReport}
                   disabled={isSaving}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold transition-all ${
                     saveSuccess 
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-white/40'
+                      ? 'bg-profit/10 text-profit'
+                      : 'bg-surface-2 hover:bg-surface-3 text-text-secondary border border-border hover:border-border-hover'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {isSaving ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <div className="w-4 h-4 border-2 border-text-muted border-t-text-primary rounded-full animate-spin"></div>
                       Saving...
                     </>
                   ) : saveSuccess ? (
@@ -495,14 +492,11 @@ export default function TechnicalAnalysisClient() {
                       Saved!
                     </>
                   ) : (
-                    <>
-                      <span>💾</span>
-                      Save Report
-                    </>
+                    "Save Report"
                   )}
                 </button>
                 {saveError && (
-                  <p className="text-xs text-red-400 mt-1">{saveError}</p>
+                  <p className="text-xs text-loss mt-1">{saveError}</p>
                 )}
               </div>
             </div>
@@ -515,12 +509,12 @@ export default function TechnicalAnalysisClient() {
             <div className="space-y-6">
               
               {/* Momentum Indicators */}
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">⚡</span> Momentum Indicators
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-4">
+                  Momentum Indicators
                 </h3>
                 
-                <div className="space-y-1 divide-y divide-white/10">
+                <div className="space-y-1 divide-y divide-border">
                   <IndicatorRow 
                     label="RSI (14)" 
                     value={report.indicators.momentum.rsi.toFixed(1)} 
@@ -536,13 +530,13 @@ export default function TechnicalAnalysisClient() {
                   <IndicatorRow 
                     label="MACD Line" 
                     value={report.indicators.momentum.macdLine.toFixed(4)} 
-                    valueColor={report.indicators.momentum.macdHistogram > 0 ? 'text-emerald-400' : 'text-red-400'}
+                    valueColor={report.indicators.momentum.macdHistogram > 0 ? 'text-profit' : 'text-loss'}
                     onHelpClick={() => openIndicatorHelp('macd')}
                   />
                   <IndicatorRow 
                     label="MACD Histogram" 
                     value={report.indicators.momentum.macdHistogram.toFixed(4)} 
-                    valueColor={report.indicators.momentum.macdHistogram > 0 ? 'text-emerald-400' : 'text-red-400'}
+                    valueColor={report.indicators.momentum.macdHistogram > 0 ? 'text-profit' : 'text-loss'}
                     onHelpClick={() => openIndicatorHelp('macd')}
                   />
                   <IndicatorRow 
@@ -553,7 +547,7 @@ export default function TechnicalAnalysisClient() {
                   <IndicatorRow 
                     label="CCI" 
                     value={report.indicators.momentum.cci.toFixed(1)} 
-                    valueColor={report.indicators.momentum.cci > 100 ? 'text-red-400' : report.indicators.momentum.cci < -100 ? 'text-emerald-400' : 'text-white'}
+                    valueColor={report.indicators.momentum.cci > 100 ? 'text-loss' : report.indicators.momentum.cci < -100 ? 'text-profit' : 'text-text-primary'}
                     onHelpClick={() => openIndicatorHelp('cci')}
                   />
                   <IndicatorRow 
@@ -565,12 +559,12 @@ export default function TechnicalAnalysisClient() {
               </div>
 
               {/* Trend Analysis */}
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">📈</span> Trend Analysis
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-4">
+                  Trend Analysis
                 </h3>
                 
-                <div className="space-y-1 divide-y divide-white/10">
+                <div className="space-y-1 divide-y divide-border">
                   <IndicatorRow 
                     label="ADX (Trend Strength)" 
                     value={report.indicators.trend.adx.toFixed(1)} 
@@ -580,21 +574,21 @@ export default function TechnicalAnalysisClient() {
                   <IndicatorRow 
                     label="+DI (Buyers)" 
                     value={report.indicators.trend.plusDI.toFixed(1)} 
-                    valueColor="text-emerald-400"
+                    valueColor="text-profit"
                     onHelpClick={() => openIndicatorHelp('di')}
                   />
                   <IndicatorRow 
                     label="-DI (Sellers)" 
                     value={report.indicators.trend.minusDI.toFixed(1)} 
-                    valueColor="text-red-400"
+                    valueColor="text-loss"
                     onHelpClick={() => openIndicatorHelp('di')}
                   />
                   <div className="flex items-center justify-between py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-slate-300">EMA Alignment</span>
+                      <span className="text-sm text-text-secondary">EMA Alignment</span>
                       <button
                         onClick={() => openIndicatorHelp('ema')}
-                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all"
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all"
                         title="Learn about EMA Alignment"
                       >
                         <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -605,8 +599,8 @@ export default function TechnicalAnalysisClient() {
                     <SignalBadge signal={report.assessments.trend.emaAlignment} size="lg" />
                   </div>
                   <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-slate-300">Price Location</span>
-                    <span className="text-base text-white">{report.assessments.trend.priceLocation}</span>
+                    <span className="text-sm text-text-secondary">Price Location</span>
+                    <span className="text-base text-text-primary">{report.assessments.trend.priceLocation}</span>
                   </div>
                 </div>
               </div>
@@ -616,25 +610,25 @@ export default function TechnicalAnalysisClient() {
             <div className="space-y-6">
               
               {/* Volume Analysis */}
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">📊</span> Volume Analysis
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-4">
+                  Volume Analysis
                 </h3>
                 
-                <div className="space-y-1 divide-y divide-white/10">
+                <div className="space-y-1 divide-y divide-border">
                   <IndicatorRow 
                     label="Volume Z-Score" 
                     value={report.indicators.volume.zScore.toFixed(2)} 
                     signal={report.indicators.volume.volumeSignal}
-                    valueColor={report.indicators.volume.zScore > 1 ? 'text-emerald-400' : report.indicators.volume.zScore < -1 ? 'text-red-400' : 'text-white'}
+                    valueColor={report.indicators.volume.zScore > 1 ? 'text-profit' : report.indicators.volume.zScore < -1 ? 'text-loss' : 'text-text-primary'}
                     onHelpClick={() => openIndicatorHelp('volume-z')}
                   />
                   <div className="flex items-center justify-between py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-slate-300">OBV Trend</span>
+                      <span className="text-sm text-text-secondary">OBV Trend</span>
                       <button
                         onClick={() => openIndicatorHelp('obv')}
-                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all"
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all"
                         title="Learn about OBV"
                       >
                         <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -647,19 +641,19 @@ export default function TechnicalAnalysisClient() {
                   <IndicatorRow 
                     label="Chaikin Money Flow" 
                     value={report.indicators.volume.cmf.toFixed(3)} 
-                    valueColor={report.indicators.volume.cmf > 0 ? 'text-emerald-400' : 'text-red-400'}
+                    valueColor={report.indicators.volume.cmf > 0 ? 'text-profit' : 'text-loss'}
                     onHelpClick={() => openIndicatorHelp('cmf')}
                   />
                 </div>
               </div>
 
               {/* Volatility */}
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">📉</span> Volatility
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-4">
+                  Volatility
                 </h3>
                 
-                <div className="space-y-1 divide-y divide-white/10">
+                <div className="space-y-1 divide-y divide-border">
                   <IndicatorRow 
                     label="ATR (14)" 
                     value={`$${report.indicators.volatility.atr.toFixed(2)} (${report.indicators.volatility.atrPercent.toFixed(2)}%)`}
@@ -667,10 +661,10 @@ export default function TechnicalAnalysisClient() {
                   />
                   <div className="flex items-center justify-between py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-slate-300">Volatility Regime</span>
+                      <span className="text-sm text-text-secondary">Volatility Regime</span>
                       <button
                         onClick={() => openIndicatorHelp('volatility')}
-                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all"
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all"
                         title="Learn about Volatility Regime"
                       >
                         <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -699,16 +693,16 @@ export default function TechnicalAnalysisClient() {
               </div>
 
               {/* TTM Squeeze */}
-              <div className={`rounded-2xl p-6 border ${
+              <div className={`rounded-xl p-6 border ${
                 report.squeeze.isInSqueeze 
-                  ? 'bg-orange-500/10 border-orange-500/30' 
-                  : 'bg-white/10 border-white/20'
+                  ? 'bg-loss/10 border-loss/30' 
+                  : 'bg-surface-1 border-border'
               }`}>
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">🔥</span> TTM Squeeze
+                <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+                  TTM Squeeze
                   <button
                     onClick={() => openIndicatorHelp('squeeze')}
-                    className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all ml-1"
+                    className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all ml-1"
                     title="Learn about TTM Squeeze"
                   >
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -718,11 +712,11 @@ export default function TechnicalAnalysisClient() {
                 </h3>
                 
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-base text-slate-300">Squeeze Status</span>
+                  <span className="text-base text-text-secondary">Squeeze Status</span>
                   <div className={`px-4 py-2 rounded-lg text-base font-semibold ${
                     report.squeeze.isInSqueeze 
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' 
-                      : 'bg-slate-600/20 text-slate-400 border border-slate-500/30'
+                      ? 'bg-loss/10 text-loss' 
+                      : 'bg-surface-3 text-text-secondary'
                   }`}>
                     {report.squeeze.isInSqueeze ? `ON — ${report.squeeze.squeezeDuration} bars` : 'OFF'}
                   </div>
@@ -730,7 +724,7 @@ export default function TechnicalAnalysisClient() {
                 
                 {report.squeeze.isInSqueeze && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-400">Momentum Direction</span>
+                    <span className="text-sm text-text-muted">Momentum Direction</span>
                     <SignalBadge signal={report.squeeze.momentumDirection} size="lg" />
                   </div>
                 )}
@@ -739,12 +733,12 @@ export default function TechnicalAnalysisClient() {
           </div>
 
           {/* ==================== MOVING AVERAGES ==================== */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <span className="text-xl">🎗️</span> Moving Averages
+          <div className="bg-surface-1 rounded-xl p-6 border border-border">
+            <h3 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              Moving Averages
               <button
                 onClick={() => openIndicatorHelp('ema')}
-                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-100 transition-all ml-1"
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-surface-3 hover:bg-surface-4 text-text-muted hover:text-text-secondary transition-all ml-1"
                 title="Learn about Moving Averages"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -763,10 +757,10 @@ export default function TechnicalAnalysisClient() {
                 const diff = ((report.currentPrice - ema.value) / ema.value) * 100;
                 const isAbove = diff > 0;
                 return (
-                  <div key={ema.label} className="bg-white/5 rounded-xl p-4">
-                    <div className="text-sm text-slate-400 mb-1">{ema.label}</div>
-                    <div className="text-xl font-mono text-white">${ema.value.toFixed(2)}</div>
-                    <div className={`text-sm mt-1 ${isAbove ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <div key={ema.label} className="bg-surface-2 rounded-xl p-4">
+                    <div className="text-sm text-text-muted mb-1">{ema.label}</div>
+                    <div className="text-xl font-mono text-text-primary">${ema.value.toFixed(2)}</div>
+                    <div className={`text-sm mt-1 ${isAbove ? 'text-profit' : 'text-loss'}`}>
                       {isAbove ? '↑' : '↓'} {Math.abs(diff).toFixed(2)}% {isAbove ? 'above' : 'below'}
                     </div>
                   </div>
@@ -776,62 +770,62 @@ export default function TechnicalAnalysisClient() {
           </div>
 
           {/* ==================== KEY LEVELS ==================== */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <span className="text-xl">📍</span> Key Levels
+          <div className="bg-surface-1 rounded-xl p-6 border border-border">
+            <h3 className="text-lg font-semibold text-text-primary mb-4">
+              Key Levels
             </h3>
             
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-3">
-                <h4 className="text-base font-semibold text-cyan-400">⚡ Near-Term Trading Levels</h4>
-                <span className="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">within 3x ATR</span>
+                <h4 className="text-base font-semibold text-accent">Near-Term Trading Levels</h4>
+                <span className="text-xs text-text-muted bg-surface-3 px-2 py-0.5 rounded">within 3x ATR</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-emerald-900/10 rounded-xl p-4 border border-emerald-500/20">
-                  <div className="text-sm text-emerald-400 font-medium mb-2">Support</div>
+                <div className="bg-profit/5 rounded-xl p-4 border border-profit/20">
+                  <div className="text-sm text-profit font-medium mb-2">Support</div>
                   <div className="space-y-2">
                     {report.levels.nearTerm?.support && report.levels.nearTerm.support.length > 0 ? (
                       report.levels.nearTerm.support.slice(0, 3).map((level, i) => (
                         <div key={i} className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
-                          <span className="text-xs text-slate-400">{level.touches} touches</span>
+                          <span className="text-lg font-mono text-text-primary">${level.price.toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">{level.touches} touches</span>
                         </div>
                       ))
                     ) : (
                       <>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.support1?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr).toFixed(2)}</span>
-                          <span className="text-xs text-slate-500">1x ATR</span>
+                          <span className="text-lg font-mono text-text-primary">${report.levels.atrBased?.support1?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr).toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">1x ATR</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.support2?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
-                          <span className="text-xs text-slate-500">1.5x ATR</span>
+                          <span className="text-lg font-mono text-text-primary">${report.levels.atrBased?.support2?.toFixed(2) || (report.currentPrice - report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">1.5x ATR</span>
                         </div>
                       </>
                     )}
                   </div>
                 </div>
                 
-                <div className="bg-red-900/10 rounded-xl p-4 border border-red-500/20">
-                  <div className="text-sm text-red-400 font-medium mb-2">Resistance</div>
+                <div className="bg-loss/5 rounded-xl p-4 border border-loss/20">
+                  <div className="text-sm text-loss font-medium mb-2">Resistance</div>
                   <div className="space-y-2">
                     {report.levels.nearTerm?.resistance && report.levels.nearTerm.resistance.length > 0 ? (
                       report.levels.nearTerm.resistance.slice(0, 3).map((level, i) => (
                         <div key={i} className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${level.price.toFixed(2)}</span>
-                          <span className="text-xs text-slate-400">{level.touches} touches</span>
+                          <span className="text-lg font-mono text-text-primary">${level.price.toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">{level.touches} touches</span>
                         </div>
                       ))
                     ) : (
                       <>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.resistance1?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr).toFixed(2)}</span>
-                          <span className="text-xs text-slate-500">1x ATR</span>
+                          <span className="text-lg font-mono text-text-primary">${report.levels.atrBased?.resistance1?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr).toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">1x ATR</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-mono text-white">${report.levels.atrBased?.resistance2?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
-                          <span className="text-xs text-slate-500">1.5x ATR</span>
+                          <span className="text-lg font-mono text-text-primary">${report.levels.atrBased?.resistance2?.toFixed(2) || (report.currentPrice + report.indicators.volatility.atr * 1.5).toFixed(2)}</span>
+                          <span className="text-xs text-text-muted">1.5x ATR</span>
                         </div>
                       </>
                     )}
@@ -840,21 +834,21 @@ export default function TechnicalAnalysisClient() {
               </div>
             </div>
             
-            <div className="mb-6 pb-6 border-b border-white/10">
-              <h4 className="text-base font-medium text-slate-300 mb-3">Pivot Points</h4>
+            <div className="mb-6 pb-6 border-b border-border">
+              <h4 className="text-base font-medium text-text-secondary mb-3">Pivot Points</h4>
               <div className="grid grid-cols-7 gap-2">
                 {[
-                  { label: 'S3', value: report.levels.pivotPoints.s3, color: 'bg-red-900/30' },
-                  { label: 'S2', value: report.levels.pivotPoints.s2, color: 'bg-red-900/20' },
-                  { label: 'S1', value: report.levels.pivotPoints.s1, color: 'bg-red-900/10' },
-                  { label: 'PP', value: report.levels.pivotPoints.pp, color: 'bg-blue-900/30 border border-blue-500/30' },
-                  { label: 'R1', value: report.levels.pivotPoints.r1, color: 'bg-emerald-900/10' },
-                  { label: 'R2', value: report.levels.pivotPoints.r2, color: 'bg-emerald-900/20' },
-                  { label: 'R3', value: report.levels.pivotPoints.r3, color: 'bg-emerald-900/30' },
+                  { label: 'S3', value: report.levels.pivotPoints.s3, color: 'bg-loss/10' },
+                  { label: 'S2', value: report.levels.pivotPoints.s2, color: 'bg-loss/5' },
+                  { label: 'S1', value: report.levels.pivotPoints.s1, color: 'bg-loss/5' },
+                  { label: 'PP', value: report.levels.pivotPoints.pp, color: 'bg-accent/10 border border-accent/30' },
+                  { label: 'R1', value: report.levels.pivotPoints.r1, color: 'bg-profit/5' },
+                  { label: 'R2', value: report.levels.pivotPoints.r2, color: 'bg-profit/5' },
+                  { label: 'R3', value: report.levels.pivotPoints.r3, color: 'bg-profit/10' },
                 ].map((pivot) => (
                   <div key={pivot.label} className={`text-center p-3 rounded-lg ${pivot.color}`}>
-                    <div className="text-xs text-slate-400">{pivot.label}</div>
-                    <div className="text-sm font-mono text-white mt-1">${pivot.value.toFixed(2)}</div>
+                    <div className="text-xs text-text-muted">{pivot.label}</div>
+                    <div className="text-sm font-mono text-text-primary mt-1">${pivot.value.toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -864,37 +858,37 @@ export default function TechnicalAnalysisClient() {
               (report.levels.historical?.resistance && report.levels.historical.resistance.length > 0)) && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <h4 className="text-base font-medium text-slate-500">📚 Historical Reference Levels</h4>
-                  <span className="text-xs text-slate-600 bg-slate-800/30 px-2 py-0.5 rounded">distant - reference only</span>
+                  <h4 className="text-base font-medium text-text-muted">Historical Reference Levels</h4>
+                  <span className="text-xs text-text-muted bg-surface-3 px-2 py-0.5 rounded">distant - reference only</span>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-70">
-                  <div className="rounded-lg p-3 bg-slate-800/30">
-                    <div className="text-xs text-slate-500 mb-2">Major Historical Support</div>
+                  <div className="rounded-lg p-3 bg-surface-2">
+                    <div className="text-xs text-text-muted mb-2">Major Historical Support</div>
                     <div className="flex flex-wrap gap-2">
                       {report.levels.historical?.support && report.levels.historical.support.length > 0 ? (
                         report.levels.historical.support.slice(0, 4).map((level, i) => (
-                          <span key={i} className="text-sm font-mono text-slate-400 bg-slate-700/30 px-2 py-1 rounded">
+                          <span key={i} className="text-sm font-mono text-text-secondary bg-surface-3 px-2 py-1 rounded">
                             ${level.price.toFixed(2)}
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-600 italic">None</span>
+                        <span className="text-xs text-text-muted italic">None</span>
                       )}
                     </div>
                   </div>
                   
-                  <div className="rounded-lg p-3 bg-slate-800/30">
-                    <div className="text-xs text-slate-500 mb-2">Major Historical Resistance</div>
+                  <div className="rounded-lg p-3 bg-surface-2">
+                    <div className="text-xs text-text-muted mb-2">Major Historical Resistance</div>
                     <div className="flex flex-wrap gap-2">
                       {report.levels.historical?.resistance && report.levels.historical.resistance.length > 0 ? (
                         report.levels.historical.resistance.slice(0, 4).map((level, i) => (
-                          <span key={i} className="text-sm font-mono text-slate-400 bg-slate-700/30 px-2 py-1 rounded">
+                          <span key={i} className="text-sm font-mono text-text-secondary bg-surface-3 px-2 py-1 rounded">
                             ${level.price.toFixed(2)}
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-600 italic">None</span>
+                        <span className="text-xs text-text-muted italic">None</span>
                       )}
                     </div>
                   </div>
@@ -914,99 +908,98 @@ export default function TechnicalAnalysisClient() {
             const structureIntact = report.structureAnalysis?.structureIntact ?? false;
             
             return (
-            <div className={`backdrop-blur-lg rounded-2xl p-6 border ${
+            <div className={`rounded-xl p-6 border ${
               classification === 'likely-pullback' 
-                ? 'bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 border-emerald-500/30' 
+                ? 'bg-profit/5 border-profit/30' 
                 : classification === 'trend-reversal-risk'
-                ? 'bg-gradient-to-br from-red-900/20 to-orange-900/10 border-red-500/30'
-                : 'bg-white/10 border-white/20'
+                ? 'bg-loss/5 border-loss/30'
+                : 'bg-surface-1 border-border'
             }`}>
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <span className="text-xl">📐</span> Price Action & Structure
+              <h3 className="text-lg font-semibold text-text-primary mb-4">
+                Price Action & Structure
               </h3>
               
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className={`px-4 py-2 rounded-xl font-bold text-lg ${
                     classification === 'likely-pullback' 
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                      ? 'bg-profit/10 text-profit' 
                       : classification === 'trend-reversal-risk'
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      ? 'bg-loss/10 text-loss'
                       : classification === 'consolidation'
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      ? 'bg-accent/10 text-accent'
                       : classification === 'breakout-attempt'
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                      : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                      ? 'bg-yellow-500/10 text-yellow-500'
+                      : 'bg-surface-3 text-text-secondary'
                   }`}>
                     {classification === 'likely-pullback' 
-                      ? '✓ Likely Pullback' 
+                      ? 'Likely Pullback' 
                       : classification === 'trend-reversal-risk'
-                      ? '⚠️ Trend Reversal Risk'
+                      ? 'Trend Reversal Risk'
                       : classification === 'consolidation'
-                      ? '⏸️ Consolidation'
+                      ? 'Consolidation'
                       : classification === 'breakout-attempt'
-                      ? '🚀 Breakout Attempt'
-                      : '◐ Mixed / No Clear Edge'}
+                      ? 'Breakout Attempt'
+                      : 'Mixed / No Clear Edge'}
                   </div>
-                  <div className="text-sm text-slate-400">
-                    Prior Trend: <span className="font-medium text-white capitalize">{priorTrend}</span>
+                  <div className="text-sm text-text-muted">
+                    Prior Trend: <span className="font-medium text-text-primary capitalize">{priorTrend}</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-white">{confidence}%</div>
-                  <div className="text-xs text-slate-400">Confidence</div>
+                  <div className="text-2xl font-bold text-text-primary">{confidence}%</div>
+                  <div className="text-xs text-text-muted">Confidence</div>
                 </div>
               </div>
               
-              <div className="p-4 rounded-xl bg-white/5 mb-6">
-                <p className="text-base text-slate-200 leading-relaxed">{summary}</p>
+              <div className="p-4 rounded-xl bg-surface-2 mb-6">
+                <p className="text-base text-text-secondary leading-relaxed">{summary}</p>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-emerald-900/10 rounded-xl p-4 border border-emerald-500/20">
+                <div className="bg-profit/5 rounded-xl p-4 border border-profit/20">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-emerald-400 text-lg">✓</span>
-                    <h4 className="text-sm font-semibold text-emerald-400">Pullback Confirmation Signals</h4>
+                    <span className="text-profit text-lg">✓</span>
+                    <h4 className="text-sm font-semibold text-profit">Pullback Confirmation Signals</h4>
                   </div>
                   <ul className="space-y-2">
                     {pullbackSignals.length > 0 ? (
                       pullbackSignals.map((signal, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                          <span className="text-emerald-500 mt-0.5">•</span>
+                        <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                          <span className="text-profit mt-0.5">•</span>
                           <span>{signal}</span>
                         </li>
                       ))
                     ) : (
-                      <li className="text-sm text-slate-500 italic">No pullback signals detected</li>
+                      <li className="text-sm text-text-muted italic">No pullback signals detected</li>
                     )}
                   </ul>
                 </div>
                 
-                <div className="bg-red-900/10 rounded-xl p-4 border border-red-500/20">
+                <div className="bg-loss/5 rounded-xl p-4 border border-loss/20">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-red-400 text-lg">⚠</span>
-                    <h4 className="text-sm font-semibold text-red-400">Trend Reversal Signals</h4>
+                    <span className="text-loss text-lg">!</span>
+                    <h4 className="text-sm font-semibold text-loss">Trend Reversal Signals</h4>
                   </div>
                   <ul className="space-y-2">
                     {reversalSignals.length > 0 ? (
                       reversalSignals.map((signal, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                          <span className="text-red-500 mt-0.5">•</span>
+                        <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                          <span className="text-loss mt-0.5">•</span>
                           <span>{signal}</span>
                         </li>
                       ))
                     ) : (
-                      <li className="text-sm text-slate-500 italic">No reversal signals detected</li>
+                      <li className="text-sm text-text-muted italic">No reversal signals detected</li>
                     )}
                   </ul>
                 </div>
               </div>
               
               {report.structureAnalysis?.detectedPatterns && report.structureAnalysis.detectedPatterns.length > 0 && (
-                <div className="mt-6 pt-4 border-t border-white/10">
+                <div className="mt-6 pt-4 border-t border-border">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">🕯️</span>
-                    <h4 className="text-sm font-semibold text-slate-300">Detected Candlestick Patterns</h4>
+                    <h4 className="text-sm font-semibold text-text-secondary">Detected Candlestick Patterns</h4>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {report.structureAnalysis.detectedPatterns.map((pattern, i) => {
@@ -1015,15 +1008,15 @@ export default function TechnicalAnalysisClient() {
                       
                       let bgColor, borderColor, textColor, iconColor;
                       if (isFailed) {
-                        bgColor = pattern.type === 'bearish' ? 'bg-emerald-900/20' : 'bg-red-900/20';
-                        borderColor = pattern.type === 'bearish' ? 'border-emerald-500/30' : 'border-red-500/30';
-                        textColor = pattern.type === 'bearish' ? 'text-emerald-300' : 'text-red-300';
-                        iconColor = 'text-slate-400';
+                        bgColor = pattern.type === 'bearish' ? 'bg-profit/5' : 'bg-loss/5';
+                        borderColor = pattern.type === 'bearish' ? 'border-profit/20' : 'border-loss/20';
+                        textColor = pattern.type === 'bearish' ? 'text-profit' : 'text-loss';
+                        iconColor = 'text-text-muted';
                       } else {
-                        bgColor = pattern.type === 'bullish' ? 'bg-emerald-900/20' : pattern.type === 'bearish' ? 'bg-red-900/20' : 'bg-slate-700/30';
-                        borderColor = pattern.type === 'bullish' ? 'border-emerald-500/30' : pattern.type === 'bearish' ? 'border-red-500/30' : 'border-slate-500/30';
-                        textColor = pattern.type === 'bullish' ? 'text-emerald-300' : pattern.type === 'bearish' ? 'text-red-300' : 'text-slate-300';
-                        iconColor = pattern.type === 'bullish' ? 'text-emerald-400' : pattern.type === 'bearish' ? 'text-red-400' : 'text-slate-400';
+                        bgColor = pattern.type === 'bullish' ? 'bg-profit/5' : pattern.type === 'bearish' ? 'bg-loss/5' : 'bg-surface-3';
+                        borderColor = pattern.type === 'bullish' ? 'border-profit/20' : pattern.type === 'bearish' ? 'border-loss/20' : 'border-border';
+                        textColor = pattern.type === 'bullish' ? 'text-profit' : pattern.type === 'bearish' ? 'text-loss' : 'text-text-secondary';
+                        iconColor = pattern.type === 'bullish' ? 'text-profit' : pattern.type === 'bearish' ? 'text-loss' : 'text-text-muted';
                       }
                       
                       return (
@@ -1036,7 +1029,7 @@ export default function TechnicalAnalysisClient() {
                           </span>
                           <div>
                             <div className="font-medium flex items-center gap-1">
-                              {isFailed && <span className="text-xs text-slate-400 line-through">{pattern.name}</span>}
+                              {isFailed && <span className="text-xs text-text-muted line-through">{pattern.name}</span>}
                               {isFailed && <span className="text-xs">FAILED</span>}
                               {!isFailed && pattern.name}
                               {isConfirmed && <span className="text-xs ml-1 opacity-70">✓</span>}
@@ -1052,22 +1045,22 @@ export default function TechnicalAnalysisClient() {
                 </div>
               )}
               
-              <div className="mt-4 flex items-center gap-4 pt-4 border-t border-white/10">
+              <div className="mt-4 flex items-center gap-4 pt-4 border-t border-border">
                 <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${structureIntact ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-                  <span className="text-sm text-slate-400">
-                    Structure: <span className={`font-medium ${structureIntact ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span className={`w-3 h-3 rounded-full ${structureIntact ? 'bg-profit' : 'bg-loss'}`}></span>
+                  <span className="text-sm text-text-muted">
+                    Structure: <span className={`font-medium ${structureIntact ? 'text-profit' : 'text-loss'}`}>
                       {structureIntact ? 'Intact' : 'Broken'}
                     </span>
                   </span>
                 </div>
-                <div className="text-sm text-slate-500">|</div>
+                <div className="text-sm text-text-muted">|</div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-text-muted">
                     Classification: <span className={`font-medium ${
-                      classification === 'likely-pullback' ? 'text-emerald-400' :
-                      classification === 'trend-reversal-risk' ? 'text-red-400' : 
-                      classification === 'breakout-attempt' ? 'text-orange-400' : 'text-yellow-400'
+                      classification === 'likely-pullback' ? 'text-profit' :
+                      classification === 'trend-reversal-risk' ? 'text-loss' : 
+                      classification === 'breakout-attempt' ? 'text-yellow-500' : 'text-text-secondary'
                     }`}>
                       {classification === 'likely-pullback' ? 'Pullback' :
                        classification === 'trend-reversal-risk' ? 'Reversal Risk' : 
@@ -1087,7 +1080,7 @@ export default function TechnicalAnalysisClient() {
               <button
                 onClick={handleAiEvaluate}
                 disabled={isAiEvaluating}
-                className="group relative px-10 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-lg font-semibold rounded-2xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative px-10 py-4 bg-accent hover:bg-accent-hover text-white text-lg font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isAiEvaluating ? (
                   <span className="flex items-center gap-3">
@@ -1095,17 +1088,14 @@ export default function TechnicalAnalysisClient() {
                     AI is analyzing all indicators and patterns...
                   </span>
                 ) : (
-                  <span className="flex items-center gap-3">
-                    <span className="text-2xl">🤖</span>
-                    Evaluate by AI
-                  </span>
+                  "Evaluate by AI"
                 )}
               </button>
-              <p className="text-slate-400 text-sm text-center max-w-md">
+              <p className="text-text-muted text-sm text-center max-w-md">
                 AI will analyze all indicators, candlestick patterns, and price structure to provide a comprehensive trading assessment, projections, and strategy
               </p>
               {aiError && (
-                <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/50 text-red-200 text-sm max-w-md text-center">
+                <div className="p-3 rounded-lg bg-loss/10 border border-loss/30 text-loss text-sm max-w-md text-center">
                   {aiError}
                 </div>
               )}
@@ -1155,10 +1145,10 @@ export default function TechnicalAnalysisClient() {
             return (
             <>
               {/* AI Assessment Header */}
-              <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/10 backdrop-blur-lg rounded-2xl p-6 border border-indigo-500/30">
-                <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                  <span className="text-xl">🤖</span> AI Evaluation
-                  <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider border border-indigo-500/30">
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
+                  AI Evaluation
+                  <span className="bg-accent/10 text-accent px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wider">
                     {(report as any).aiModel || 'AI'}
                   </span>
                 </h3>
@@ -1170,18 +1160,18 @@ export default function TechnicalAnalysisClient() {
                   </div>
                   <div className="flex items-center gap-6 md:gap-8">
                     <div className="flex flex-col items-center min-w-[60px]">
-                      <div className="text-xs text-slate-400 mb-1">Signal Grade</div>
+                      <div className="text-xs text-text-muted mb-1">Signal Grade</div>
                       <GradeBadge grade={aiSignal.grade} />
                     </div>
                     <div className="flex flex-col items-center min-w-[60px]">
-                      <div className="text-xs text-slate-400 mb-1">Strength</div>
-                      <div className="text-2xl font-bold text-white">{aiSignal.overall}<span className="text-sm font-normal text-slate-500">/100</span></div>
+                      <div className="text-xs text-text-muted mb-1">Strength</div>
+                      <div className="text-2xl font-bold text-text-primary">{aiSignal.overall}<span className="text-sm font-normal text-text-muted">/100</span></div>
                     </div>
                     <div className="flex flex-col items-center min-w-[80px]">
-                      <div className="text-xs text-slate-400 mb-1">Confidence</div>
+                      <div className="text-xs text-text-muted mb-1">Confidence</div>
                       <div className={`text-lg font-semibold ${
-                        mergedRecommendation.confidence >= 70 ? 'text-emerald-400' :
-                        mergedRecommendation.confidence >= 50 ? 'text-yellow-400' : 'text-red-400'
+                        mergedRecommendation.confidence >= 70 ? 'text-profit' :
+                        mergedRecommendation.confidence >= 50 ? 'text-yellow-500' : 'text-loss'
                       }`}>
                         {mergedRecommendation.confidence >= 70 ? 'HIGH' : mergedRecommendation.confidence >= 50 ? 'MEDIUM' : 'LOW'}
                         <span className="text-xs ml-1 opacity-70">({mergedRecommendation.confidence}%)</span>
@@ -1191,12 +1181,12 @@ export default function TechnicalAnalysisClient() {
                 </div>
                 
                 {aiSignal.reasoning && aiSignal.reasoning.length > 0 && (
-                  <div className="mt-6 pt-4 border-t border-indigo-500/20">
-                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Reasoning</h4>
+                  <div className="mt-6 pt-4 border-t border-border">
+                    <h4 className="text-xs font-bold text-accent uppercase tracking-widest mb-3">Reasoning</h4>
                     <div className="space-y-2">
                       {aiSignal.reasoning.map((reason, i) => (
-                        <div key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                          <span className="text-indigo-400 shrink-0 mt-0.5">•</span>
+                        <div key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                          <span className="text-accent shrink-0 mt-0.5">•</span>
                           <span className="leading-relaxed">{reason}</span>
                         </div>
                       ))}
@@ -1213,13 +1203,13 @@ export default function TechnicalAnalysisClient() {
                   const score = typeof d?.score === 'number' ? d.score : 50;
                   const displayText = d?.assessment || d?.signal || '';
                   return (
-                  <div key={key} className="bg-indigo-900/5 backdrop-blur-lg rounded-xl p-4 border border-indigo-500/20">
+                  <div key={key} className="bg-surface-1 rounded-xl p-4 border border-border">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-300 capitalize">{key}</span>
-                      <span className="text-xl font-bold text-white">{score}</span>
+                      <span className="text-sm font-medium text-text-secondary capitalize">{key}</span>
+                      <span className="text-xl font-bold text-text-primary">{score}</span>
                     </div>
                     <Gauge value={score} colorScheme="signal" />
-                    {displayText && <div className="text-xs text-slate-400 mt-2 leading-relaxed line-clamp-3">{displayText}</div>}
+                    {displayText && <div className="text-xs text-text-muted mt-2 leading-relaxed line-clamp-3">{displayText}</div>}
                   </div>
                   );
                 })}
@@ -1228,20 +1218,19 @@ export default function TechnicalAnalysisClient() {
 
               {/* AI Structure Analysis */}
               {report.aiEnhanced!.structureAnalysis && (
-                <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/10 backdrop-blur-lg rounded-2xl p-6 border border-indigo-500/30">
-                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                    <span className="text-xl">📐</span> AI Structure Analysis
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h3 className="text-lg font-semibold text-text-primary mb-4">
+                    AI Structure Analysis
                   </h3>
-                  <div className="p-4 rounded-xl bg-white/5 mb-4">
-                    <p className="text-base text-slate-200 leading-relaxed">{report.aiEnhanced!.structureAnalysis.summary}</p>
+                  <div className="p-4 rounded-xl bg-surface-2 mb-4">
+                    <p className="text-base text-text-secondary leading-relaxed">{report.aiEnhanced!.structureAnalysis.summary}</p>
                   </div>
                   {report.aiEnhanced!.structureAnalysis.patternAnalysis && (
-                    <div className="p-4 rounded-xl bg-indigo-900/20 border border-indigo-500/20">
+                    <div className="p-4 rounded-xl bg-surface-2 border border-border">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-lg">🕯️</span>
-                        <h4 className="text-sm font-semibold text-indigo-400">AI Pattern Interpretation</h4>
+                        <h4 className="text-sm font-semibold text-accent">AI Pattern Interpretation</h4>
                       </div>
-                      <p className="text-sm text-slate-300 leading-relaxed">{report.aiEnhanced!.structureAnalysis.patternAnalysis}</p>
+                      <p className="text-sm text-text-secondary leading-relaxed">{report.aiEnhanced!.structureAnalysis.patternAnalysis}</p>
                     </div>
                   )}
                 </div>
@@ -1264,64 +1253,64 @@ export default function TechnicalAnalysisClient() {
                 const proj = report.aiEnhanced!.priceProjections;
                 
                 return (
-                <div className="bg-gradient-to-br from-indigo-900/10 to-purple-900/5 backdrop-blur-lg rounded-2xl p-6 border border-indigo-500/30">
-                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                    <span className="text-xl">🎯</span> AI Price Projections
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h3 className="text-lg font-semibold text-text-primary mb-4">
+                    AI Price Projections
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className={`p-4 rounded-xl border ${
                       proj.mostLikely === 'bull' 
-                        ? 'bg-emerald-500/20 border-emerald-500/50' 
-                        : 'bg-emerald-900/10 border-emerald-500/20'
+                        ? 'bg-profit/10 border-profit/50' 
+                        : 'bg-profit/5 border-profit/20'
                     }`}>
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium text-emerald-400">📈 Bull Case</div>
+                        <div className="text-sm font-medium text-profit">Bull Case</div>
                         {proj.mostLikely === 'bull' && (
-                          <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                          <span className="text-[10px] bg-profit/20 text-profit px-1.5 py-0.5 rounded">Most Likely</span>
                         )}
                       </div>
-                      <div className="text-xl font-mono text-white mb-1">
+                      <div className="text-xl font-mono text-text-primary mb-1">
                         {formatTarget(proj.bullCase.target, (proj.bullCase as any).targetLow, (proj.bullCase as any).targetHigh)}
                       </div>
-                      <div className="text-sm text-slate-400">{proj.bullCase.probability}% • {proj.bullCase.timeframe}</div>
-                      <div className="text-xs text-slate-500 mt-2">{proj.bullCase.reasoning}</div>
+                      <div className="text-sm text-text-muted">{proj.bullCase.probability}% • {proj.bullCase.timeframe}</div>
+                      <div className="text-xs text-text-muted mt-2">{proj.bullCase.reasoning}</div>
                     </div>
                     
                     <div className={`p-4 rounded-xl border ${
                       proj.mostLikely === 'base' 
-                        ? 'bg-blue-500/20 border-blue-500/50' 
-                        : 'bg-blue-900/10 border-blue-500/20'
+                        ? 'bg-accent/10 border-accent/50' 
+                        : 'bg-accent/5 border-accent/20'
                     }`}>
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium text-blue-400">📊 Base Case</div>
+                        <div className="text-sm font-medium text-accent">Base Case</div>
                         {proj.mostLikely === 'base' && (
-                          <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                          <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded">Most Likely</span>
                         )}
                       </div>
-                      <div className="text-xl font-mono text-white mb-1">
+                      <div className="text-xl font-mono text-text-primary mb-1">
                         {formatTarget(proj.baseCase.target, (proj.baseCase as any).targetLow, (proj.baseCase as any).targetHigh)}
                       </div>
-                      <div className="text-sm text-slate-400">{proj.baseCase.probability}% • {proj.baseCase.timeframe}</div>
-                      <div className="text-xs text-slate-500 mt-2">{proj.baseCase.reasoning}</div>
+                      <div className="text-sm text-text-muted">{proj.baseCase.probability}% • {proj.baseCase.timeframe}</div>
+                      <div className="text-xs text-text-muted mt-2">{proj.baseCase.reasoning}</div>
                     </div>
                     
                     <div className={`p-4 rounded-xl border ${
                       proj.mostLikely === 'bear' 
-                        ? 'bg-red-500/20 border-red-500/50' 
-                        : 'bg-red-900/10 border-red-500/20'
+                        ? 'bg-loss/10 border-loss/50' 
+                        : 'bg-loss/5 border-loss/20'
                     }`}>
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium text-red-400">📉 Bear Case</div>
+                        <div className="text-sm font-medium text-loss">Bear Case</div>
                         {proj.mostLikely === 'bear' && (
-                          <span className="text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded">Most Likely</span>
+                          <span className="text-[10px] bg-loss/20 text-loss px-1.5 py-0.5 rounded">Most Likely</span>
                         )}
                       </div>
-                      <div className="text-xl font-mono text-white mb-1">
+                      <div className="text-xl font-mono text-text-primary mb-1">
                         {formatTarget(proj.bearCase.target, (proj.bearCase as any).targetLow, (proj.bearCase as any).targetHigh)}
                       </div>
-                      <div className="text-sm text-slate-400">{proj.bearCase.probability}% • {proj.bearCase.timeframe}</div>
-                      <div className="text-xs text-slate-500 mt-2">{proj.bearCase.reasoning}</div>
+                      <div className="text-sm text-text-muted">{proj.bearCase.probability}% • {proj.bearCase.timeframe}</div>
+                      <div className="text-xs text-text-muted mt-2">{proj.bearCase.reasoning}</div>
                     </div>
                   </div>
                 </div>
@@ -1329,34 +1318,34 @@ export default function TechnicalAnalysisClient() {
               })()}
 
               {/* AI Strategy Recommendation */}
-              <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/20 backdrop-blur-lg rounded-2xl p-6 border border-indigo-500/30">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="text-xl">🎲</span> AI Strategy Recommendation
+              <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                <h3 className="text-lg font-semibold text-text-primary mb-4">
+                  AI Strategy Recommendation
                 </h3>
                 
                 <div className="flex items-center gap-4 mb-6">
                   <div className={`px-5 py-2 rounded-xl font-bold text-xl ${
-                    mergedRecommendation.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                    mergedRecommendation.direction === 'short' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                    'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                    mergedRecommendation.direction === 'long' ? 'bg-profit/10 text-profit' :
+                    mergedRecommendation.direction === 'short' ? 'bg-loss/10 text-loss' :
+                    'bg-yellow-500/10 text-yellow-500'
                   }`}>
-                    {mergedRecommendation.direction === 'wait' ? '⏳ WAIT' : mergedRecommendation.direction.toUpperCase()}
+                    {mergedRecommendation.direction === 'wait' ? 'WAIT' : mergedRecommendation.direction.toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-lg text-white font-medium">{mergedRecommendation.strategy}</div>
-                    <div className="text-sm text-slate-400">Confidence: {mergedRecommendation.confidence}%</div>
+                    <div className="text-lg text-text-primary font-medium">{mergedRecommendation.strategy}</div>
+                    <div className="text-sm text-text-muted">Confidence: {mergedRecommendation.confidence}%</div>
                   </div>
                 </div>
                 
                 {mergedRecommendation.direction === 'wait' ? (
                   <div className="space-y-4">
-                    <div className="p-4 rounded-xl bg-white/5">
-                      <div className="text-sm font-medium text-slate-300 mb-3">Conditions to Watch</div>
+                    <div className="p-4 rounded-xl bg-surface-2">
+                      <div className="text-sm font-medium text-text-secondary mb-3">Conditions to Watch</div>
                       <div className="space-y-2">
                         {(mergedRecommendation.entry.conditions?.length ? mergedRecommendation.entry.conditions : [mergedRecommendation.invalidation || 'Wait for clearer setup with volume confirmation'].filter(Boolean)).map((condition, i) => (
                           <div key={i} className="flex items-start gap-2 text-sm">
-                            <span className="text-yellow-400 mt-0.5 shrink-0">→</span>
-                            <span className="text-slate-300">{condition}</span>
+                            <span className="text-yellow-500 mt-0.5 shrink-0">→</span>
+                            <span className="text-text-secondary">{condition}</span>
                           </div>
                         ))}
                       </div>
@@ -1368,8 +1357,8 @@ export default function TechnicalAnalysisClient() {
                       const cp = report.currentPrice;
                       if (t1 <= 0 && t3 <= 0) {
                         return (
-                          <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
-                            <span className="font-medium text-yellow-400">Note:</span> No clear trading edge. 
+                          <div className="p-3 rounded-lg bg-surface-2 text-sm text-text-muted">
+                            <span className="font-medium text-yellow-500">Note:</span> No clear trading edge. 
                             Wait for price to break above resistance or below support with volume confirmation before taking a position.
                           </div>
                         );
@@ -1382,39 +1371,39 @@ export default function TechnicalAnalysisClient() {
                       
                       return (
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-emerald-900/20 border border-emerald-500/20">
-                          <div className="text-sm text-emerald-400 mb-1">Resistance (Bullish Breakout)</div>
-                          <div className="text-xl font-mono text-white">${resistance.toFixed(2)}</div>
+                        <div className="p-4 rounded-xl bg-profit/5 border border-profit/20">
+                          <div className="text-sm text-profit mb-1">Resistance (Bullish Breakout)</div>
+                          <div className="text-xl font-mono text-text-primary">${resistance.toFixed(2)}</div>
                         </div>
-                        <div className="p-4 rounded-xl bg-red-900/20 border border-red-500/20">
-                          <div className="text-sm text-red-400 mb-1">Support (Bearish Breakdown)</div>
-                          <div className="text-xl font-mono text-white">${support.toFixed(2)}</div>
+                        <div className="p-4 rounded-xl bg-loss/5 border border-loss/20">
+                          <div className="text-sm text-loss mb-1">Support (Bearish Breakdown)</div>
+                          <div className="text-xl font-mono text-text-primary">${support.toFixed(2)}</div>
                         </div>
                       </div>
                       );
                     })()}
                     
-                    <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
-                      <span className="font-medium text-yellow-400">Note:</span> No clear trading edge. 
+                    <div className="p-3 rounded-lg bg-surface-2 text-sm text-text-muted">
+                      <span className="font-medium text-yellow-500">Note:</span> No clear trading edge. 
                       Wait for price to break above resistance or below support with volume confirmation before taking a position.
                     </div>
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                      <div className="p-4 rounded-xl bg-white/5">
-                        <div className="text-sm text-slate-400 mb-1">Entry ({mergedRecommendation.entry.type})</div>
-                        <div className="text-2xl font-mono text-white">${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)}</div>
+                      <div className="p-4 rounded-xl bg-surface-2">
+                        <div className="text-sm text-text-muted mb-1">Entry ({mergedRecommendation.entry.type})</div>
+                        <div className="text-2xl font-mono text-text-primary">${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)}</div>
                         {mergedRecommendation.entry.conditions?.length > 0 && (
-                          <div className="text-sm text-slate-400 mt-2">
+                          <div className="text-sm text-text-muted mt-2">
                             {mergedRecommendation.entry.conditions[0]}
                           </div>
                         )}
                       </div>
-                      <div className="p-4 rounded-xl bg-red-900/20 border border-red-500/20">
-                        <div className="text-sm text-red-400 mb-1">Stop Loss</div>
-                        <div className="text-2xl font-mono text-red-400">${(mergedRecommendation.stopLoss.price || report.currentPrice * 0.93).toFixed(2)}</div>
-                        <div className="text-sm text-slate-400 mt-2">
+                      <div className="p-4 rounded-xl bg-loss/5 border border-loss/20">
+                        <div className="text-sm text-loss mb-1">Stop Loss</div>
+                        <div className="text-2xl font-mono text-loss">${(mergedRecommendation.stopLoss.price || report.currentPrice * 0.93).toFixed(2)}</div>
+                        <div className="text-sm text-text-muted mt-2">
                           Risk: {mergedRecommendation.stopLoss.riskPercent?.toFixed(1) || '—'}% • {mergedRecommendation.stopLoss.reason || 'No trade - reference level only'}
                         </div>
                       </div>
@@ -1424,7 +1413,7 @@ export default function TechnicalAnalysisClient() {
                       const hasValidTargets = Object.values(mergedRecommendation.targets).some(t => t?.price > 0);
                       if (!hasValidTargets) {
                         return (
-                          <div className="p-4 rounded-xl bg-slate-800/50 text-slate-400 text-sm">
+                          <div className="p-4 rounded-xl bg-surface-2 text-text-muted text-sm">
                             No price targets provided — WAIT recommendation. Reference: Entry ${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)}, Invalidation: {mergedRecommendation.invalidation || 'See conditions above'}
                           </div>
                         );
@@ -1432,14 +1421,14 @@ export default function TechnicalAnalysisClient() {
                       return (
                     <div>
                       <h4 className={`text-base font-medium mb-3 ${
-                        mergedRecommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
+                        mergedRecommendation.direction === 'long' ? 'text-profit' : 'text-loss'
                       }`}>
-                        {mergedRecommendation.direction === 'long' ? '📈 Long Targets' : '📉 Short Targets'}
+                        {mergedRecommendation.direction === 'long' ? 'Long Targets' : 'Short Targets'}
                       </h4>
                       <div className="overflow-x-auto">
                       <table className="w-full min-w-[600px]">
                         <thead>
-                          <tr className="text-sm text-slate-500 border-b border-white/10">
+                          <tr className="text-sm text-text-muted border-b border-border">
                             <th className="text-left py-2 font-medium">Target</th>
                             <th className="text-right py-2 font-medium">Price</th>
                             <th className="text-right py-2 font-medium">From Entry</th>
@@ -1448,7 +1437,7 @@ export default function TechnicalAnalysisClient() {
                             <th className="text-right py-2 font-medium">Est. Prob</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
+                        <tbody className="divide-y divide-border">
                           {Object.entries(mergedRecommendation.targets)
                             .filter(([, t]) => t?.price > 0)
                             .map(([key, target]) => {
@@ -1463,39 +1452,39 @@ export default function TechnicalAnalysisClient() {
                             
                             return (
                             <tr key={key} className="text-base">
-                              <td className="py-3 text-slate-300 font-medium">{key.toUpperCase()}</td>
+                              <td className="py-3 text-text-secondary font-medium">{key.toUpperCase()}</td>
                               <td className={`py-3 text-right font-mono ${
-                                mergedRecommendation.direction === 'long' ? 'text-emerald-400' : 'text-red-400'
+                                mergedRecommendation.direction === 'long' ? 'text-profit' : 'text-loss'
                               }`}>${target.price.toFixed(2)}</td>
-                              <td className="py-3 text-right text-slate-300">
-                                <span className={moveFromEntry >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                              <td className="py-3 text-right text-text-secondary">
+                                <span className={moveFromEntry >= 0 ? 'text-profit' : 'text-loss'}>
                                   {moveFromEntry >= 0 ? '+' : ''}{moveFromEntry.toFixed(2)}%
                                 </span>
                               </td>
-                              <td className="py-3 text-right text-slate-300">
-                                <span className={moveFromCurrent >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                              <td className="py-3 text-right text-text-secondary">
+                                <span className={moveFromCurrent >= 0 ? 'text-profit' : 'text-loss'}>
                                   {moveFromCurrent >= 0 ? '+' : ''}{moveFromCurrent.toFixed(2)}%
                                 </span>
                               </td>
-                              <td className="py-3 text-right text-white font-semibold">{(target.rr || 0) > 0 ? `${target.rr}:1` : '—'}</td>
-                              <td className="py-3 text-right text-slate-400">{(target.probability || 0) > 0 ? `~${target.probability}%` : '—'}</td>
+                              <td className="py-3 text-right text-text-primary font-semibold">{(target.rr || 0) > 0 ? `${target.rr}:1` : '—'}</td>
+                              <td className="py-3 text-right text-text-muted">{(target.probability || 0) > 0 ? `~${target.probability}%` : '—'}</td>
                             </tr>
                             );
                           })}
                         </tbody>
                       </table>
                       </div>
-                      <div className="mt-3 text-xs text-slate-500 flex flex-wrap items-center gap-4">
-                        <span>• <span className="text-slate-400">From Entry:</span> % move from entry price (${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)})</span>
-                        <span>• <span className="text-slate-400">From Current:</span> % move from current price (${report.currentPrice.toFixed(2)})</span>
+                      <div className="mt-3 text-xs text-text-muted flex flex-wrap items-center gap-4">
+                        <span>• <span className="text-text-secondary">From Entry:</span> % move from entry price (${(mergedRecommendation.entry.price || report.currentPrice).toFixed(2)})</span>
+                        <span>• <span className="text-text-secondary">From Current:</span> % move from current price (${report.currentPrice.toFixed(2)})</span>
                       </div>
                     </div>
                       );
                     })()}
                     
                     {mergedRecommendation.invalidation && (
-                      <div className="mt-4 p-3 rounded-lg bg-slate-800/50 text-sm text-slate-400">
-                        <span className="font-medium text-slate-300">Invalidation:</span> {mergedRecommendation.invalidation}
+                      <div className="mt-4 p-3 rounded-lg bg-surface-2 text-sm text-text-muted">
+                        <span className="font-medium text-text-secondary">Invalidation:</span> {mergedRecommendation.invalidation}
                       </div>
                     )}
                   </>
@@ -1504,57 +1493,57 @@ export default function TechnicalAnalysisClient() {
 
               {/* AI Summary */}
               {report.aiSummary && (
-                <div className="bg-gradient-to-r from-violet-900/30 to-indigo-900/20 backdrop-blur-lg rounded-2xl p-6 border border-violet-500/30">
-                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                    <span className="text-xl">📋</span> AI Technical Summary
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h3 className="text-lg font-semibold text-text-primary mb-4">
+                    AI Technical Summary
                   </h3>
                   
-                  <div className="text-base font-medium text-indigo-300 mb-4 leading-relaxed">
+                  <div className="text-base font-medium text-accent mb-4 leading-relaxed">
                     {report.aiSummary.headline}
                   </div>
                   
                   {report.aiSummary.technicalOutlook && (
-                    <p className="text-sm text-slate-300 leading-relaxed mb-6">
+                    <p className="text-sm text-text-secondary leading-relaxed mb-6">
                       {report.aiSummary.technicalOutlook}
                     </p>
                   )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
-                      <h4 className="text-base font-medium text-emerald-400 mb-3">Key Insights</h4>
+                      <h4 className="text-base font-medium text-profit mb-3">Key Insights</h4>
                       {report.aiSummary.keyInsights?.length > 0 ? (
                         <ul className="space-y-2">
                           {report.aiSummary.keyInsights.map((insight, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                              <span className="text-emerald-400 mt-0.5 shrink-0">✓</span>
+                            <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                              <span className="text-profit mt-0.5 shrink-0">✓</span>
                               <span>{insight}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-sm text-slate-500 italic">See summary above</p>
+                        <p className="text-sm text-text-muted italic">See summary above</p>
                       )}
                     </div>
                     
                     <div>
-                      <h4 className="text-base font-medium text-red-400 mb-3">Risk Factors</h4>
+                      <h4 className="text-base font-medium text-loss mb-3">Risk Factors</h4>
                       {report.aiSummary.riskFactors?.length > 0 ? (
                         <ul className="space-y-2">
                           {report.aiSummary.riskFactors.map((risk, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                              <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
+                            <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                              <span className="text-loss mt-0.5 shrink-0">!</span>
                               <span>{risk}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-sm text-slate-500 italic">See summary above</p>
+                        <p className="text-sm text-text-muted italic">See summary above</p>
                       )}
                     </div>
                     
                     <div>
-                      <h4 className="text-base font-medium text-indigo-400 mb-3">Trading Plan</h4>
-                      <p className="text-sm text-slate-300 leading-relaxed">
+                      <h4 className="text-base font-medium text-accent mb-3">Trading Plan</h4>
+                      <p className="text-sm text-text-secondary leading-relaxed">
                         {report.aiSummary.tradingPlan || 'See recommendation section.'}
                       </p>
                     </div>
@@ -1566,7 +1555,7 @@ export default function TechnicalAnalysisClient() {
           })()}
 
           {/* Footer */}
-          <div className="text-center text-slate-500 text-sm py-4">
+          <div className="text-center text-text-muted text-sm py-4">
             Analysis generated {new Date(report.timestamp).toLocaleString()} • 
             {report.marketData.barsAnalyzed} bars analyzed • 
             Data as of {new Date(report.marketData.lastBarDate).toLocaleDateString()}

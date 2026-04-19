@@ -72,21 +72,21 @@ export default function IndicatorExplanationModal({
     <>
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] transition-opacity"
+        className="fixed inset-0 bg-black/50 z-[100] transition-opacity"
         onClick={onClose}
       />
       
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 z-[101] w-full sm:max-w-2xl bg-gradient-to-br from-slate-900 to-slate-800 shadow-2xl flex flex-col animate-slide-in sm:border-l border-white/10">
+      <div className="fixed inset-y-0 right-0 z-[101] w-full sm:max-w-2xl bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border">
         {/* Header */}
-        <div className="bg-gradient-to-r from-teal-600/20 to-blue-600/20 p-6 border-b border-white/10 flex items-center justify-between shrink-0">
+        <div className="bg-surface-2 border-b border-border p-6 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-1">📊 Indicator Guide</h2>
-            <p className="text-blue-200 text-sm">Plain English explanations for trading indicators</p>
+            <h2 className="text-2xl font-bold text-text-primary mb-1">Indicator Guide</h2>
+            <p className="text-text-secondary text-sm">Plain English explanations for trading indicators</p>
           </div>
           <button
             onClick={onClose}
-            className="text-white/60 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+            className="text-text-muted hover:text-text-primary transition-colors p-2 hover:bg-surface-3 rounded-lg"
             title="Close"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,15 +96,15 @@ export default function IndicatorExplanationModal({
         </div>
 
         {/* Tabs - Scrollable */}
-        <div className="flex gap-1 px-4 pt-3 pb-2 border-b border-white/10 overflow-x-auto shrink-0 bg-slate-900/50">
+        <div className="flex gap-1 px-4 pt-3 pb-2 border-b border-border overflow-x-auto shrink-0 bg-surface-1">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as IndicatorSection)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-teal-600/40 text-white border border-teal-500/50'
-                  : 'text-blue-300 hover:text-white hover:bg-white/10'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
               }`}
             >
               {tab.label}
@@ -133,10 +133,10 @@ export default function IndicatorExplanationModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-white/10 bg-slate-900/50 shrink-0">
+        <div className="p-4 border-t border-border bg-surface-1 shrink-0">
           <button
             onClick={onClose}
-            className="w-full px-4 py-3 bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-700 hover:to-blue-700 text-white font-medium rounded-lg transition-all shadow-lg"
+            className="w-full px-4 py-3 bg-accent hover:bg-accent-hover text-white font-medium rounded-lg transition-all"
           >
             Got it!
           </button>
@@ -148,33 +148,33 @@ export default function IndicatorExplanationModal({
 
 // Helper components for formatting
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-xl font-bold text-white mb-4">{children}</h3>;
+  return <h3 className="text-xl font-bold text-text-primary mb-4">{children}</h3>;
 }
 
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-6">
-      <h4 className="text-sm font-semibold text-teal-300 uppercase tracking-wide mb-2">{title}</h4>
-      <div className="text-slate-300 text-sm space-y-2">{children}</div>
+      <h4 className="text-sm font-semibold text-accent uppercase tracking-wide mb-2">{title}</h4>
+      <div className="text-text-secondary text-sm space-y-2">{children}</div>
     </div>
   );
 }
 
 function ValueRange({ ranges }: { ranges: { range: string; meaning: string; color: string }[] }) {
   return (
-    <div className="bg-slate-800/50 rounded-lg p-4 border border-white/10">
+    <div className="bg-surface-2 rounded-lg p-4 border border-border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-slate-400">
+          <tr className="text-text-muted">
             <th className="text-left pb-2">Value</th>
             <th className="text-left pb-2">Meaning</th>
           </tr>
         </thead>
         <tbody>
           {ranges.map((r, i) => (
-            <tr key={i} className="border-t border-white/5">
+            <tr key={i} className="border-t border-border">
               <td className={`py-2 font-mono ${r.color}`}>{r.range}</td>
-              <td className="py-2 text-slate-300">{r.meaning}</td>
+              <td className="py-2 text-text-secondary">{r.meaning}</td>
             </tr>
           ))}
         </tbody>
@@ -185,24 +185,24 @@ function ValueRange({ ranges }: { ranges: { range: string; meaning: string; colo
 
 function Analogy({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-blue-500/10 border-l-4 border-blue-500 pl-4 py-3 rounded-r-lg mb-4">
-      <p className="text-blue-200 text-sm italic">💡 {children}</p>
+    <div className="bg-surface-2 border-l-4 border-accent pl-4 py-3 rounded-r-lg mb-4">
+      <p className="text-text-secondary text-sm italic">{children}</p>
     </div>
   );
 }
 
 function Warning({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-amber-500/10 border-l-4 border-amber-500 pl-4 py-3 rounded-r-lg mb-4">
-      <p className="text-amber-200 text-sm">⚠️ {children}</p>
+    <div className="bg-loss/10 border-l-4 border-loss pl-4 py-3 rounded-r-lg mb-4">
+      <p className="text-text-secondary text-sm">{children}</p>
     </div>
   );
 }
 
 function TradingTip({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-emerald-500/10 border-l-4 border-emerald-500 pl-4 py-3 rounded-r-lg mb-4">
-      <p className="text-emerald-200 text-sm">✓ {children}</p>
+    <div className="bg-profit/10 border-l-4 border-profit pl-4 py-3 rounded-r-lg mb-4">
+      <p className="text-text-secondary text-sm">{children}</p>
     </div>
   );
 }
@@ -226,11 +226,11 @@ function RSIExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 70', meaning: 'Overbought - price moved up fast, may need rest', color: 'text-red-400' },
-          { range: '55-70', meaning: 'Bullish momentum - buyers in control', color: 'text-emerald-400' },
-          { range: '45-55', meaning: 'Neutral - no strong momentum either way', color: 'text-slate-400' },
-          { range: '30-45', meaning: 'Bearish momentum - sellers in control', color: 'text-orange-400' },
-          { range: '< 30', meaning: 'Oversold - price dropped fast, may bounce', color: 'text-red-400' },
+          { range: '> 70', meaning: 'Overbought - price moved up fast, may need rest', color: 'text-loss' },
+          { range: '55-70', meaning: 'Bullish momentum - buyers in control', color: 'text-profit' },
+          { range: '45-55', meaning: 'Neutral - no strong momentum either way', color: 'text-text-muted' },
+          { range: '30-45', meaning: 'Bearish momentum - sellers in control', color: 'text-loss' },
+          { range: '< 30', meaning: 'Oversold - price dropped fast, may bounce', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -262,10 +262,10 @@ function StochasticExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 80', meaning: 'Overbought - price near top of recent range', color: 'text-red-400' },
-          { range: '50-80', meaning: 'Bullish zone - trending higher', color: 'text-emerald-400' },
-          { range: '20-50', meaning: 'Bearish zone - trending lower', color: 'text-orange-400' },
-          { range: '< 20', meaning: 'Oversold - price near bottom of recent range', color: 'text-red-400' },
+          { range: '> 80', meaning: 'Overbought - price near top of recent range', color: 'text-loss' },
+          { range: '50-80', meaning: 'Bullish zone - trending higher', color: 'text-profit' },
+          { range: '20-50', meaning: 'Bearish zone - trending lower', color: 'text-loss' },
+          { range: '< 20', meaning: 'Oversold - price near bottom of recent range', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -297,17 +297,17 @@ function MACDExplanation() {
 
       <SubSection title="How to read it">
         <div className="space-y-3">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-emerald-400">MACD Line &gt; 0 + Histogram &gt; 0</p>
-            <p className="text-slate-400 text-xs mt-1">Bullish trend + accelerating momentum = Strong buy zone</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-profit">MACD Line &gt; 0 + Histogram &gt; 0</p>
+            <p className="text-text-muted text-xs mt-1">Bullish trend + accelerating momentum = Strong buy zone</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-amber-400">MACD Line &gt; 0 + Histogram &lt; 0</p>
-            <p className="text-slate-400 text-xs mt-1">Still bullish trend, but momentum cooling = Pullback/consolidation</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-text-secondary">MACD Line &gt; 0 + Histogram &lt; 0</p>
+            <p className="text-text-muted text-xs mt-1">Still bullish trend, but momentum cooling = Pullback/consolidation</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-red-400">MACD Line &lt; 0 + Histogram &lt; 0</p>
-            <p className="text-slate-400 text-xs mt-1">Bearish trend + accelerating down = Avoid longs</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-loss">MACD Line &lt; 0 + Histogram &lt; 0</p>
+            <p className="text-text-muted text-xs mt-1">Bearish trend + accelerating down = Avoid longs</p>
           </div>
         </div>
       </SubSection>
@@ -338,10 +338,10 @@ function WilliamsRExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '-20 to 0', meaning: 'Overbought - price near recent highs', color: 'text-red-400' },
-          { range: '-50 to -20', meaning: 'Upper neutral - mild strength', color: 'text-emerald-400' },
-          { range: '-80 to -50', meaning: 'Lower neutral - mild weakness', color: 'text-orange-400' },
-          { range: '-100 to -80', meaning: 'Oversold - price near recent lows', color: 'text-red-400' },
+          { range: '-20 to 0', meaning: 'Overbought - price near recent highs', color: 'text-loss' },
+          { range: '-50 to -20', meaning: 'Upper neutral - mild strength', color: 'text-profit' },
+          { range: '-80 to -50', meaning: 'Lower neutral - mild weakness', color: 'text-loss' },
+          { range: '-100 to -80', meaning: 'Oversold - price near recent lows', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -367,10 +367,10 @@ function CCIExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> +100', meaning: 'Strong bullish momentum - possibly extended', color: 'text-emerald-400' },
-          { range: '0 to +100', meaning: 'Mild bullish - normal uptrend territory', color: 'text-emerald-300' },
-          { range: '-100 to 0', meaning: 'Mild bearish - pullback or early downtrend', color: 'text-orange-400' },
-          { range: '< -100', meaning: 'Strong bearish momentum - possibly oversold', color: 'text-red-400' },
+          { range: '> +100', meaning: 'Strong bullish momentum - possibly extended', color: 'text-profit' },
+          { range: '0 to +100', meaning: 'Mild bullish - normal uptrend territory', color: 'text-profit' },
+          { range: '-100 to 0', meaning: 'Mild bearish - pullback or early downtrend', color: 'text-loss' },
+          { range: '< -100', meaning: 'Strong bearish momentum - possibly oversold', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -400,10 +400,10 @@ function MFIExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 80', meaning: 'Heavy buying pressure - possibly exhausted', color: 'text-red-400' },
-          { range: '50-80', meaning: 'Money flowing IN - accumulation', color: 'text-emerald-400' },
-          { range: '20-50', meaning: 'Money flowing OUT - distribution', color: 'text-orange-400' },
-          { range: '< 20', meaning: 'Heavy selling pressure - possibly capitulation', color: 'text-red-400' },
+          { range: '> 80', meaning: 'Heavy buying pressure - possibly exhausted', color: 'text-loss' },
+          { range: '50-80', meaning: 'Money flowing IN - accumulation', color: 'text-profit' },
+          { range: '20-50', meaning: 'Money flowing OUT - distribution', color: 'text-loss' },
+          { range: '< 20', meaning: 'Heavy selling pressure - possibly capitulation', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -433,10 +433,10 @@ function ADXExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 40', meaning: 'STRONG trend - follow it, don\'t fade it', color: 'text-emerald-400' },
-          { range: '25-40', meaning: 'Moderate trend - tradeable, use pullbacks', color: 'text-blue-400' },
-          { range: '20-25', meaning: 'Weak/emerging trend - be cautious', color: 'text-amber-400' },
-          { range: '< 20', meaning: 'No trend (range) - use mean reversion', color: 'text-slate-400' },
+          { range: '> 40', meaning: 'STRONG trend - follow it, don\'t fade it', color: 'text-profit' },
+          { range: '25-40', meaning: 'Moderate trend - tradeable, use pullbacks', color: 'text-text-secondary' },
+          { range: '20-25', meaning: 'Weak/emerging trend - be cautious', color: 'text-text-muted' },
+          { range: '< 20', meaning: 'No trend (range) - use mean reversion', color: 'text-text-muted' },
         ]} />
       </SubSection>
 
@@ -468,17 +468,17 @@ function DIExplanation() {
 
       <SubSection title="How to interpret">
         <div className="space-y-3">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-emerald-400">+DI &gt; -DI (especially by 10+ points)</p>
-            <p className="text-slate-400 text-xs mt-1">Buyers in control = bullish directional bias</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-profit">+DI &gt; -DI (especially by 10+ points)</p>
+            <p className="text-text-muted text-xs mt-1">Buyers in control = bullish directional bias</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-red-400">-DI &gt; +DI (especially by 10+ points)</p>
-            <p className="text-slate-400 text-xs mt-1">Sellers in control = bearish directional bias</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-loss">-DI &gt; +DI (especially by 10+ points)</p>
+            <p className="text-text-muted text-xs mt-1">Sellers in control = bearish directional bias</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-amber-400">+DI ≈ -DI (within 5 points)</p>
-            <p className="text-slate-400 text-xs mt-1">Neither side dominant = ranging or transitional</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-text-secondary">+DI ≈ -DI (within 5 points)</p>
+            <p className="text-text-muted text-xs mt-1">Neither side dominant = ranging or transitional</p>
           </div>
         </div>
       </SubSection>
@@ -506,17 +506,17 @@ function EMAExplanation() {
 
       <SubSection title="Bullish vs Bearish Alignment">
         <div className="space-y-3">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-emerald-400">Bullish Stacking: 9 &gt; 20 &gt; 50 &gt; 200</p>
-            <p className="text-slate-400 text-xs mt-1">Price above all EMAs, short-term leading = strong uptrend</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-profit">Bullish Stacking: 9 &gt; 20 &gt; 50 &gt; 200</p>
+            <p className="text-text-muted text-xs mt-1">Price above all EMAs, short-term leading = strong uptrend</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-red-400">Bearish Stacking: 9 &lt; 20 &lt; 50 &lt; 200</p>
-            <p className="text-slate-400 text-xs mt-1">Price below all EMAs, short-term lagging = strong downtrend</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-loss">Bearish Stacking: 9 &lt; 20 &lt; 50 &lt; 200</p>
+            <p className="text-text-muted text-xs mt-1">Price below all EMAs, short-term lagging = strong downtrend</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-amber-400">Mixed/Compressed</p>
-            <p className="text-slate-400 text-xs mt-1">EMAs tangled together = ranging or transitional</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-text-secondary">Mixed/Compressed</p>
+            <p className="text-text-muted text-xs mt-1">EMAs tangled together = ranging or transitional</p>
           </div>
         </div>
       </SubSection>
@@ -547,10 +547,10 @@ function VolumeZExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 2.0', meaning: 'Extremely high volume - major event or breakout', color: 'text-emerald-400' },
-          { range: '1.0 to 2.0', meaning: 'Above average - conviction behind move', color: 'text-blue-400' },
-          { range: '-0.5 to 1.0', meaning: 'Normal volume - typical activity', color: 'text-slate-400' },
-          { range: '< -0.5', meaning: 'Below average - low conviction/summer doldrums', color: 'text-orange-400' },
+          { range: '> 2.0', meaning: 'Extremely high volume - major event or breakout', color: 'text-profit' },
+          { range: '1.0 to 2.0', meaning: 'Above average - conviction behind move', color: 'text-text-secondary' },
+          { range: '-0.5 to 1.0', meaning: 'Normal volume - typical activity', color: 'text-text-muted' },
+          { range: '< -0.5', meaning: 'Below average - low conviction/summer doldrums', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -580,17 +580,17 @@ function OBVExplanation() {
 
       <SubSection title="How to interpret">
         <div className="space-y-3">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-emerald-400">OBV Rising + Price Rising</p>
-            <p className="text-slate-400 text-xs mt-1">Confirmed uptrend - volume supports price</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-profit">OBV Rising + Price Rising</p>
+            <p className="text-text-muted text-xs mt-1">Confirmed uptrend - volume supports price</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-amber-400">OBV Rising + Price Flat</p>
-            <p className="text-slate-400 text-xs mt-1">Accumulation - smart money buying, breakout coming?</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-text-secondary">OBV Rising + Price Flat</p>
+            <p className="text-text-muted text-xs mt-1">Accumulation - smart money buying, breakout coming?</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-red-400">OBV Falling + Price Rising</p>
-            <p className="text-slate-400 text-xs mt-1">Bearish divergence - rally on weak volume, caution</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-loss">OBV Falling + Price Rising</p>
+            <p className="text-text-muted text-xs mt-1">Bearish divergence - rally on weak volume, caution</p>
           </div>
         </div>
       </SubSection>
@@ -617,11 +617,11 @@ function CMFExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 0.25', meaning: 'Strong accumulation - heavy buying', color: 'text-emerald-400' },
-          { range: '0.05 to 0.25', meaning: 'Mild accumulation - buyers slightly ahead', color: 'text-emerald-300' },
-          { range: '-0.05 to 0.05', meaning: 'Neutral - balanced flow', color: 'text-slate-400' },
-          { range: '-0.25 to -0.05', meaning: 'Mild distribution - sellers slightly ahead', color: 'text-orange-400' },
-          { range: '< -0.25', meaning: 'Strong distribution - heavy selling', color: 'text-red-400' },
+          { range: '> 0.25', meaning: 'Strong accumulation - heavy buying', color: 'text-profit' },
+          { range: '0.05 to 0.25', meaning: 'Mild accumulation - buyers slightly ahead', color: 'text-profit' },
+          { range: '-0.05 to 0.05', meaning: 'Neutral - balanced flow', color: 'text-text-muted' },
+          { range: '-0.25 to -0.05', meaning: 'Mild distribution - sellers slightly ahead', color: 'text-loss' },
+          { range: '< -0.25', meaning: 'Strong distribution - heavy selling', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -656,10 +656,10 @@ function ATRExplanation() {
 
       <SubSection title="ATR% Ranges">
         <ValueRange ranges={[
-          { range: '> 8%', meaning: 'Extremely volatile - wild swings, widen stops', color: 'text-red-400' },
-          { range: '5-8%', meaning: 'High volatility - active stock, wider stops needed', color: 'text-amber-400' },
-          { range: '2-5%', meaning: 'Normal volatility - typical swing trading range', color: 'text-emerald-400' },
-          { range: '< 2%', meaning: 'Low volatility - slow mover, tight stops OK', color: 'text-slate-400' },
+          { range: '> 8%', meaning: 'Extremely volatile - wild swings, widen stops', color: 'text-loss' },
+          { range: '5-8%', meaning: 'High volatility - active stock, wider stops needed', color: 'text-text-secondary' },
+          { range: '2-5%', meaning: 'Normal volatility - typical swing trading range', color: 'text-profit' },
+          { range: '< 2%', meaning: 'Low volatility - slow mover, tight stops OK', color: 'text-text-muted' },
         ]} />
       </SubSection>
 
@@ -686,11 +686,11 @@ function BollingerExplanation() {
 
       <SubSection title="%B Ranges">
         <ValueRange ranges={[
-          { range: '> 100%', meaning: 'Above upper band - very strong, possibly extended', color: 'text-emerald-400' },
-          { range: '80-100%', meaning: 'Near upper band - bullish, watch for reversal', color: 'text-blue-400' },
-          { range: '20-80%', meaning: 'Middle zone - normal trading range', color: 'text-slate-400' },
-          { range: '0-20%', meaning: 'Near lower band - oversold, watch for bounce', color: 'text-orange-400' },
-          { range: '< 0%', meaning: 'Below lower band - extremely oversold', color: 'text-red-400' },
+          { range: '> 100%', meaning: 'Above upper band - very strong, possibly extended', color: 'text-profit' },
+          { range: '80-100%', meaning: 'Near upper band - bullish, watch for reversal', color: 'text-text-secondary' },
+          { range: '20-80%', meaning: 'Middle zone - normal trading range', color: 'text-text-muted' },
+          { range: '0-20%', meaning: 'Near lower band - oversold, watch for bounce', color: 'text-loss' },
+          { range: '< 0%', meaning: 'Below lower band - extremely oversold', color: 'text-loss' },
         ]} />
       </SubSection>
 
@@ -716,10 +716,10 @@ function VolatilityExplanation() {
 
       <SubSection title="Value Ranges">
         <ValueRange ranges={[
-          { range: '> 100%', meaning: 'Extreme - crisis level volatility', color: 'text-red-400' },
-          { range: '50-100%', meaning: 'High - growth/speculative stocks', color: 'text-amber-400' },
-          { range: '20-50%', meaning: 'Normal - typical for most stocks', color: 'text-slate-400' },
-          { range: '< 20%', meaning: 'Low - blue chips, utilities', color: 'text-blue-400' },
+          { range: '> 100%', meaning: 'Extreme - crisis level volatility', color: 'text-loss' },
+          { range: '50-100%', meaning: 'High - growth/speculative stocks', color: 'text-text-secondary' },
+          { range: '20-50%', meaning: 'Normal - typical for most stocks', color: 'text-text-muted' },
+          { range: '< 20%', meaning: 'Low - blue chips, utilities', color: 'text-text-secondary' },
         ]} />
       </SubSection>
 
@@ -747,17 +747,17 @@ function SqueezeExplanation() {
 
       <SubSection title="How to trade it">
         <div className="space-y-3">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-amber-400">Squeeze ON (Compression)</p>
-            <p className="text-slate-400 text-xs mt-1">Prepare for breakout. Identify direction using momentum indicator. Don&apos;t enter trend trades during squeeze.</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-text-secondary">Squeeze ON (Compression)</p>
+            <p className="text-text-muted text-xs mt-1">Prepare for breakout. Identify direction using momentum indicator. Don&apos;t enter trend trades during squeeze.</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-emerald-400">Squeeze OFF + Momentum Bullish</p>
-            <p className="text-slate-400 text-xs mt-1">Squeeze fired upward - look for long entries on pullbacks</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-profit">Squeeze OFF + Momentum Bullish</p>
+            <p className="text-text-muted text-xs mt-1">Squeeze fired upward - look for long entries on pullbacks</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-white/10">
-            <p className="font-semibold text-red-400">Squeeze OFF + Momentum Bearish</p>
-            <p className="text-slate-400 text-xs mt-1">Squeeze fired downward - avoid longs, look for shorts</p>
+          <div className="bg-surface-2 rounded-lg p-3 border border-border">
+            <p className="font-semibold text-loss">Squeeze OFF + Momentum Bearish</p>
+            <p className="text-text-muted text-xs mt-1">Squeeze fired downward - avoid longs, look for shorts</p>
           </div>
         </div>
       </SubSection>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Session } from 'next-auth';
-import Navbar from '../../components/navbar';
+
 
 interface SavedAnalysis {
   id: string;
@@ -68,22 +68,20 @@ export default function AnalysesClient({ session }: { session: Session }) {
   const selected = analyses.find(a => a.id === selectedId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-900 to-slate-900">
-      <Navbar session={session} />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Journal Analyses</h1>
-            <p className="text-blue-200 text-sm mt-1">Saved AI performance reports from your trading journal</p>
+            <h1 className="text-2xl font-bold text-text-primary">Journal Analyses</h1>
+            <p className="text-text-secondary text-sm mt-1">Saved AI performance reports from your trading journal</p>
           </div>
-          <a href="/journal" className="px-4 py-2 bg-slate-700/50 border border-white/10 text-blue-200 rounded-lg text-sm font-medium hover:bg-slate-600/50 transition-all">
+          <a href="/journal" className="px-4 py-2 bg-surface-2 border border-border text-text-secondary rounded-lg text-sm font-medium hover:bg-surface-3 transition-all">
             &larr; Back to Journal
           </a>
         </div>
 
         {/* Type filter */}
         <div className="flex items-center gap-2 mb-6">
-          <span className="text-blue-200 text-sm font-medium">Filter:</span>
+          <span className="text-text-secondary text-sm font-medium">Filter:</span>
           {([
             { value: 'all' as const, label: 'All' },
             { value: 'day' as const, label: 'Day Trading' },
@@ -95,8 +93,8 @@ export default function AnalysesClient({ session }: { session: Session }) {
               onClick={() => setFilterType(opt.value)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 filterType === opt.value
-                  ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg'
-                  : 'bg-slate-800/50 text-blue-200 hover:bg-slate-700/50 border border-white/10'
+                  ? 'bg-accent text-white'
+                  : 'bg-surface-2 text-text-secondary hover:bg-surface-3 border border-border'
               }`}
             >
               {opt.label}
@@ -105,11 +103,11 @@ export default function AnalysesClient({ session }: { session: Session }) {
         </div>
 
         {loading ? (
-          <div className="text-center text-blue-200 py-12">Loading analyses...</div>
+          <div className="text-center text-text-secondary py-12">Loading analyses...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-12 text-center">
-            <p className="text-blue-200 text-lg">No saved analyses yet</p>
-            <p className="text-blue-300 text-sm mt-2">Run an AI analysis from your Trading Journal and save the ones you find useful.</p>
+          <div className="bg-surface-1 border border-border rounded-xl p-12 text-center">
+            <p className="text-text-secondary text-lg">No saved analyses yet</p>
+            <p className="text-text-muted text-sm mt-2">Run an AI analysis from your Trading Journal and save the ones you find useful.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -121,10 +119,10 @@ export default function AnalysesClient({ session }: { session: Session }) {
                 return (
                   <div
                     key={a.id}
-                    className={`rounded-lg border transition-all cursor-pointer ${
+                    className={`rounded-xl border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-purple-900/30 border-purple-500/50 shadow-lg shadow-purple-500/10'
-                        : 'bg-slate-800/50 border-white/10 hover:bg-slate-700/50'
+                        ? 'bg-accent/10 border-accent/30'
+                        : 'bg-surface-1 border-border hover:bg-surface-2'
                     }`}
                   >
                     <button
@@ -134,25 +132,25 @@ export default function AnalysesClient({ session }: { session: Session }) {
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-white font-semibold text-sm">{a.periodLabel}</span>
+                            <span className="text-text-primary font-semibold text-sm">{a.periodLabel}</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                              typeLabel === 'Day' ? 'bg-amber-500/20 text-amber-400' :
-                              typeLabel === 'Swing' ? 'bg-blue-500/20 text-blue-400' :
-                              'bg-purple-500/20 text-purple-400'
+                              typeLabel === 'Day' ? 'bg-surface-3 text-text-secondary' :
+                              typeLabel === 'Swing' ? 'bg-accent/10 text-accent' :
+                              'bg-surface-4 text-text-secondary'
                             }`}>
                               {typeLabel}
                             </span>
                           </div>
                           <div className="flex items-center gap-3 mt-1.5 text-xs">
-                            <span className="text-blue-300">{a.tradesAnalyzed} trades</span>
+                            <span className="text-text-muted">{a.tradesAnalyzed} trades</span>
                             {a.winRate !== null && (
-                              <span className={a.winRate >= 50 ? 'text-green-400' : 'text-red-400'}>{a.winRate}% WR</span>
+                              <span className={a.winRate >= 50 ? 'text-profit' : 'text-loss'}>{a.winRate}% WR</span>
                             )}
                             {a.totalPL !== null && (
-                              <span className={a.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}>{formatCurrency(a.totalPL)}</span>
+                              <span className={a.totalPL >= 0 ? 'text-profit' : 'text-loss'}>{formatCurrency(a.totalPL)}</span>
                             )}
                           </div>
-                          <p className="text-blue-400 text-[11px] mt-1">
+                          <p className="text-text-muted text-[11px] mt-1">
                             {new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -161,7 +159,7 @@ export default function AnalysesClient({ session }: { session: Session }) {
                     <div className="px-4 pb-3 flex justify-end">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(a.id); }}
-                        className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+                        className="text-xs text-text-muted hover:text-loss transition-colors"
                       >
                         Delete
                       </button>
@@ -174,43 +172,42 @@ export default function AnalysesClient({ session }: { session: Session }) {
             {/* Detail */}
             <div className="lg:col-span-2">
               {selected ? (
-                <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg overflow-hidden">
-                  <div className="px-6 py-4 border-b border-white/10">
+                <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h2 className="text-lg font-bold text-white">{selected.periodLabel}</h2>
+                        <h2 className="text-lg font-bold text-text-primary">{selected.periodLabel}</h2>
                         <div className="flex items-center gap-3 mt-1 text-xs">
-                          <span className="text-blue-300">{selected.tradesAnalyzed} trades</span>
-                          {selected.intradayCount > 0 && <span className="text-amber-400">{selected.intradayCount} day</span>}
-                          {selected.swingCount > 0 && <span className="text-blue-400">{selected.swingCount} swing</span>}
+                          <span className="text-text-muted">{selected.tradesAnalyzed} trades</span>
+                          {selected.intradayCount > 0 && <span className="text-text-secondary">{selected.intradayCount} day</span>}
+                          {selected.swingCount > 0 && <span className="text-accent">{selected.swingCount} swing</span>}
                           {selected.winRate !== null && (
-                            <span className={selected.winRate >= 50 ? 'text-green-400' : 'text-red-400'}>{selected.winRate}% WR</span>
+                            <span className={selected.winRate >= 50 ? 'text-profit' : 'text-loss'}>{selected.winRate}% WR</span>
                           )}
                           {selected.totalPL !== null && (
-                            <span className={selected.totalPL >= 0 ? 'text-green-400' : 'text-red-400'}>{formatCurrency(selected.totalPL)}</span>
+                            <span className={selected.totalPL >= 0 ? 'text-profit' : 'text-loss'}>{formatCurrency(selected.totalPL)}</span>
                           )}
                         </div>
                       </div>
-                      <span className="text-blue-400 text-xs">
+                      <span className="text-text-muted text-xs">
                         {new Date(selected.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </div>
                   <div className="p-6">
-                    <div className="prose prose-invert prose-sm max-w-none text-blue-100 leading-relaxed whitespace-pre-wrap">
+                    <div className="prose prose-invert prose-sm max-w-none text-text-secondary leading-relaxed whitespace-pre-wrap">
                       {selected.analysis}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="bg-slate-800/30 border border-white/5 rounded-lg p-12 text-center">
-                  <p className="text-blue-300">Select an analysis from the list to view it</p>
+                <div className="bg-surface-1 border border-border rounded-xl p-12 text-center">
+                  <p className="text-text-muted">Select an analysis from the list to view it</p>
                 </div>
               )}
             </div>
           </div>
         )}
-      </main>
     </div>
   );
 }

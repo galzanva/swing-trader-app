@@ -182,32 +182,28 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     try {
       const element = reportContentRef.current;
       
-      // Capture the element as canvas with higher quality
       const canvas = await html2canvas(element, {
-        scale: 2, // Higher quality
+        scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#0f172a', // Dark background to match the UI
+        backgroundColor: '#0f172a',
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight,
       });
       
       const imgData = canvas.toDataURL('image/png');
       
-      // Calculate PDF dimensions
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
+      const imgWidth = 210;
+      const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       
       const pdf = new jsPDF('p', 'mm', 'a4');
       let heightLeft = imgHeight;
       let position = 0;
       
-      // Add first page
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
       
-      // Add additional pages if needed
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
@@ -215,7 +211,6 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         heightLeft -= pageHeight;
       }
       
-      // Download the PDF
       const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
     } catch (err: any) {
@@ -235,17 +230,15 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     try {
       const element = reportContentRef.current;
       
-      // Capture the element as canvas with higher quality
       const canvas = await html2canvas(element, {
-        scale: 2, // Higher quality
+        scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#0f172a', // Dark background
+        backgroundColor: '#0f172a',
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight,
       });
       
-      // Convert to blob and download
       canvas.toBlob((blob) => {
         if (blob) {
           const url = URL.createObjectURL(blob);
@@ -288,7 +281,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     return (
       <div className="flex items-center justify-center min-h-screen">
         <svg
-          className="animate-spin h-12 w-12 text-teal-500"
+          className="animate-spin h-12 w-12 text-accent"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -313,13 +306,13 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
 
   if (error && !report) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-6">
-          <h2 className="text-xl font-bold text-red-300 mb-2">Error Loading Report</h2>
-          <p className="text-red-200 mb-4">{error}</p>
+      <div>
+        <div className="bg-loss/10 border border-loss/30 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-loss mb-2">Error Loading Report</h2>
+          <p className="text-loss/80 mb-4">{error}</p>
           <Link
             href="/reports"
-            className="inline-block px-4 py-2 bg-red-600/30 hover:bg-red-600/40 text-red-200 rounded-lg transition-all"
+            className="inline-block px-4 py-2 bg-loss/10 hover:bg-loss/20 text-loss rounded-lg transition-all"
           >
             Back to Reports
           </Link>
@@ -333,12 +326,12 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
       {/* Header with Actions */}
       <div className="mb-6">
         <Link
           href="/reports"
-          className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-all mb-4"
+          className="inline-flex items-center gap-2 text-text-muted hover:text-text-secondary transition-all mb-4"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -348,22 +341,22 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
 
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-text-primary mb-2 flex items-center gap-3">
               {report.title}
               {report.isPinned && (
-                <span className="text-yellow-400 text-2xl" title="Pinned">
-                  📌
-                </span>
+                <svg className="w-5 h-5 text-accent" fill="currentColor" viewBox="0 0 20 20" aria-label="Pinned">
+                  <path d="M10 2a.75.75 0 01.59.29l2.5 3.2a.75.75 0 01-.59 1.21H11v4.5h1.5a.75.75 0 01.59 1.21l-2.5 3.2a.75.75 0 01-1.18 0l-2.5-3.2A.75.75 0 017.5 11.2H9v-4.5H7.5a.75.75 0 01-.59-1.21l2.5-3.2A.75.75 0 0110 2z" />
+                </svg>
               )}
             </h1>
             {report.description && (
-              <p className="text-blue-200">{report.description}</p>
+              <p className="text-text-secondary">{report.description}</p>
             )}
             <div className="flex flex-wrap gap-2 mt-3">
               {report.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full border border-blue-500/30"
+                  className="px-2 py-1 bg-surface-3 text-text-secondary text-xs rounded-full border border-border"
                 >
                   {tag}
                 </span>
@@ -375,10 +368,12 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleTogglePin}
-              className="px-4 py-2 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 rounded-lg transition-all border border-yellow-500/30 flex items-center gap-2"
+              className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-lg transition-all flex items-center gap-2"
               title={report.isPinned ? 'Unpin' : 'Pin'}
             >
-              <span className="text-xl">📌</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
               <span className="hidden sm:inline">{report.isPinned ? 'Unpin' : 'Pin'}</span>
             </button>
 
@@ -386,7 +381,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
               onClick={handleRerun}
               disabled={isRerunning || report.type === 'deep-analysis'}
               title={report.type === 'deep-analysis' ? 'Rerun is not available for legacy deep analysis reports' : undefined}
-              className="px-4 py-2 bg-teal-600/20 hover:bg-teal-600/30 disabled:bg-gray-600/20 text-teal-300 disabled:text-gray-400 rounded-lg transition-all border border-teal-500/30 disabled:border-gray-500/30 flex items-center gap-2 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-accent text-white hover:bg-accent-hover disabled:opacity-40 rounded-lg transition-all flex items-center gap-2 disabled:cursor-not-allowed"
             >
               {isRerunning ? (
                 <>
@@ -409,7 +404,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
             <button
               onClick={handleDuplicate}
               disabled={isDuplicating}
-              className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 disabled:bg-gray-600/20 text-blue-300 disabled:text-gray-400 rounded-lg transition-all border border-blue-500/30 disabled:border-gray-500/30 flex items-center gap-2 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 disabled:opacity-40 rounded-lg transition-all flex items-center gap-2 disabled:cursor-not-allowed"
             >
               {isDuplicating ? (
                 <>
@@ -432,7 +427,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
             {/* Export JSON Button */}
             <button
               onClick={handleExport}
-              className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg transition-all border border-purple-500/30 flex items-center gap-2"
+              className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-lg transition-all flex items-center gap-2"
               title="Export as JSON"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -446,7 +441,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
               <button
                 onClick={() => setShowDownloadMenu(!showDownloadMenu)}
                 disabled={isDownloading}
-                className="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 disabled:bg-gray-600/20 text-indigo-300 disabled:text-gray-400 rounded-lg transition-all border border-indigo-500/30 disabled:border-gray-500/30 flex items-center gap-2 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 disabled:opacity-40 rounded-lg transition-all flex items-center gap-2 disabled:cursor-not-allowed"
                 title="Download as PDF or Image"
               >
                 {isDownloading ? (
@@ -472,25 +467,29 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
               
               {/* Dropdown Menu */}
               {showDownloadMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-48 bg-surface-1 border border-border rounded-lg shadow-xl z-50 overflow-hidden">
                   <button
                     onClick={handleDownloadPDF}
-                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-3 transition-colors"
+                    className="w-full px-4 py-3 text-left text-text-primary hover:bg-surface-2 flex items-center gap-3 transition-colors"
                   >
-                    <span className="text-red-400">📄</span>
+                    <svg className="w-4 h-4 text-loss" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
                     <div>
                       <div className="font-medium">Download PDF</div>
-                      <div className="text-xs text-slate-400">Multi-page document</div>
+                      <div className="text-xs text-text-muted">Multi-page document</div>
                     </div>
                   </button>
                   <button
                     onClick={handleDownloadImage}
-                    className="w-full px-4 py-3 text-left text-white hover:bg-white/10 flex items-center gap-3 transition-colors border-t border-white/5"
+                    className="w-full px-4 py-3 text-left text-text-primary hover:bg-surface-2 flex items-center gap-3 transition-colors border-t border-border"
                   >
-                    <span className="text-blue-400">🖼️</span>
+                    <svg className="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                     <div>
                       <div className="font-medium">Download Image</div>
-                      <div className="text-xs text-slate-400">High-res PNG</div>
+                      <div className="text-xs text-text-muted">High-res PNG</div>
                     </div>
                   </button>
                 </div>
@@ -499,7 +498,7 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
 
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded-lg transition-all border border-red-500/30 flex items-center gap-2"
+              className="px-4 py-2 bg-loss/10 text-loss hover:bg-loss/20 rounded-lg transition-all flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -512,24 +511,24 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-red-500/30">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Report?</h3>
-            <p className="text-blue-200 mb-6">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-1 rounded-xl p-6 max-w-md w-full border border-border">
+            <h3 className="text-xl font-bold text-text-primary mb-2">Delete Report?</h3>
+            <p className="text-text-secondary mb-6">
               Are you sure you want to delete this report? This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-white/10 hover:bg-white/20 disabled:bg-white/5 text-white rounded-lg transition-all disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-lg transition-all disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white rounded-lg transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-loss/10 text-loss hover:bg-loss/20 rounded-lg transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isDeleting ? (
                   <>
@@ -551,39 +550,39 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
       {/* Report Content - Wrapped for PDF/Image export */}
       <div ref={reportContentRef}>
         {/* Metadata */}
-        <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 mb-6">
-          <h3 className="text-lg font-bold text-white mb-4">Report Details</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-          <div>
-            <div className="text-blue-300 mb-1">Created</div>
-            <div className="text-white font-medium">
-              {new Date(report.createdAt).toLocaleString()}
-            </div>
-          </div>
-          <div>
-            <div className="text-blue-300 mb-1">Last Updated</div>
-            <div className="text-white font-medium">
-              {new Date(report.updatedAt).toLocaleString()}
-            </div>
-          </div>
-          {report.lastViewedAt && (
+        <div className="bg-surface-1 rounded-xl p-6 border border-border mb-6">
+          <h3 className="text-lg font-bold text-text-primary mb-4">Report Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div>
-              <div className="text-blue-300 mb-1">Last Viewed</div>
-              <div className="text-white font-medium">
-                {new Date(report.lastViewedAt).toLocaleString()}
+              <div className="text-text-muted mb-1">Created</div>
+              <div className="text-text-primary font-medium">
+                {new Date(report.createdAt).toLocaleString()}
               </div>
             </div>
-          )}
-          {report.lastRerunAt && (
             <div>
-              <div className="text-blue-300 mb-1">Last Rerun</div>
-              <div className="text-white font-medium">
-                {new Date(report.lastRerunAt).toLocaleString()}
+              <div className="text-text-muted mb-1">Last Updated</div>
+              <div className="text-text-primary font-medium">
+                {new Date(report.updatedAt).toLocaleString()}
               </div>
             </div>
-          )}
+            {report.lastViewedAt && (
+              <div>
+                <div className="text-text-muted mb-1">Last Viewed</div>
+                <div className="text-text-primary font-medium">
+                  {new Date(report.lastViewedAt).toLocaleString()}
+                </div>
+              </div>
+            )}
+            {report.lastRerunAt && (
+              <div>
+                <div className="text-text-muted mb-1">Last Rerun</div>
+                <div className="text-text-primary font-medium">
+                  {new Date(report.lastRerunAt).toLocaleString()}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
         {/* Report Data - Render based on type */}
         {report.type === 'deep-analysis' ? (
@@ -591,15 +590,15 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         ) : report.type === 'technical-analysis' ? (
           <TechnicalAnalysisReportDisplay report={report.reportData} />
         ) : (
-          <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-            <h3 className="text-lg font-bold text-white mb-4">Report Data</h3>
-            <div className="bg-slate-900/50 rounded-lg p-4 overflow-auto max-h-[600px]">
-              <pre className="text-sm text-blue-200 whitespace-pre-wrap">
+          <div className="bg-surface-1 rounded-xl p-6 border border-border">
+            <h3 className="text-lg font-bold text-text-primary mb-4">Report Data</h3>
+            <div className="bg-surface-2 rounded-lg p-4 overflow-auto max-h-[600px]">
+              <pre className="text-sm text-text-secondary whitespace-pre-wrap">
                 {JSON.stringify(report.reportData, null, 2)}
               </pre>
             </div>
-            <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-              <p className="text-blue-200 text-sm">
+            <div className="mt-4 p-4 bg-accent/10 border border-accent/30 rounded-lg">
+              <p className="text-text-secondary text-sm">
                 <strong>Note:</strong> Full UI rendering for {report.type} reports coming soon.
               </p>
             </div>
@@ -617,4 +616,3 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     </div>
   );
 }
-

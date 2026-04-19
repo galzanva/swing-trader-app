@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import AppShell from '../components/app-shell';
 import TickerHistoryClient from './ticker-history-client';
 
 export default async function TickerHistoryPage() {
@@ -10,5 +11,9 @@ export default async function TickerHistoryPage() {
     redirect('/login');
   }
 
-  return <TickerHistoryClient session={session} />;
+  return (
+    <AppShell session={session}>
+      <TickerHistoryClient session={session} />
+    </AppShell>
+  );
 }

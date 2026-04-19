@@ -195,11 +195,11 @@ export default function TradeCalculatorClient() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">🧮 Trade Risk Calculator</h1>
-          <p className="text-blue-200">
+          <h1 className="text-4xl font-bold text-text-primary mb-2">Trade Risk Calculator</h1>
+          <p className="text-text-secondary">
             Calculate position sizes, risk/reward, and profit/loss with precision
           </p>
         </div>
@@ -208,9 +208,9 @@ export default function TradeCalculatorClient() {
           {/* Left Column - Inputs */}
           <div className="space-y-6">
             {/* Preset Settings */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                <span className="mr-2">⚙️</span> Account Presets
+            <div className="bg-surface-1 rounded-xl p-6 border border-border">
+              <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                Account Presets
                 <HelpIcon
                   onClick={() => {
                     setHelpSection('presets');
@@ -222,23 +222,23 @@ export default function TradeCalculatorClient() {
               </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Account Size
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                     <input
                       type="number"
                       value={preset.accountSize}
                       onChange={(e) => setPreset({ ...preset, accountSize: parseFloat(e.target.value) || 0 })}
-                      className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="100"
                       min="0"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Risk Per Trade (%)
                   </label>
                   <div className="relative">
@@ -246,16 +246,16 @@ export default function TradeCalculatorClient() {
                       type="number"
                       value={preset.riskPercent}
                       onChange={(e) => setPreset({ ...preset, riskPercent: parseFloat(e.target.value) || 0 })}
-                      className="w-full pr-10 pl-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pr-10 pl-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="0.1"
                       min="0"
                       max="100"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted">%</span>
                   </div>
                 </div>
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <p className="text-sm text-blue-200">
+                <div className="p-3 bg-accent/10 border border-accent/30 rounded-lg">
+                  <p className="text-sm text-text-secondary">
                     <span className="font-semibold">Risk Dollars:</span> {formatCurrency(riskDollars)}
                   </p>
                 </div>
@@ -263,9 +263,9 @@ export default function TradeCalculatorClient() {
             </div>
 
             {/* Mode Toggle */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                <span className="mr-2">🔄</span> Calculator Mode
+            <div className="bg-surface-1 rounded-xl p-6 border border-border">
+              <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                Calculator Mode
                 <HelpIcon
                   onClick={() => {
                     setHelpSection('modes');
@@ -280,8 +280,8 @@ export default function TradeCalculatorClient() {
                   onClick={() => setMode('risk-to-size')}
                   className={`py-3 px-4 rounded-lg font-medium transition-all ${
                     mode === 'risk-to-size'
-                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                      : 'bg-slate-700 text-blue-200 hover:bg-slate-600'
+                      ? 'bg-accent text-white'
+                      : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
                   }`}
                 >
                   Risk→Size
@@ -290,14 +290,14 @@ export default function TradeCalculatorClient() {
                   onClick={() => setMode('budget-to-stop')}
                   className={`py-3 px-4 rounded-lg font-medium transition-all ${
                     mode === 'budget-to-stop'
-                      ? 'bg-gradient-to-r from-teal-500 to-blue-500 text-white shadow-lg'
-                      : 'bg-slate-700 text-blue-200 hover:bg-slate-600'
+                      ? 'bg-accent text-white'
+                      : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
                   }`}
                 >
                   Budget→Stop
                 </button>
               </div>
-              <p className="text-xs text-blue-300 mt-3">
+              <p className="text-xs text-text-muted mt-3">
                 {mode === 'risk-to-size'
                   ? 'Enter stop price → get position size'
                   : 'Enter position budget → get stop price'}
@@ -305,22 +305,22 @@ export default function TradeCalculatorClient() {
             </div>
 
             {/* Trade Inputs */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                <span className="mr-2">📊</span> Trade Parameters
+            <div className="bg-surface-1 rounded-xl p-6 border border-border">
+              <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                Trade Parameters
               </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Entry Price *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                     <input
                       type="number"
                       value={entryPrice}
                       onChange={(e) => setEntryPrice(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="0.01"
                       min="0"
                     />
@@ -329,16 +329,16 @@ export default function TradeCalculatorClient() {
 
                 {mode === 'risk-to-size' ? (
                   <div>
-                    <label className="block text-sm font-medium text-blue-200 mb-2">
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
                       Stop Loss Price *
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                       <input
                         type="number"
                         value={stopPrice}
                         onChange={(e) => setStopPrice(e.target.value)}
-                        className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                         step="0.01"
                         min="0"
                       />
@@ -346,16 +346,16 @@ export default function TradeCalculatorClient() {
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-sm font-medium text-blue-200 mb-2">
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
                       Position Budget ($) *
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                       <input
                         type="number"
                         value={positionBudget}
                         onChange={(e) => setPositionBudget(e.target.value)}
-                        className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                         step="10"
                         min="0"
                       />
@@ -364,26 +364,26 @@ export default function TradeCalculatorClient() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     R Multiple Target (R:R Ratio)
                   </label>
                   <input
                     type="number"
                     value={rMultiple}
                     onChange={(e) => setRMultiple(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                     step="0.1"
                     min="0"
                   />
-                  <p className="text-xs text-blue-300 mt-1">Default 2.0 = 1:2 risk/reward</p>
+                  <p className="text-xs text-text-muted mt-1">Default 2.0 = 1:2 risk/reward</p>
                 </div>
               </div>
             </div>
 
             {/* Advanced Options */}
-            <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                <span className="mr-2">⚡</span> Advanced Options
+            <div className="bg-surface-1 rounded-xl p-6 border border-border">
+              <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                Advanced Options
                 <HelpIcon
                   onClick={() => {
                     setHelpSection('advanced');
@@ -395,7 +395,7 @@ export default function TradeCalculatorClient() {
               </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Tax Rate on Profits (%)
                   </label>
                   <div className="relative">
@@ -403,26 +403,26 @@ export default function TradeCalculatorClient() {
                       type="number"
                       value={taxRate}
                       onChange={(e) => setTaxRate(e.target.value)}
-                      className="w-full pr-10 pl-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pr-10 pl-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="0.1"
                       min="0"
                       max="100"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted">%</span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-blue-200 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Total Fees (Entry + Exit)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                     <input
                       type="number"
                       value={totalFees}
                       onChange={(e) => setTotalFees(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="0.01"
                       min="0"
                     />
@@ -430,7 +430,7 @@ export default function TradeCalculatorClient() {
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-blue-200 mb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-text-secondary mb-2">
                     Tick Size
                     <HelpIcon
                       onClick={() => {
@@ -441,17 +441,17 @@ export default function TradeCalculatorClient() {
                     />
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">$</span>
                     <input
                       type="number"
                       value={tickSize}
                       onChange={(e) => setTickSize(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-8 pr-4 py-2 bg-surface-2 text-text-primary rounded-lg border border-border placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                       step="0.01"
                       min="0.01"
                     />
                   </div>
-                  <p className="text-xs text-blue-300 mt-1">Stop/TP rounded to this increment</p>
+                  <p className="text-xs text-text-muted mt-1">Stop/TP rounded to this increment</p>
                 </div>
 
                 <div className="flex items-center">
@@ -460,9 +460,9 @@ export default function TradeCalculatorClient() {
                     id="roundShares"
                     checked={roundShares}
                     onChange={(e) => setRoundShares(e.target.checked)}
-                    className="w-4 h-4 text-blue-500 bg-slate-700 border-slate-600 rounded focus:ring-2 focus:ring-blue-500"
+                    className="w-4 h-4 text-accent bg-surface-2 border-border rounded focus:ring-1 focus:ring-accent"
                   />
-                  <label htmlFor="roundShares" className="ml-2 text-sm text-blue-200">
+                  <label htmlFor="roundShares" className="ml-2 text-sm text-text-secondary">
                     Round shares to whole units
                   </label>
                 </div>
@@ -474,13 +474,13 @@ export default function TradeCalculatorClient() {
           <div className="space-y-6">
             {/* Validation Errors */}
             {errors.length > 0 && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                <h3 className="text-red-300 font-semibold mb-2 flex items-center">
-                  <span className="mr-2">⚠️</span> Validation Errors
+              <div className="bg-loss/10 border border-loss/30 rounded-xl p-4">
+                <h3 className="text-loss font-semibold mb-2 flex items-center">
+                  Validation Errors
                 </h3>
                 <ul className="space-y-1">
                   {errors.map((error, idx) => (
-                    <li key={idx} className="text-sm text-red-200">
+                    <li key={idx} className="text-sm text-loss">
                       • {error}
                     </li>
                   ))}
@@ -492,56 +492,56 @@ export default function TradeCalculatorClient() {
             {errors.length === 0 && (
               <>
                 {/* Position Details */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                  <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                    <span className="mr-2">📈</span> Position Details
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                    Position Details
                   </h2>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center p-3 bg-blue-500/10 rounded-lg">
-                      <span className="text-blue-200 font-medium">Shares/Units:</span>
-                      <span className="text-white font-bold text-lg">{formatShares(shares)}</span>
+                    <div className="flex justify-between items-center p-3 bg-accent/10 rounded-lg">
+                      <span className="text-text-secondary font-medium">Shares/Units:</span>
+                      <span className="text-text-primary font-bold text-lg">{formatShares(shares)}</span>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-slate-700/50 rounded-lg">
-                      <span className="text-blue-200">Position Value:</span>
-                      <span className="text-white font-semibold">{formatCurrency(positionValue)}</span>
+                    <div className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
+                      <span className="text-text-secondary">Position Value:</span>
+                      <span className="text-text-primary font-semibold">{formatCurrency(positionValue)}</span>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-slate-700/50 rounded-lg">
-                      <span className="text-blue-200">Entry Price:</span>
-                      <span className="text-white font-semibold">{formatCurrency(entry)}</span>
+                    <div className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
+                      <span className="text-text-secondary">Entry Price:</span>
+                      <span className="text-text-primary font-semibold">{formatCurrency(entry)}</span>
                     </div>
                     {mode === 'risk-to-size' ? (
-                      <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg border border-red-500/30">
-                        <span className="text-red-200">Stop Loss:</span>
-                        <span className="text-red-300 font-semibold">{formatCurrency(stop)}</span>
+                      <div className="flex justify-between items-center p-3 bg-loss/10 rounded-lg border border-loss/30">
+                        <span className="text-loss">Stop Loss:</span>
+                        <span className="text-loss font-semibold">{formatCurrency(stop)}</span>
                       </div>
                     ) : (
-                      <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg border border-red-500/30">
-                        <span className="text-red-200">Computed Stop:</span>
-                        <span className="text-red-300 font-semibold">{formatCurrency(computedStop)}</span>
+                      <div className="flex justify-between items-center p-3 bg-loss/10 rounded-lg border border-loss/30">
+                        <span className="text-loss">Computed Stop:</span>
+                        <span className="text-loss font-semibold">{formatCurrency(computedStop)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center p-3 bg-green-500/10 rounded-lg border border-green-500/30">
-                      <span className="text-green-200">Take Profit ({rMult}R):</span>
-                      <span className="text-green-300 font-semibold">{formatCurrency(takeProfitPrice)}</span>
+                    <div className="flex justify-between items-center p-3 bg-profit/10 rounded-lg border border-profit/30">
+                      <span className="text-profit">Take Profit ({rMult}R):</span>
+                      <span className="text-profit font-semibold">{formatCurrency(takeProfitPrice)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Price Movements */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                  <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                    <span className="mr-2">📉</span> Price Movements
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                    Price Movements
                   </h2>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center p-3 bg-slate-700/50 rounded-lg">
-                      <span className="text-blue-200">% Move to Stop:</span>
-                      <span className={`font-semibold ${pctMoveToStop < 0 ? 'text-red-300' : 'text-green-300'}`}>
+                    <div className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
+                      <span className="text-text-secondary">% Move to Stop:</span>
+                      <span className={`font-semibold ${pctMoveToStop < 0 ? 'text-loss' : 'text-profit'}`}>
                         {formatPercent(pctMoveToStop)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-slate-700/50 rounded-lg">
-                      <span className="text-blue-200">% Move to Target:</span>
-                      <span className={`font-semibold ${pctMoveToTarget > 0 ? 'text-green-300' : 'text-red-300'}`}>
+                    <div className="flex justify-between items-center p-3 bg-surface-2 rounded-lg">
+                      <span className="text-text-secondary">% Move to Target:</span>
+                      <span className={`font-semibold ${pctMoveToTarget > 0 ? 'text-profit' : 'text-loss'}`}>
                         {formatPercent(pctMoveToTarget)}
                       </span>
                     </div>
@@ -549,69 +549,69 @@ export default function TradeCalculatorClient() {
                 </div>
 
                 {/* Profit & Loss */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                  <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                    <span className="mr-2">💰</span> Profit & Loss
+                <div className="bg-surface-1 rounded-xl p-6 border border-border">
+                  <h2 className="text-xl font-bold text-text-primary mb-4 flex items-center">
+                    Profit & Loss
                   </h2>
                   <div className="space-y-4">
                     {/* At Stop */}
                     <div>
-                      <h3 className="text-sm font-semibold text-red-200 mb-2">If Stopped Out:</h3>
+                      <h3 className="text-sm font-semibold text-loss mb-2">If Stopped Out:</h3>
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center p-2 bg-slate-700/50 rounded text-sm">
-                          <span className="text-blue-200">Gross P/L:</span>
-                          <span className={`font-semibold ${grossPLAtStop < 0 ? 'text-red-300' : 'text-green-300'}`}>
+                        <div className="flex justify-between items-center p-2 bg-surface-2 rounded text-sm">
+                          <span className="text-text-secondary">Gross P/L:</span>
+                          <span className={`font-semibold ${grossPLAtStop < 0 ? 'text-loss' : 'text-profit'}`}>
                             {formatCurrency(grossPLAtStop)}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center p-2 bg-slate-700/50 rounded text-sm">
-                          <span className="text-blue-200">Fees:</span>
-                          <span className="text-white">-{formatCurrency(fees)}</span>
+                        <div className="flex justify-between items-center p-2 bg-surface-2 rounded text-sm">
+                          <span className="text-text-secondary">Fees:</span>
+                          <span className="text-text-primary">-{formatCurrency(fees)}</span>
                         </div>
-                        <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg border border-red-500/30">
-                          <span className="text-red-200 font-semibold">Net P/L:</span>
-                          <span className="text-red-300 font-bold text-lg">{formatCurrency(netPLAtStop)}</span>
+                        <div className="flex justify-between items-center p-3 bg-loss/10 rounded-lg border border-loss/30">
+                          <span className="text-loss font-semibold">Net P/L:</span>
+                          <span className="text-loss font-bold text-lg">{formatCurrency(netPLAtStop)}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* At Target */}
                     <div>
-                      <h3 className="text-sm font-semibold text-green-200 mb-2">If Target Hit:</h3>
+                      <h3 className="text-sm font-semibold text-profit mb-2">If Target Hit:</h3>
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center p-2 bg-slate-700/50 rounded text-sm">
-                          <span className="text-blue-200">Gross P/L:</span>
-                          <span className={`font-semibold ${grossPLAtTarget < 0 ? 'text-red-300' : 'text-green-300'}`}>
+                        <div className="flex justify-between items-center p-2 bg-surface-2 rounded text-sm">
+                          <span className="text-text-secondary">Gross P/L:</span>
+                          <span className={`font-semibold ${grossPLAtTarget < 0 ? 'text-loss' : 'text-profit'}`}>
                             {formatCurrency(grossPLAtTarget)}
                           </span>
                         </div>
                         {taxOnProfit > 0 && (
-                          <div className="flex justify-between items-center p-2 bg-slate-700/50 rounded text-sm">
-                            <span className="text-blue-200">Tax ({tax}%):</span>
-                            <span className="text-white">-{formatCurrency(taxOnProfit)}</span>
+                          <div className="flex justify-between items-center p-2 bg-surface-2 rounded text-sm">
+                            <span className="text-text-secondary">Tax ({tax}%):</span>
+                            <span className="text-text-primary">-{formatCurrency(taxOnProfit)}</span>
                           </div>
                         )}
-                        <div className="flex justify-between items-center p-2 bg-slate-700/50 rounded text-sm">
-                          <span className="text-blue-200">Fees:</span>
-                          <span className="text-white">-{formatCurrency(fees)}</span>
+                        <div className="flex justify-between items-center p-2 bg-surface-2 rounded text-sm">
+                          <span className="text-text-secondary">Fees:</span>
+                          <span className="text-text-primary">-{formatCurrency(fees)}</span>
                         </div>
-                        <div className="flex justify-between items-center p-3 bg-green-500/10 rounded-lg border border-green-500/30">
-                          <span className="text-green-200 font-semibold">Net Profit:</span>
-                          <span className="text-green-300 font-bold text-lg">{formatCurrency(netPLAtTarget)}</span>
+                        <div className="flex justify-between items-center p-3 bg-profit/10 rounded-lg border border-profit/30">
+                          <span className="text-profit font-semibold">Net Profit:</span>
+                          <span className="text-profit font-bold text-lg">{formatCurrency(netPLAtTarget)}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Risk/Reward Summary */}
-                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                      <div className="text-sm text-blue-200 space-y-1">
+                    <div className="p-4 bg-surface-2 border border-border rounded-lg">
+                      <div className="text-sm text-text-secondary space-y-1">
                         <p>
                           <span className="font-semibold">Risk:</span> {formatCurrency(Math.abs(netPLAtStop))} ({formatPercent(Math.abs(pctMoveToStop))})
                         </p>
                         <p>
                           <span className="font-semibold">Reward:</span> {formatCurrency(netPLAtTarget)} ({formatPercent(pctMoveToTarget)})
                         </p>
-                        <p className="pt-2 border-t border-blue-500/30">
+                        <p className="pt-2 border-t border-border">
                           <span className="font-semibold">R:R Ratio:</span> 1:{rMult} (actual: 1:{(netPLAtTarget / Math.abs(netPLAtStop)).toFixed(2)})
                         </p>
                       </div>
@@ -620,11 +620,11 @@ export default function TradeCalculatorClient() {
                 </div>
 
                 {/* Quick Tips */}
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-                  <h3 className="text-blue-200 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">💡</span> Quick Tips
+                <div className="bg-surface-2 border border-border rounded-xl p-4">
+                  <h3 className="text-text-secondary font-semibold mb-2 flex items-center">
+                    Quick Tips
                   </h3>
-                  <ul className="text-sm text-blue-200 space-y-1">
+                  <ul className="text-sm text-text-secondary space-y-1">
                     <li>• Risk per trade: {formatCurrency(riskDollars)} ({preset.riskPercent}% of account)</li>
                     <li>• Presets are saved automatically across sessions</li>
                     <li>• Tax is only applied to profits, not losses</li>
@@ -646,4 +646,3 @@ export default function TradeCalculatorClient() {
     </>
   );
 }
-
