@@ -77,9 +77,10 @@ export async function GET(request: NextRequest) {
         createdAt: true,
         updatedAt: true,
       },
-      orderBy: {
-        entryDate: 'desc', // Most recent trades first
-      },
+      orderBy: [
+        { exitDate: { sort: 'desc', nulls: 'last' } },
+        { entryDate: 'desc' },
+      ],
     });
 
     console.log(`[Journal List] Found ${trades.length} trades`);

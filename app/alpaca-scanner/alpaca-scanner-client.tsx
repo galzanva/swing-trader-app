@@ -70,17 +70,6 @@ interface Criteria {
   minVolume: number;
 }
 
-const DEFAULT_CRITERIA: Criteria = {
-  minChangePercent: 10,
-  maxChangePercent: 999,
-  minRelativeVolume: 3,
-  minFloat: 0,
-  maxFloat: 30,
-  minPrice: 2,
-  maxPrice: 200,
-  minVolume: 500000,
-};
-
 const PRESETS: { label: string; criteria: Criteria }[] = [
   {
     label: 'Catalyst Gainer',
@@ -123,6 +112,54 @@ const PRESETS: { label: string; criteria: Criteria }[] = [
   },
 ];
 
+const SCANNER_STORAGE_KEY = 'alpaca-scanner-settings-v1';
+
+function cloneDefaultPresets(): Criteria[] {
+  return PRESETS.map(p => ({ ...p.criteria }));
+}
+
+type SortKey = 'changePercent' | 'volume' | 'relativeVolume' | 'floatShares' | 'price';
+
+function parseStoredScannerSettings(): {
+  presetsCriteria: Criteria[];
+  selectedPreset: number;
+  sortBy: SortKey;
+  autoReconnect: boolean;
+} | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(SCANNER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      presetsCriteria?: Partial<Criteria>[];
+      selectedPreset?: number;
+      sortBy?: string;
+      autoReconnect?: boolean;
+    };
+    const defaults = cloneDefaultPresets();
+    if (!Array.isArray(parsed.presetsCriteria)) return null;
+    const merged = defaults.map((def, i) => ({
+      ...def,
+      ...(parsed.presetsCriteria![i] && typeof parsed.presetsCriteria![i] === 'object'
+        ? parsed.presetsCriteria![i]
+        : {}),
+    }));
+    const sortKeys: SortKey[] = ['changePercent', 'volume', 'relativeVolume', 'floatShares', 'price'];
+    const sortBy = sortKeys.includes(parsed.sortBy as SortKey) ? (parsed.sortBy as SortKey) : 'changePercent';
+    return {
+      presetsCriteria: merged,
+      selectedPreset: Math.min(
+        Math.max(0, Number(parsed.selectedPreset) || 0),
+        defaults.length - 1,
+      ),
+      sortBy,
+      autoReconnect: typeof parsed.autoReconnect === 'boolean' ? parsed.autoReconnect : true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Helpers ──
 
 function formatVolume(v: number): string {
@@ -157,10 +194,11 @@ export default function AlpacaScannerClient() {
   const [isScanning, setIsScanning] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [liveSymbols, setLiveSymbols] = useState<string[]>([]);
-  const [criteria, setCriteria] = useState<Criteria>(PRESETS[0].criteria);
+  const [presetsCriteria, setPresetsCriteria] = useState<Criteria[]>(cloneDefaultPresets);
   const [selectedPreset, setSelectedPreset] = useState(0);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [sortBy, setSortBy] = useState<'changePercent' | 'volume' | 'relativeVolume' | 'floatShares' | 'price'>('changePercent');
+  const [sortBy, setSortBy] = useState<SortKey>('changePercent');
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [autoReconnect, setAutoReconnect] = useState(true);
   const [connectionCount, setConnectionCount] = useState(0);
@@ -168,6 +206,44 @@ export default function AlpacaScannerClient() {
 
   const abortRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const criteria = presetsCriteria[selectedPreset];
+
+  const updateCriteria = useCallback((patch: Partial<Criteria>) => {
+    setPresetsCriteria(prev => {
+      const next = [...prev];
+      next[selectedPreset] = { ...next[selectedPreset], ...patch };
+      return next;
+    });
+  }, [selectedPreset]);
+
+  useEffect(() => {
+    const loaded = parseStoredScannerSettings();
+    if (loaded) {
+      setPresetsCriteria(loaded.presetsCriteria);
+      setSelectedPreset(loaded.selectedPreset);
+      setSortBy(loaded.sortBy);
+      setAutoReconnect(loaded.autoReconnect);
+    }
+    setSettingsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated || typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        SCANNER_STORAGE_KEY,
+        JSON.stringify({
+          presetsCriteria,
+          selectedPreset,
+          sortBy,
+          autoReconnect,
+        }),
+      );
+    } catch {
+      /* quota / private mode */
+    }
+  }, [settingsHydrated, presetsCriteria, selectedPreset, sortBy, autoReconnect]);
 
   const sortedResults = useMemo(() => {
     const arr = Array.from(results.values()).map(r => {
@@ -427,7 +503,7 @@ export default function AlpacaScannerClient() {
           {PRESETS.map((p, i) => (
             <button
               key={i}
-              onClick={() => { setSelectedPreset(i); setCriteria(p.criteria); }}
+              onClick={() => setSelectedPreset(i)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 selectedPreset === i
                   ? 'bg-teal-500/30 border border-teal-400/60 text-teal-300'
@@ -457,14 +533,14 @@ export default function AlpacaScannerClient() {
                   <label className="text-xs text-blue-300/70 mb-1 block">{label}</label>
                   <input
                     type="number"
-                    value={(criteria as any)[key]}
-                    onChange={e => setCriteria(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                    value={criteria[key as keyof Criteria]}
+                    onChange={e => updateCriteria({ [key]: Number(e.target.value) } as Partial<Criteria>)}
                     className="w-full px-3 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-blue-100 text-sm focus:outline-none focus:border-teal-500"
                   />
                 </div>
               ))}
             </div>
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <label className="flex items-center gap-2 text-sm text-blue-300/80 cursor-pointer">
                 <input
                   type="checkbox"
@@ -474,6 +550,9 @@ export default function AlpacaScannerClient() {
                 />
                 Auto-reconnect (keeps streaming after timeout)
               </label>
+              <p className="text-xs text-blue-400/50">
+                Per-preset thresholds, sort order, and this option are saved in this browser.
+              </p>
             </div>
           </div>
         )}

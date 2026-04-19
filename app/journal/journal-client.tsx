@@ -3,33 +3,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Session } from 'next-auth';
 import Navbar from '../components/navbar';
-
-interface Trade {
-  id: string;
-  ticker: string;
-  direction: 'long' | 'short';
-  tradeType: 'swing' | 'intraday';
-  entryPrice: number;
-  entryDate: string;
-  exitPrice: number | null;
-  exitDate: string | null;
-  entryTime: string | null;
-  exitTime: string | null;
-  amount: number;
-  strategy: string | null;
-  notes: string | null;
-  isOpen: boolean;
-  exitReason: string | null;
-  returnPct: number | null;
-  rMultiple: number | null;
-  holdingDays: number | null;
-  profitLoss: number | null;
-  analysisReportId: string | null;
-  source: string;
-  externalOrderId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { Trade } from './journal-types';
+import TradeDetailDrawer from './trade-detail-drawer';
+import { formatJournalStoredDate } from '@/lib/trade-dates';
 
 interface Summary {
   totalTrades: number;
@@ -82,6 +58,38 @@ const ANALYSIS_STEPS = [
   'AI is writing your performance report...',
 ];
 
+function tradeCalendarDay(isoString: string) {
+  return isoString.slice(0, 10);
+}
+
+function msFromJournalTime(t: string | null | undefined): number {
+  if (!t || typeof t !== 'string') return 0;
+  const p = t.trim().split(':');
+  const h = parseInt(p[0], 10);
+  const m = parseInt(p[1], 10);
+  const s = parseInt(p[2], 10);
+  if (!Number.isFinite(h)) return 0;
+  const hh = Math.min(23, Math.max(0, h));
+  const mm = Number.isFinite(m) ? Math.min(59, Math.max(0, m)) : 0;
+  const ss = Number.isFinite(s) ? Math.min(59, Math.max(0, s)) : 0;
+  return ((hh * 60 + mm) * 60 + ss) * 1000;
+}
+
+/** Descending: latest exit (day + time) first; opens / no exit use entry day + entry time. */
+function journalTradeSortKey(t: Trade): number {
+  const exitDate = t.exitDate;
+  if (!t.isOpen && exitDate && t.exitPrice != null) {
+    const dayMs = new Date(`${tradeCalendarDay(exitDate)}T00:00:00.000Z`).getTime();
+    if (Number.isNaN(dayMs)) {
+      const ed = new Date(`${tradeCalendarDay(t.entryDate)}T00:00:00.000Z`).getTime();
+      return (Number.isNaN(ed) ? 0 : ed) + msFromJournalTime(t.entryTime);
+    }
+    return dayMs + msFromJournalTime(t.exitTime);
+  }
+  const dayMs = new Date(`${tradeCalendarDay(t.entryDate)}T00:00:00.000Z`).getTime();
+  return (Number.isNaN(dayMs) ? 0 : dayMs) + msFromJournalTime(t.entryTime);
+}
+
 export default function JournalClient({ session }: JournalClientProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -105,6 +113,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'webull'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [rehydratingOhlc, setRehydratingOhlc] = useState(false);
+  const [viewTradeId, setViewTradeId] = useState<string | null>(null);
   const [tradesPage, setTradesPage] = useState(1);
   const tradesPerPage = 20;
   const modalRef = useRef<HTMLDivElement>(null);
@@ -279,7 +289,12 @@ export default function JournalClient({ session }: JournalClientProps) {
       result = result.filter(trade => (trade.source || 'manual') === sourceFilter);
     }
 
-    return result;
+    return [...result].sort((a, b) => {
+      const kb = journalTradeSortKey(b);
+      const ka = journalTradeSortKey(a);
+      if (kb !== ka) return kb - ka;
+      return b.id.localeCompare(a.id);
+    });
   }, [trades, selectedPeriod, typeFilter, strategyFilter, sourceFilter]);
 
   const hasTradesWithNoStrategy = useMemo(() =>
@@ -458,14 +473,21 @@ export default function JournalClient({ session }: JournalClientProps) {
     setShowModal(true);
   };
 
-  const handleDelete = async (tradeId: string) => {
-    if (!confirm('Are you sure you want to delete this trade?')) return;
+  const handleDelete = async (tradeId: string): Promise<boolean> => {
+    if (!confirm('Are you sure you want to delete this trade?')) return false;
     try {
       const response = await fetch(`/api/journal/${tradeId}`, { method: 'DELETE' });
       const data = await response.json();
-      if (data.success) fetchTrades();
-      else alert('Error deleting trade: ' + data.error);
-    } catch { alert('Failed to delete trade'); }
+      if (data.success) {
+        fetchTrades();
+        return true;
+      }
+      alert('Error deleting trade: ' + data.error);
+      return false;
+    } catch {
+      alert('Failed to delete trade');
+      return false;
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -484,6 +506,49 @@ export default function JournalClient({ session }: JournalClientProps) {
       pageIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
       return next;
     });
+  };
+
+  const handleRehydrateOhlc = async () => {
+    const MAX_REFRESH = 2000;
+    const ids = filteredTrades.map(t => t.id);
+    if (ids.length === 0) {
+      alert('No trades match your current filters (period, type, strategy, source). Widen or clear filters to refresh rows.');
+      return;
+    }
+    const idsToSend = ids.slice(0, MAX_REFRESH);
+    const truncated = ids.length > MAX_REFRESH;
+    if (
+      !confirm(
+        `Re-fetch daily OHLC and indicators from Polygon for ${idsToSend.length} trade(s) that match your current filters${truncated ? ` (capped at ${MAX_REFRESH} of ${ids.length})` : ''}? Only these rows are updated — not the rest of your journal. Uses Polygon API quota.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      setRehydratingOhlc(true);
+      const res = await fetch('/api/journal/rehydrate-ohlc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tradeIds: idsToSend }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || data.details || 'Failed to refresh market data');
+        return;
+      }
+      const errTail =
+        Array.isArray(data.errors) && data.errors.length > 0
+          ? `\n\nNotes:\n${data.errors.slice(0, 6).join('\n')}`
+          : '';
+      alert(
+        `Updated ${data.updated} trade(s).${data.skipped ? ` Skipped ${data.skipped}.` : ''}${errTail}`,
+      );
+      fetchTrades();
+    } catch {
+      alert('Could not reach the server. Try again.');
+    } finally {
+      setRehydratingOhlc(false);
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -593,11 +658,6 @@ export default function JournalClient({ session }: JournalClientProps) {
         fetchSavedAnalyses();
       }
     } catch { alert('Failed to delete analysis'); }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   };
 
   const formatCurrency = (value: number | null) => {
@@ -752,6 +812,15 @@ export default function JournalClient({ session }: JournalClientProps) {
             className="px-4 py-2 bg-gradient-to-r from-teal-500 to-blue-500 text-white rounded-lg font-medium hover:from-teal-600 hover:to-blue-600 transition-all"
           >
             + Add Trade
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleRehydrateOhlc()}
+            disabled={rehydratingOhlc || filteredTrades.length === 0}
+            className="px-4 py-2 bg-slate-700/60 border border-cyan-500/25 text-cyan-200 rounded-lg font-medium hover:bg-slate-600/60 transition-all disabled:opacity-45 disabled:cursor-not-allowed"
+            title="Re-run Polygon for trades matching Period, Type, Strategy, and Source filters (not the whole journal)"
+          >
+            {rehydratingOhlc ? 'Refreshing…' : `Refresh OHLC (${filteredTrades.length})`}
           </button>
           <button
             onClick={handleAnalyze}
@@ -992,13 +1061,13 @@ export default function JournalClient({ session }: JournalClientProps) {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm text-white">${trade.entryPrice.toFixed(2)}</div>
-                        <div className="text-xs text-blue-300">{formatDate(trade.entryDate)}</div>
+                        <div className="text-xs text-blue-300">{formatJournalStoredDate(trade.entryDate)}</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {trade.exitPrice ? (
                           <>
                             <div className="text-sm text-white">${trade.exitPrice.toFixed(2)}</div>
-                            {trade.exitDate && <div className="text-xs text-blue-300">{formatDate(trade.exitDate)}</div>}
+                            {trade.exitDate && <div className="text-xs text-blue-300">{formatJournalStoredDate(trade.exitDate)}</div>}
                           </>
                         ) : (<div className="text-sm text-blue-300">—</div>)}
                       </td>
@@ -1022,9 +1091,22 @@ export default function JournalClient({ session }: JournalClientProps) {
                           <div className="text-xs text-blue-300 max-w-[120px] truncate mt-0.5" title={trade.notes}>{trade.notes}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
-                        <button onClick={() => handleEdit(trade)} className="text-blue-400 hover:text-blue-300 mr-3">Edit</button>
-                        <button onClick={() => handleDelete(trade.id)} className="text-red-400 hover:text-red-300">Delete</button>
+                      <td className="px-4 py-3 text-right text-sm">
+                        <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setViewTradeId(trade.id)}
+                            className="text-teal-400 hover:text-teal-300 font-medium"
+                          >
+                            View
+                          </button>
+                          <button type="button" onClick={() => handleEdit(trade)} className="text-blue-400 hover:text-blue-300">
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => void handleDelete(trade.id)} className="text-red-400 hover:text-red-300">
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1064,6 +1146,16 @@ export default function JournalClient({ session }: JournalClientProps) {
           )}
         </div>
       </main>
+
+      <TradeDetailDrawer
+        tradeId={viewTradeId}
+        onClose={() => setViewTradeId(null)}
+        onEdit={trade => {
+          setViewTradeId(null);
+          handleEdit(trade);
+        }}
+        onDelete={handleDelete}
+      />
 
       {/* ==================== MODAL FORM ==================== */}
       {showModal && (

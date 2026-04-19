@@ -37,8 +37,11 @@ export interface TechnicalIndicators {
  */
 export function calculateEMA(data: number[], period: number): number[] {
   const ema: number[] = [];
+  if (data.length < period) {
+    return [];
+  }
   const multiplier = 2 / (period + 1);
-  
+
   // Start with SMA for first value
   let sum = 0;
   for (let i = 0; i < period; i++) {
@@ -118,13 +121,15 @@ export function calculateMACD(prices: number[]): { value: number; signal: number
  * Calculate Average True Range (ATR)
  */
 export function calculateATR(ohlcv: OHLCV[], period: number = 14): number {
+  if (ohlcv.length < 2) return 0;
+
   const trueRanges: number[] = [];
-  
+
   for (let i = 1; i < ohlcv.length; i++) {
     const high = ohlcv[i].high;
     const low = ohlcv[i].low;
     const prevClose = ohlcv[i - 1].close;
-    
+
     const tr = Math.max(
       high - low,
       Math.abs(high - prevClose),
@@ -132,17 +137,20 @@ export function calculateATR(ohlcv: OHLCV[], period: number = 14): number {
     );
     trueRanges.push(tr);
   }
-  
-  // Calculate average
+
   const recentTR = trueRanges.slice(-period);
-  return recentTR.reduce((sum, tr) => sum + tr, 0) / recentTR.length;
+  if (recentTR.length === 0) return 0;
+  const avg = recentTR.reduce((sum, tr) => sum + tr, 0) / recentTR.length;
+  return Number.isFinite(avg) ? avg : 0;
 }
 
 /**
  * Calculate Volume Z-Score
  */
 export function calculateVolumeZScore(volumes: number[], period: number = 20): number {
+  if (!volumes.length) return 0;
   const recentVolumes = volumes.slice(-period);
+  if (!recentVolumes.length) return 0;
   const avg = recentVolumes.reduce((sum, v) => sum + v, 0) / recentVolumes.length;
   
   const variance = recentVolumes.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / recentVolumes.length;

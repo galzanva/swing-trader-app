@@ -114,39 +114,64 @@ export async function POST(request: NextRequest) {
             );
             movers = (moversData.gainers || []).map((g: any) => ({
               symbol: g.symbol,
-              percent_change: g.percent_change,
-              change: g.change,
-              price: g.price,
+              percent_change: Number(g.percent_change) || 0,
+              change: Number(g.change) || 0,
+              price: Number(g.price) || 0,
             }));
           } catch (e: any) {
-            send('progress', { step: `Movers endpoint: ${e.message}. Trying snapshots fallback...`, percent: 8 });
+            send('progress', { step: `Movers endpoint: ${e.message}. Trying most-actives...`, percent: 8 });
+          }
+
+          // Fallback pool if gainers empty (keys / session / weekend)
+          if (movers.length === 0) {
+            try {
+              const actives = await alpacaFetch(
+                '/v1beta1/screener/stocks/most-actives?top=50',
+                alpacaKeyId,
+                alpacaSecret,
+              );
+              const list = actives.internals || actives.most_actives || actives.actives || [];
+              movers = (Array.isArray(list) ? list : []).map((g: any) => ({
+                symbol: g.symbol,
+                percent_change: Number(g.percent_change) || Number(g.daily_change_percent) || 0,
+                change: Number(g.change) || 0,
+                price: Number(g.last_trade_price) || Number(g.price) || 0,
+              })).filter(m => m.symbol);
+              send('progress', { step: `Using ${movers.length} most-active symbols (gainers empty).`, percent: 12 });
+            } catch { /* */ }
           }
 
           send('progress', {
-            step: `Found ${movers.length} gainers. Fetching live snapshots...`,
+            step: `Found ${movers.length} candidate symbols. Fetching live snapshots...`,
             percent: 15,
           });
 
-          // Pre-filter movers by basic criteria
-          const candidates = movers.filter(m =>
-            m.percent_change >= criteria.minChangePercent &&
-            m.percent_change <= criteria.maxChangePercent &&
-            m.price >= criteria.minPrice &&
-            m.price <= criteria.maxPrice &&
-            m.symbol.length <= 5 &&
-            !m.symbol.includes('.') &&
-            !m.symbol.includes('-'),
-          );
+          // Widen mover pool: Alpaca screener % can differ from IEX snapshot % — we merge both when filtering.
+          const poolMinMoverPct = Math.max(1, Math.min(12, criteria.minChangePercent * 0.35));
+          const candidates = movers
+            .filter(m =>
+              m.percent_change >= poolMinMoverPct &&
+              m.percent_change <= criteria.maxChangePercent &&
+              m.price >= criteria.minPrice &&
+              m.price <= criteria.maxPrice &&
+              m.symbol &&
+              m.symbol.length <= 5 &&
+              !m.symbol.includes('.') &&
+              !m.symbol.includes('-'),
+            )
+            .slice(0, 80);
 
           if (candidates.length === 0) {
-            send('progress', { step: 'No stocks match basic criteria from movers.', percent: 100 });
+            send('progress', { step: 'No symbols in movers/most-actives match price / symbol filters.', percent: 100 });
             send('complete', { totalResults: 0, scannedAt: new Date().toISOString() });
             controller.close();
             return;
           }
 
+          const moverPctBySymbol = new Map(candidates.map(c => [c.symbol, c.percent_change]));
+
           // ── Phase 2: Get snapshots for live data ──
-          const symbolList = candidates.map(c => c.symbol).slice(0, 50);
+          const symbolList = candidates.map(c => c.symbol).slice(0, 80);
           send('progress', {
             step: `Getting snapshots for ${symbolList.length} stocks...`,
             percent: 20,
@@ -190,11 +215,14 @@ export async function POST(request: NextRequest) {
             const prevVolume = prevBar.v || 1;
 
             const changePercent = prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
+            const moverPct = moverPctBySymbol.get(sym) ?? 0;
+            // Screener % and IEX snapshot % often disagree — use the stronger signal for % change gate + display
+            const effectiveChangePercent = Math.max(changePercent, moverPct);
             const relativeVolume = prevVolume > 0 ? dayVolume / prevVolume : 1;
 
             if (dayVolume < criteria.minVolume) continue;
             if (relativeVolume < criteria.minRelativeVolume) continue;
-            if (changePercent < criteria.minChangePercent || changePercent > criteria.maxChangePercent) continue;
+            if (effectiveChangePercent < criteria.minChangePercent || effectiveChangePercent > criteria.maxChangePercent) continue;
             if (currentPrice < criteria.minPrice || currentPrice > criteria.maxPrice) continue;
 
             // Finnhub float
@@ -238,7 +266,7 @@ export async function POST(request: NextRequest) {
               vwap: Math.round(dayVwap * 100) / 100,
               prevClose: Math.round(prevClose * 100) / 100,
               change: Math.round((currentPrice - prevClose) * 100) / 100,
-              changePercent: Math.round(changePercent * 100) / 100,
+              changePercent: Math.round(effectiveChangePercent * 100) / 100,
               volume: dayVolume,
               relativeVolume: Math.round(relativeVolume * 100) / 100,
               floatShares,

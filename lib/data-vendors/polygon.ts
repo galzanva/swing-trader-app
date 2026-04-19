@@ -255,9 +255,11 @@ export class PolygonClient {
   async getAggregates(
     symbol: string,
     timeframe: "1min" | "5min" | "15min" | "1hour" | "1day" = "1day",
-    limit?: number // Will be set based on timeframe if not provided
+    limit?: number, // Will be set based on timeframe if not provided
+    options?: { adjusted?: boolean },
   ): Promise<MarketData> {
     try {
+      const adjusted = options?.adjusted !== false;
       // Calculate date range - get data up to today
       // Use UTC to avoid timezone issues
       const now = new Date();
@@ -322,7 +324,7 @@ export class PolygonClient {
       // This ensures we always get the latest data even for newer stocks
       const url = `${this.baseUrl}/v2/aggs/ticker/${symbol.toUpperCase()}/range/${
         timeframeMap[timeframe]
-      }/${fromStr}/${toStr}?adjusted=true&sort=desc&limit=${effectiveLimit}&apiKey=${this.apiKey}`;
+      }/${fromStr}/${toStr}?adjusted=${adjusted}&sort=desc&limit=${effectiveLimit}&apiKey=${this.apiKey}`;
 
       console.log(`[Polygon] Request URL: ${url.replace(this.apiKey, 'API_KEY_HIDDEN')}`);
       

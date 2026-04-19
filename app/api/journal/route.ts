@@ -8,7 +8,10 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 import { PolygonClient } from '@/lib/data-vendors/polygon';
-import { calculateTechnicalIndicators } from '@/lib/indicators/technical';
+import {
+  computeJournalPolygonPatchFromBars,
+  fetchUnadjustedDailyBars,
+} from '@/lib/journal-polygon-enrichment';
 
 interface TradeInput {
   id?: string;
@@ -116,7 +119,6 @@ export async function POST(request: NextRequest) {
     let holdingDays: number | null = null;
     let rMultiple: number | null = null;
     let maxPotentialR: number | null = null;
-    let calculatedR: number | null = null; // Temporary for R calculation
 
     if (body.exitPrice && exitDate) {
       // Calculate return %
@@ -156,119 +158,42 @@ export async function POST(request: NextRequest) {
         const polygonClient = new PolygonClient(polygonApiKey);
         console.log(`[Journal] Fetching market data for ${ticker}...`);
 
-        // Fetch historical data around entry date (need 50+ bars for indicators)
-        const marketData = await polygonClient.getAggregates(ticker, '1day', 100);
-        
-        if (marketData.bars && marketData.bars.length > 0) {
-          // Find entry date bar (or closest previous bar)
-          const entryTimestamp = entryDate.getTime();
-          const entryBarIndex = marketData.bars.findIndex(bar => {
-            const barDate = new Date(bar.timestamp).setHours(0, 0, 0, 0);
-            const entryDateOnly = new Date(entryTimestamp).setHours(0, 0, 0, 0);
-            return barDate >= entryDateOnly;
-          });
+        const bars = await fetchUnadjustedDailyBars(polygonClient, ticker);
+        const exitDateStr =
+          exitDate &&
+          (body.exitDate && body.exitDate.length >= 10
+            ? body.exitDate.slice(0, 10)
+            : exitDate.toISOString().slice(0, 10));
 
-          if (entryBarIndex >= 0 && entryBarIndex < marketData.bars.length) {
-            const entryBar = marketData.bars[entryBarIndex];
-            entryOHLC = {
-              open: entryBar.open,
-              high: entryBar.high,
-              low: entryBar.low,
-              close: entryBar.close,
-              volume: entryBar.volume,
-              timestamp: entryBar.timestamp,
-            };
+        const patch = computeJournalPolygonPatchFromBars(bars, {
+          direction: body.direction,
+          entryDateYmd: body.entryDate,
+          exitDateYmd: exitDateStr ?? null,
+          entryPrice: body.entryPrice,
+          exitPrice: body.exitPrice ?? null,
+          returnPct,
+        });
 
-            // Calculate indicators up to entry bar
-            const barsUpToEntry = marketData.bars.slice(0, entryBarIndex + 1);
-            const entryIndicators = calculateTechnicalIndicators(barsUpToEntry);
-            
-            entryEMA9 = entryIndicators.ema9;
-            entryEMA20 = entryIndicators.ema20;
-            entryEMA50 = entryIndicators.ema50;
-            entryRSI = entryIndicators.rsi;
-            entryATR = entryIndicators.atr;
-
-            console.log(`[Journal] Entry indicators - EMA9: ${entryEMA9?.toFixed(2)}, RSI: ${entryRSI?.toFixed(2)}, ATR: ${entryATR?.toFixed(2)}`);
-          }
-
-          // Find exit date bar (if closed trade)
-          if (exitDate) {
-            const exitTimestamp = exitDate.getTime();
-            const exitBarIndex = marketData.bars.findIndex(bar => {
-              const barDate = new Date(bar.timestamp).setHours(0, 0, 0, 0);
-              const exitDateOnly = new Date(exitTimestamp).setHours(0, 0, 0, 0);
-              return barDate >= exitDateOnly;
-            });
-
-            if (exitBarIndex >= 0 && exitBarIndex < marketData.bars.length) {
-              const exitBar = marketData.bars[exitBarIndex];
-              exitOHLC = {
-                open: exitBar.open,
-                high: exitBar.high,
-                low: exitBar.low,
-                close: exitBar.close,
-                volume: exitBar.volume,
-                timestamp: exitBar.timestamp,
-              };
-
-              // Calculate indicators up to exit bar
-              const barsUpToExit = marketData.bars.slice(0, exitBarIndex + 1);
-              const exitIndicators = calculateTechnicalIndicators(barsUpToExit);
-              
-              exitEMA9 = exitIndicators.ema9;
-              exitEMA20 = exitIndicators.ema20;
-              exitEMA50 = exitIndicators.ema50;
-              exitRSI = exitIndicators.rsi;
-              exitATR = exitIndicators.atr;
-
-              console.log(`[Journal] Exit indicators - EMA9: ${exitEMA9?.toFixed(2)}, RSI: ${exitRSI?.toFixed(2)}, ATR: ${exitATR?.toFixed(2)}`);
-            }
-          }
-          
-          // 3.5. Calculate maxPotentialR for early exit detection
-          if (body.exitPrice && exitDate && entryATR && entryBarIndex >= 0) {
-            try {
-              // Get bars from entry to 20 days after exit to see how far trade could have gone
-              const exitBarIndexForPotential = marketData.bars.findIndex(bar => {
-                const barDate = new Date(bar.timestamp).setHours(0, 0, 0, 0);
-                const exitDateOnly = new Date(exitDate.getTime()).setHours(0, 0, 0, 0);
-                return barDate >= exitDateOnly;
-              });
-              
-              if (exitBarIndexForPotential >= 0) {
-                const lookAheadBars = marketData.bars.slice(entryBarIndex, Math.min(exitBarIndexForPotential + 20, marketData.bars.length));
-                const stopDistance = 1.5 * entryATR;
-                const riskPerShare = stopDistance;
-                
-                let maxGain = 0;
-                
-                for (const bar of lookAheadBars) {
-                  let gain = 0;
-                  
-                  if (body.direction === 'long') {
-                    gain = bar.high - body.entryPrice;
-                    // Check if stop would have been hit
-                    if (bar.low < body.entryPrice - stopDistance) {
-                      break; // Would have stopped out
-                    }
-                  } else {
-                    gain = body.entryPrice - bar.low;
-                    // Check if stop would have been hit (for short)
-                    if (bar.high > body.entryPrice + stopDistance) {
-                      break; // Would have stopped out
-                    }
-                  }
-                  
-                  maxGain = Math.max(maxGain, gain);
-                }
-                
-                maxPotentialR = maxGain / riskPerShare;
-                console.log(`[Journal] Max potential R: ${maxPotentialR.toFixed(2)}R`);
-              }
-            } catch (error) {
-              console.error('[Journal] Error calculating maxPotentialR:', error);
-            }
+        if (patch) {
+          entryOHLC = patch.entryOHLC;
+          exitOHLC = patch.exitOHLC;
+          entryEMA9 = patch.entryEMA9;
+          entryEMA20 = patch.entryEMA20;
+          entryEMA50 = patch.entryEMA50;
+          entryRSI = patch.entryRSI;
+          entryATR = patch.entryATR;
+          exitEMA9 = patch.exitEMA9;
+          exitEMA20 = patch.exitEMA20;
+          exitEMA50 = patch.exitEMA50;
+          exitRSI = patch.exitRSI;
+          exitATR = patch.exitATR;
+          maxPotentialR = patch.maxPotentialR;
+          rMultiple = patch.rMultiple;
+          console.log(
+            `[Journal] Entry indicators - EMA9: ${entryEMA9?.toFixed(2)}, RSI: ${entryRSI?.toFixed(2)}, ATR: ${entryATR?.toFixed(2)}`,
+          );
+          if (rMultiple != null) {
+            console.log(`[Journal] R multiple: ${rMultiple.toFixed(2)}R`);
           }
         }
       } catch (error) {
@@ -277,20 +202,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Calculate R multiple (if ATR available and not open trade)
-    if (entryATR && body.exitPrice && returnPct !== null) {
-      // Assume 1.5 ATR as default stop distance
-      const stopDistance = 1.5 * entryATR;
-      const riskPerShare = stopDistance;
-      const riskPercent = (riskPerShare / body.entryPrice) * 100;
-      
-      if (riskPercent !== 0) {
-        rMultiple = returnPct / riskPercent;
-        console.log(`[Journal] Calculated R multiple: ${rMultiple.toFixed(2)}R (Return: ${returnPct.toFixed(2)}% / Risk: ${riskPercent.toFixed(2)}%)`);
-      }
-    }
-
-    // 5. Save to database
+    // 4. Save to database
     const tradeData = {
       userId,
       ticker,
