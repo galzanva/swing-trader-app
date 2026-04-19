@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AnalysisReportDisplay from '../../components/analysis-report-display';
 import TechnicalAnalysisReportDisplay from '../../components/technical-analysis-report-display';
-import type { AnalysisReport } from '../../api/analyze/route';
+import type { AnalysisReport } from '@/lib/types/analysis-report';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -384,7 +384,8 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
 
             <button
               onClick={handleRerun}
-              disabled={isRerunning}
+              disabled={isRerunning || report.type === 'deep-analysis'}
+              title={report.type === 'deep-analysis' ? 'Rerun is not available for legacy deep analysis reports' : undefined}
               className="px-4 py-2 bg-teal-600/20 hover:bg-teal-600/30 disabled:bg-gray-600/20 text-teal-300 disabled:text-gray-400 rounded-lg transition-all border border-teal-500/30 disabled:border-gray-500/30 flex items-center gap-2 disabled:cursor-not-allowed"
             >
               {isRerunning ? (

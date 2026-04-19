@@ -26,7 +26,7 @@ function question(query: string): Promise<string> {
 async function createUser() {
   try {
     console.log("╔════════════════════════════════════════════╗");
-    console.log("║   Swing Advisor - Create First User       ║");
+    console.log("║   Trader Journey - Create First User      ║");
     console.log("╚════════════════════════════════════════════╝\n");
 
     // Get user input

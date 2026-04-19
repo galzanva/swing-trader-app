@@ -787,12 +787,6 @@ export default function AlpacaScannerClient() {
                         })()}
                         <div className="mt-3 flex gap-2">
                           <Link
-                            href={`/intraday-analysis?symbol=${r.ticker}`}
-                            className="text-xs px-3 py-1.5 bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 rounded-lg transition-all"
-                          >
-                            ⚡ Intraday Analysis
-                          </Link>
-                          <Link
                             href={`/technical-analysis?symbol=${r.ticker}`}
                             className="text-xs px-3 py-1.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg transition-all"
                           >

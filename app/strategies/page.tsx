@@ -6,7 +6,7 @@ import Navbar from '../components/navbar';
 import StrategiesClient from './strategies-client';
 
 export const metadata: Metadata = {
-  title: 'Strategies | Swing Advisor',
+  title: 'Strategies | Trader Journey',
   description: 'Manage your trading strategies',
 };
 

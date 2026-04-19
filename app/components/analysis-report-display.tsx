@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AnalysisReport } from '../api/analyze/route';
+import type { AnalysisReport } from '@/lib/types/analysis-report';
 import HelpIcon from './help-icon';
 import PatternExplanationHelpModal from './pattern-explanation-help-modal';
 
@@ -780,7 +780,7 @@ export default function AnalysisReportDisplay({ report }: AnalysisReportDisplayP
         {/* ==================== Footer ==================== */}
         <div className="text-center text-sm text-slate-400">
           <p>Report generated: {new Date(report.timestamp).toLocaleString()}</p>
-          <p className="mt-1 text-xs">Deep Analysis • Technical + Fundamentals + Sentiment</p>
+          <p className="mt-1 text-xs">Legacy saved report • Technical + fundamentals + sentiment</p>
         </div>
       </div>
     </>

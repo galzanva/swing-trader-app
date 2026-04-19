@@ -6,7 +6,7 @@ import Navbar from '../components/navbar';
 import AnalyticsClient from './analytics-client';
 
 export const metadata: Metadata = {
-  title: 'Trade Analytics | Swing Advisor',
+  title: 'Trade Analytics | Trader Journey',
   description: 'Detailed trading performance analytics and reports',
 };
 

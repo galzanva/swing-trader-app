@@ -49,38 +49,13 @@ export async function POST(
     let newCachedData = cachedData; // Start with existing cache
 
     if (originalReport.type === "deep-analysis") {
-      // Call deep analysis endpoint
-      const response = await fetch(
-        `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/analyze`,
+      return NextResponse.json(
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Cookie: request.headers.get("cookie") || "",
-          },
-          body: JSON.stringify({
-            symbol: parameters.symbol,
-            timeframe: parameters.timeframe,
-            useCachedData: cachedData !== null,
-            cachedData: cachedData,
-          }),
-        }
+          error:
+            "Deep analysis reports can no longer be rerun. Open Technical Analysis for a fresh report, or keep this copy as a historical snapshot.",
+        },
+        { status: 410 }
       );
-
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
-      }
-
-      newReportData = await response.json();
-      
-      // Update cache with new data if available
-      if (newReportData.cacheableData) {
-        newCachedData = {
-          ...cachedData,
-          ...newReportData.cacheableData,
-          lastUpdated: new Date().toISOString(),
-        };
-      }
     } else if (originalReport.type === "strategy-analysis") {
       return NextResponse.json(
         { error: "Strategy analysis reports can no longer be rerun. This feature has been removed." },

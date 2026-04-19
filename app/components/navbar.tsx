@@ -30,17 +30,13 @@ export default function Navbar({ session }: NavbarProps) {
       label: '📊 Analysis',
       items: [
         { href: '/technical-analysis', label: '📈 Technical Analysis' },
-        { href: '/analyze', label: '🔍 Deep Analysis' },
         { href: '/reports', label: '📂 Saved Reports' },
       ] as NavItem[],
     },
     tools: {
       label: '🛠️ Tools',
       items: [
-        { href: '/day-scanner', label: '🔴 Day Trading Scanner' },
         { href: '/alpaca-scanner', label: '⚡ Alpaca Live Scanner' },
-        { href: '/intraday-analysis', label: '⚡ Intraday Analysis' },
-        { href: '/scanner', label: '📊 Market Screener' },
         { href: '/trade-calculator', label: '🧮 Trade Calculator' },
       ] as NavItem[],
     },
@@ -102,7 +98,7 @@ export default function Navbar({ session }: NavbarProps) {
             {/* Logo */}
             <Link href="/dashboard" className="flex items-center space-x-2" onClick={closeMobileMenu}>
               <div className="text-2xl">📈</div>
-              <span className="text-xl font-bold text-white">Swing Advisor</span>
+              <span className="text-xl font-bold text-white">Trader Journey</span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -285,7 +281,7 @@ export default function Navbar({ session }: NavbarProps) {
                 className="flex items-center space-x-2"
               >
                 <div className="text-2xl">📈</div>
-                <span className="text-xl font-bold text-white">Swing Advisor</span>
+                <span className="text-xl font-bold text-white">Trader Journey</span>
               </Link>
               <button
                 onClick={handleMobileMenuToggle}

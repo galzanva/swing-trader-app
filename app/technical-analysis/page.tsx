@@ -5,7 +5,7 @@ import Navbar from "../components/navbar";
 import TechnicalAnalysisClient from "./technical-analysis-client";
 
 export const metadata = {
-  title: "Technical Analysis | Swing Advisor",
+  title: "Technical Analysis | Trader Journey",
   description: "Professional-grade technical analysis with advanced indicators, probability-based predictions, and AI-powered insights",
 };
 

@@ -6,7 +6,7 @@ import Navbar from '../components/navbar';
 import AlpacaScannerClient from './alpaca-scanner-client';
 
 export const metadata: Metadata = {
-  title: 'Alpaca Real-Time Scanner | Swing Advisor',
+  title: 'Alpaca Real-Time Scanner | Trader Journey',
   description: 'Real-time stock scanner powered by Alpaca WebSocket streaming',
 };
 

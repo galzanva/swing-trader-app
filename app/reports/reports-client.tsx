@@ -114,7 +114,7 @@ export default function ReportsClient() {
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'deep-analysis':
-        return 'Deep Analysis';
+        return 'Legacy (deep analysis)';
       case 'strategy-analysis':
         return 'Strategy Analysis';
       case 'backtest':
@@ -164,7 +164,7 @@ export default function ReportsClient() {
               className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               <option value="">All Types</option>
-              <option value="deep-analysis">Deep Analysis</option>
+              <option value="deep-analysis">Legacy (deep analysis)</option>
               <option value="technical-analysis">Technical Analysis</option>
               <option value="backtest">Backtest</option>
             </select>
@@ -246,10 +246,10 @@ export default function ReportsClient() {
               : 'Start by running an analysis and saving the report'}
           </p>
           <Link
-            href="/analyze"
+            href="/technical-analysis"
             className="inline-block px-6 py-3 bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all shadow-lg"
           >
-            Run Deep Analysis
+            Open Technical Analysis
           </Link>
         </div>
       )}

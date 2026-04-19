@@ -3,8 +3,8 @@ import SessionProvider from "./session-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Swing Advisor - AI Trading Intelligence",
-  description: "AI-powered swing trading advisor that finds the best setups and provides evidence-backed analysis",
+  title: "Trader Journey",
+  description: "Trading journal, analytics, technical analysis, and tools for your trading workflow",
   icons: {
     icon: "/favicon.ico",
   },

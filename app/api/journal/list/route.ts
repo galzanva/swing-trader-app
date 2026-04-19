@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       avgPL: parseFloat(avgPL.toFixed(2)),
       avgReturn: parseFloat(avgReturn.toFixed(2)),
       avgRMultiple: avgRMultiple !== null ? parseFloat(avgRMultiple.toFixed(2)) : null,
-      avgHoldingDays: avgHoldingDays !== null ? parseFloat(avgHoldingDays.toFixed(1)) : null,
+      avgHoldingDays: avgHoldingDays !== null ? Math.round(avgHoldingDays) : null,
     };
 
     return NextResponse.json({

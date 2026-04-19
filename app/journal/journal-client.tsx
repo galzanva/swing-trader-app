@@ -75,6 +75,35 @@ function msFromJournalTime(t: string | null | undefined): number {
   return ((hh * 60 + mm) * 60 + ss) * 1000;
 }
 
+/** Hold duration in seconds for a closed intraday trade when entry + exit times exist. */
+function closedIntradayHoldSeconds(t: Trade): number | null {
+  if (t.isOpen || t.returnPct === null) return null;
+  const tt = t.tradeType || (t.holdingDays === 0 ? 'intraday' : 'swing');
+  if (tt !== 'intraday') return null;
+  if (!t.entryTime?.trim() || !t.exitTime?.trim()) return null;
+  const entryDay = tradeCalendarDay(t.entryDate);
+  const exitDay = t.exitDate ? tradeCalendarDay(t.exitDate) : entryDay;
+  const entryMs = new Date(`${entryDay}T00:00:00.000Z`).getTime() + msFromJournalTime(t.entryTime);
+  const exitMs = new Date(`${exitDay}T00:00:00.000Z`).getTime() + msFromJournalTime(t.exitTime);
+  const sec = (exitMs - entryMs) / 1000;
+  if (!Number.isFinite(sec) || sec < 0) return null;
+  return sec;
+}
+
+/** Format an average duration: minutes + seconds (hours when needed). */
+function formatAvgHoldDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  if (m < 60) return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (rem === 0 && mm === 0) return `${h}h`;
+  if (rem === 0) return `${h}h ${mm}m`;
+  return `${h}h ${mm}m ${rem}s`;
+}
+
 /** Descending: latest exit (day + time) first; opens / no exit use entry day + entry time. */
 function journalTradeSortKey(t: Trade): number {
   const exitDate = t.exitDate;
@@ -344,15 +373,35 @@ export default function JournalClient({ session }: JournalClientProps) {
     const avgReturn = totalClosed > 0 ? closedTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalClosed : 0;
     const dTrades = closedTrades.filter(t => t.holdingDays !== null);
     const avgHoldingDays = dTrades.length > 0 ? dTrades.reduce((sum, t) => sum + (t.holdingDays ?? 0), 0) / dTrades.length : null;
+
+    let avgHoldDetail: string;
+    if (typeFilter === 'intraday') {
+      const holdSecs = closedTrades.map(closedIntradayHoldSeconds).filter((x): x is number => x !== null);
+      if (holdSecs.length > 0) {
+        const avgSec = holdSecs.reduce((a, b) => a + b, 0) / holdSecs.length;
+        const label = `Avg hold ${formatAvgHoldDuration(avgSec)}`;
+        avgHoldDetail =
+          holdSecs.length < closedTrades.length
+            ? `${label} (${holdSecs.length}/${closedTrades.length} with times)`
+            : label;
+      } else {
+        avgHoldDetail = 'Avg hold — add entry & exit times';
+      }
+    } else {
+      avgHoldDetail =
+        avgHoldingDays !== null ? `Avg hold ${Math.round(avgHoldingDays)} days` : '—';
+    }
+
     return {
       totalTrades, totalClosed, totalOpen, winningTrades, losingTrades, breakEvenTrades,
       winRate: parseFloat(winRate.toFixed(2)),
       totalPL: parseFloat(totalPL.toFixed(2)),
       avgPL: parseFloat(avgPL.toFixed(2)),
       avgReturn: parseFloat(avgReturn.toFixed(2)),
-      avgHoldingDays: avgHoldingDays !== null ? parseFloat(avgHoldingDays.toFixed(1)) : null,
+      avgHoldingDays: avgHoldingDays !== null ? Math.round(avgHoldingDays) : null,
+      avgHoldDetail,
     };
-  }, [filteredTrades]);
+  }, [filteredTrades, typeFilter]);
 
   const fetchTrades = async () => {
     try {
@@ -799,7 +848,7 @@ export default function JournalClient({ session }: JournalClientProps) {
             <div className="bg-slate-800/50 backdrop-blur-lg border border-white/10 rounded-lg p-4">
               <div className="text-blue-200 text-sm mb-1">Avg Return</div>
               <div className={`text-2xl font-bold ${filteredSummary.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>{filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%</div>
-              <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgHoldingDays !== null ? `Avg hold ${filteredSummary.avgHoldingDays} days` : '—'}</div>
+              <div className="text-xs text-blue-300 mt-1">{filteredSummary.avgHoldDetail}</div>
             </div>
           </div>
           </div>

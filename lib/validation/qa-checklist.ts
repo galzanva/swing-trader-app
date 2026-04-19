@@ -1,5 +1,5 @@
 /**
- * QA Checklist for Swing Advisor Reports
+ * QA Checklist for Trader Journey / legacy analysis reports
  * Validates all deterministic, rule-based standards for accuracy, transparency, and institutional-grade clarity
  */
 
@@ -511,7 +511,7 @@ function generateSummary(passed: boolean, score: number, issues: QAIssue[], warn
 
 export function formatQAReport(result: QAResult): string {
   let report = `\n${'='.repeat(70)}\n`;
-  report += `SWING ADVISOR QA REPORT\n`;
+  report += `TRADER JOURNEY QA REPORT\n`;
   report += `${'='.repeat(70)}\n\n`;
 
   report += result.summary + '\n\n';

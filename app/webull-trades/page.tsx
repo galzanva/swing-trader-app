@@ -6,7 +6,7 @@ import Navbar from '../components/navbar';
 import WebullTradesClient from './webull-trades-client';
 
 export const metadata: Metadata = {
-  title: 'Webull Trade Sync | Swing Advisor',
+  title: 'Webull Trade Sync | Trader Journey',
   description: 'Import trades from your Webull account into your trading journal',
 };
 

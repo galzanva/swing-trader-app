@@ -1,10 +1,10 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState, FormEvent } from "react";
+import { Suspense, useState, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -60,8 +60,8 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Swing Advisor</h1>
-          <p className="text-blue-200">AI-Powered Trading Intelligence</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Trader Journey</h1>
+          <p className="text-blue-200">Your trading workspace</p>
         </div>
 
         {/* Login Card */}
@@ -125,10 +125,23 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-blue-200/50 text-sm mt-8">
-          © 2025 Swing Advisor. All rights reserved.
+          © 2026 Trader Journey. All rights reserved.
         </p>
       </div>
     </div>
   );
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+          <p className="text-blue-200">Loading…</p>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}

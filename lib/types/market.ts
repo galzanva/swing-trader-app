@@ -1,5 +1,5 @@
 /**
- * Shared market data types used across screener, technical analysis, and data vendors.
+ * Shared market data types used across technical analysis and data vendors.
  * Extracted from strategy types for cleaner dependencies.
  */
 
