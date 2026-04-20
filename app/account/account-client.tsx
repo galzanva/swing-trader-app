@@ -1,9 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Session } from 'next-auth';
 import { useSession } from 'next-auth/react';
 import { useTheme } from '@/app/theme-provider';
+
+const COMMON_TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Toronto',
+  'America/Vancouver',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Asia/Kolkata',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
 
 interface AccountClientProps {
   session: Session;
@@ -13,11 +32,19 @@ export default function AccountClient({ session: initialSession }: AccountClient
   const { data: session, update } = useSession();
   const { theme, setTheme } = useTheme();
   const [name, setName] = useState(session?.user?.name || initialSession.user?.name || '');
+  const [timezone, setTimezone] = useState('America/New_York');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/account/settings')
+      .then(r => r.json())
+      .then(d => { if (d.timezone) setTimezone(d.timezone); })
+      .catch(() => {});
+  }, []);
 
   const updateProfile = async () => {
     if (!name.trim()) {
@@ -32,7 +59,7 @@ export default function AccountClient({ session: initialSession }: AccountClient
       const response = await fetch('/api/account/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, timezone }),
       });
 
       if (response.ok) {
@@ -135,6 +162,20 @@ export default function AccountClient({ session: initialSession }: AccountClient
               className="w-full bg-surface-2 text-text-muted rounded-lg px-4 py-2 border border-border cursor-not-allowed opacity-60"
             />
             <p className="text-xs text-text-muted mt-1">Email cannot be changed</p>
+          </div>
+
+          <div>
+            <label className="block text-text-secondary text-sm font-medium mb-2">Timezone</label>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="w-full bg-surface-2 text-text-primary rounded-lg px-4 py-2 border border-border focus:ring-1 focus:ring-accent focus:border-accent focus:outline-none"
+            >
+              {COMMON_TIMEZONES.map(tz => (
+                <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+            <p className="text-xs text-text-muted mt-1">Used for analytics date calculations</p>
           </div>
 
           <button

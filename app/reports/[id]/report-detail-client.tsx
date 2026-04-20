@@ -52,6 +52,20 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
     fetchReport();
   }, [reportId]);
 
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isDeleting) setShowDeleteConfirm(false);
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [showDeleteConfirm, isDeleting]);
+
   const fetchReport = async () => {
     setIsLoading(true);
     setError('');
@@ -509,30 +523,60 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete confirmation drawer */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-1 rounded-xl p-6 max-w-md w-full border border-border">
-            <h3 className="text-xl font-bold text-text-primary mb-2">Delete Report?</h3>
-            <p className="text-text-secondary mb-6">
-              Are you sure you want to delete this report? This action cannot be undone.
-            </p>
-            <div className="flex gap-3">
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 z-50 transition-opacity"
+            aria-hidden
+            onClick={() => !isDeleting && setShowDeleteConfirm(false)}
+          />
+          <div className="fixed inset-0 z-[51] flex justify-end pointer-events-none">
+            <aside
+              className="pointer-events-auto h-full w-full sm:max-w-md bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-report-title"
+            >
+            <div className="shrink-0 border-b border-border bg-surface-2 px-6 py-5 flex items-center justify-between">
+              <h3 id="delete-report-title" className="text-xl font-bold text-text-primary">
+                Delete report?
+              </h3>
               <button
+                type="button"
+                onClick={() => !isDeleting && setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="text-text-muted hover:text-text-primary p-2 rounded-lg hover:bg-surface-3 transition-colors disabled:opacity-50"
+                title="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <p className="text-text-secondary text-base leading-relaxed">
+                Are you sure you want to delete this report? This action cannot be undone.
+              </p>
+            </div>
+            <div className="shrink-0 border-t border-border bg-surface-2 px-6 py-5 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-lg transition-all disabled:cursor-not-allowed"
+                className="px-5 py-3 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-xl transition-all disabled:cursor-not-allowed text-base font-medium"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 px-4 py-2 bg-loss/10 text-loss hover:bg-loss/20 rounded-lg transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="px-5 py-3 bg-loss/15 text-loss hover:bg-loss/25 rounded-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base font-semibold"
               >
                 {isDeleting ? (
                   <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -543,8 +587,9 @@ export default function ReportDetailClient({ reportId }: ReportDetailClientProps
                 )}
               </button>
             </div>
+          </aside>
           </div>
-        </div>
+        </>
       )}
 
       {/* Report Content - Wrapped for PDF/Image export */}

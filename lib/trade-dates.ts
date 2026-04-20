@@ -88,3 +88,29 @@ export function formatJournalStoredDate(iso: string): string {
     timeZone: 'UTC',
   });
 }
+
+/**
+ * Calendar YYYY-MM-DD for a journal `entryDate` / exitDate stored as UTC midnight on that date.
+ * Use this for grouping (daily P/L, filters) — do **not** pass the instant through another timezone
+ * or UTC midnight becomes "yesterday evening" in US zones and shifts the wrong calendar day.
+ */
+export function journalStoredYmd(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return typeof iso === 'string' ? iso.slice(0, 10) : '';
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Short weekday label (Mon…Sun) for the **stored** calendar date — matches list/table semantics
+ * and {@link formatJournalStoredDate} (UTC calendar parts).
+ */
+export function journalStoredWeekdayShort(iso: string | Date): string {
+  const ymd = journalStoredYmd(iso);
+  const parts = ymd.split('-').map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const day = parts[2];
+  if (!y || !m || !day) return '—';
+  const utcNoon = new Date(Date.UTC(y, m - 1, day, 12, 0, 0));
+  return utcNoon.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+}

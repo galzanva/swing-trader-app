@@ -68,19 +68,19 @@ function Section({
 }) {
   return (
     <section className="rounded-xl border border-border bg-surface-2 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-border bg-surface-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
+      <div className="px-5 py-3 border-b border-border bg-surface-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
           {title}
         </h3>
       </div>
-      <div className="px-4 py-3">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </section>
   );
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 py-2 border-b border-border last:border-0 text-sm">
+    <div className="flex justify-between gap-4 py-2.5 border-b border-border last:border-0 text-base">
       <span className="text-text-muted shrink-0">{label}</span>
       <span className="text-text-primary font-medium text-right min-w-0 break-words">{value}</span>
     </div>
@@ -96,35 +96,35 @@ function OHLCCard({ title, bar }: { title: string; bar: OHLCBar | null }) {
     );
   }
   return (
-    <div className="rounded-lg bg-surface-2 border border-border p-4">
+    <div className="rounded-xl bg-surface-2 border border-border p-5">
       <div className="mb-3">
-        <div className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{title}</div>
+        <div className="text-sm font-semibold text-text-secondary uppercase tracking-wide">{title}</div>
         {bar.timestamp != null && (
-          <div className="text-[10px] text-text-muted mt-1">
+          <div className="text-xs text-text-muted mt-1">
             Polygon session date (ET): {nyseCalendarDateString(bar.timestamp)}
           </div>
         )}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-base">
         <div>
-          <div className="text-[10px] text-text-muted uppercase">Open</div>
-          <div className="text-text-primary font-mono">{bar.open != null ? `$${bar.open.toFixed(2)}` : '—'}</div>
+          <div className="text-xs text-text-muted uppercase font-medium">Open</div>
+          <div className="text-text-primary font-mono tabular-nums">{bar.open != null ? `$${bar.open.toFixed(2)}` : '—'}</div>
         </div>
         <div>
-          <div className="text-[10px] text-text-muted uppercase">High</div>
-          <div className="text-profit font-mono">{bar.high != null ? `$${bar.high.toFixed(2)}` : '—'}</div>
+          <div className="text-xs text-text-muted uppercase font-medium">High</div>
+          <div className="text-profit font-mono tabular-nums">{bar.high != null ? `$${bar.high.toFixed(2)}` : '—'}</div>
         </div>
         <div>
-          <div className="text-[10px] text-text-muted uppercase">Low</div>
-          <div className="text-loss font-mono">{bar.low != null ? `$${bar.low.toFixed(2)}` : '—'}</div>
+          <div className="text-xs text-text-muted uppercase font-medium">Low</div>
+          <div className="text-loss font-mono tabular-nums">{bar.low != null ? `$${bar.low.toFixed(2)}` : '—'}</div>
         </div>
         <div>
-          <div className="text-[10px] text-text-muted uppercase">Close</div>
-          <div className="text-text-primary font-mono">{bar.close != null ? `$${bar.close.toFixed(2)}` : '—'}</div>
+          <div className="text-xs text-text-muted uppercase font-medium">Close</div>
+          <div className="text-text-primary font-mono tabular-nums">{bar.close != null ? `$${bar.close.toFixed(2)}` : '—'}</div>
         </div>
         <div className="sm:col-span-2">
-          <div className="text-[10px] text-text-muted uppercase">Volume</div>
-          <div className="text-text-secondary font-mono">{bar.volume != null ? formatVol(bar.volume) : '—'}</div>
+          <div className="text-xs text-text-muted uppercase font-medium">Volume</div>
+          <div className="text-text-secondary font-mono tabular-nums">{bar.volume != null ? formatVol(bar.volume) : '—'}</div>
         </div>
       </div>
     </div>
@@ -230,26 +230,27 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
         aria-hidden
         onClick={onClose}
       />
-      <aside
-        className="fixed inset-y-0 right-0 z-[71] w-full sm:max-w-lg bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trade-drawer-title"
-      >
+      <div className="fixed inset-0 z-[71] flex justify-end pointer-events-none">
+        <aside
+          className="pointer-events-auto h-full w-full sm:max-w-3xl xl:max-w-[56rem] bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trade-drawer-title"
+        >
         {/* Header */}
-        <div className="shrink-0 border-b border-border bg-surface-2 px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="shrink-0 border-b border-border bg-surface-2 px-6 lg:px-8 py-5">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               {loading ? (
-                <div className="h-8 w-40 bg-surface-3 rounded animate-pulse" />
+                <div className="h-10 w-48 bg-surface-3 rounded-lg animate-pulse" />
               ) : detail ? (
                 <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 id="trade-drawer-title" className="text-2xl font-bold text-text-primary tracking-tight font-mono">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h2 id="trade-drawer-title" className="text-3xl font-bold text-text-primary tracking-tight font-mono">
                       {detail.ticker}
                     </h2>
                     <span
-                      className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                      className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-lg ${
                         detail.direction === 'long'
                           ? 'bg-profit/10 text-profit border border-profit/30'
                           : 'bg-loss/10 text-loss border border-loss/30'
@@ -257,22 +258,22 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                     >
                       {detail.direction.toUpperCase()}
                     </span>
-                    <span className="inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full bg-surface-3 text-text-secondary border border-border">
+                    <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border">
                       {detail.tradeType === 'intraday' ? 'INTRADAY' : 'SWING'}
                     </span>
                     {(detail.source || 'manual') === 'webull' && (
-                      <span className="inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full bg-surface-3 text-text-secondary border border-border">
+                      <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border">
                         WEBULL
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-text-muted mt-1.5">
+                  <p className="text-sm text-text-muted mt-2">
                     {detail.isOpen ? 'Open position' : 'Closed trade'}
                     {detail.holdingDays != null && !detail.isOpen ? ` · ${detail.holdingDays}d hold` : ''}
                   </p>
                 </>
               ) : (
-                <h2 id="trade-drawer-title" className="text-lg font-semibold text-text-primary">
+                <h2 id="trade-drawer-title" className="text-xl font-semibold text-text-primary">
                   Trade details
                 </h2>
               )}
@@ -283,34 +284,34 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
               className="shrink-0 text-text-muted hover:text-text-primary p-2 rounded-lg hover:bg-surface-3 transition-colors"
               title="Close"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           {detail && !detail.isOpen && detail.returnPct != null && (
-            <div className="mt-4 flex flex-wrap gap-4">
+            <div className="mt-5 flex flex-wrap gap-4">
               <div
-                className={`rounded-xl px-4 py-3 min-w-[120px] border ${
+                className={`rounded-xl px-5 py-4 min-w-[140px] border ${
                   (detail.profitLoss ?? 0) >= 0
                     ? 'bg-profit/10 border-profit/25'
                     : 'bg-loss/10 border-loss/25'
                 }`}
               >
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">P / L</div>
+                <div className="text-xs uppercase tracking-wider text-text-muted font-medium">P / L</div>
                 <div
-                  className={`text-xl font-bold tabular-nums ${
+                  className={`text-2xl font-bold tabular-nums ${
                     (detail.profitLoss ?? 0) >= 0 ? 'text-profit' : 'text-loss'
                   }`}
                 >
                   {formatMoney(detail.profitLoss)}
                 </div>
               </div>
-              <div className="rounded-xl px-4 py-3 min-w-[100px] border border-border bg-surface-2">
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">Return</div>
+              <div className="rounded-xl px-5 py-4 min-w-[120px] border border-border bg-surface-2">
+                <div className="text-xs uppercase tracking-wider text-text-muted font-medium">Return</div>
                 <div
-                  className={`text-xl font-bold tabular-nums ${
+                  className={`text-2xl font-bold tabular-nums ${
                     detail.returnPct >= 0 ? 'text-profit' : 'text-loss'
                   }`}
                 >
@@ -319,9 +320,9 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 </div>
               </div>
               {detail.rMultiple != null && (
-                <div className="rounded-xl px-4 py-3 min-w-[80px] border border-border bg-surface-2">
-                  <div className="text-[10px] uppercase tracking-wider text-text-muted">R</div>
-                  <div className="text-xl font-bold text-text-primary tabular-nums">{detail.rMultiple.toFixed(2)}</div>
+                <div className="rounded-xl px-5 py-4 min-w-[100px] border border-border bg-surface-2">
+                  <div className="text-xs uppercase tracking-wider text-text-muted font-medium">R</div>
+                  <div className="text-2xl font-bold text-text-primary tabular-nums">{detail.rMultiple.toFixed(2)}</div>
                 </div>
               )}
             </div>
@@ -329,7 +330,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 lg:px-8 py-5 space-y-5">
           {loading && (
             <div className="space-y-3">
               {[1, 2, 3, 4].map(i => (
@@ -381,7 +382,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
               </Section>
 
               <Section title="Session OHLC (saved)">
-                <p className="text-[11px] text-text-muted mb-3 leading-relaxed">
+                <p className="text-sm text-text-muted mb-3 leading-relaxed">
                   Daily bars are saved as <span className="text-text-secondary">unadjusted</span> US session OHLC so levels align with broker prints; re-save the trade to refresh after a bad match.
                 </p>
                 <div className="space-y-3">
@@ -395,11 +396,11 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
               <Section title="Technicals (daily @ save)">
                 {detail.exitDate &&
                   detail.entryDate.slice(0, 10) === detail.exitDate.slice(0, 10) && (
-                    <p className="text-[11px] text-loss mb-3 rounded-lg border border-loss/25 bg-loss/10 px-3 py-2 leading-relaxed">
+                    <p className="text-sm text-loss mb-3 rounded-lg border border-loss/25 bg-loss/10 px-4 py-3 leading-relaxed">
                       Same calendar day for entry and exit: we store <strong>one daily bar</strong> per date, so both columns use that bar&apos;s OHLC and the same end-of-day indicators (not your intraday exit time).
                     </p>
                   )}
-                <p className="text-[11px] text-text-muted mb-3 leading-relaxed">
+                <p className="text-sm text-text-muted mb-3 leading-relaxed">
                   EMA, RSI, and ATR use Polygon <span className="text-text-secondary">unadjusted</span> daily closes <strong>through</strong> each session (oldest → newest). After a huge day from a low base, EMAs can still sit <strong>below</strong> the last close because they weight many prior sessions. ATR(14) is a <strong>smoothed</strong> average of true range — often much smaller than that day&apos;s high−low spike.
                   {detail.tradeType === 'intraday' && (
                     <span> ATR % = ATR ÷ that session&apos;s daily close.</span>
@@ -407,15 +408,15 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                   If rows show dashes, use <span className="text-accent">Refresh OHLC</span> on the journal page (refreshes trades matching your filters; needs Polygon).
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="rounded-lg bg-surface-2 border border-border p-3">
-                    <div className="text-xs font-semibold text-text-secondary mb-2">At entry</div>
+                  <div className="rounded-xl bg-surface-2 border border-border p-4">
+                    <div className="text-sm font-semibold text-text-secondary mb-3">At entry</div>
                     <Row label="EMA 9 / 20 / 50" value={`${n(detail.entryEMA9)} / ${n(detail.entryEMA20)} / ${n(detail.entryEMA50)}`} />
                     <Row label="RSI" value={n(detail.entryRSI)} />
                     <Row label="ATR ($)" value={n(detail.entryATR)} />
                     <Row label="ATR % of day close" value={atrPctLabel(detail.entryATR, entryBar?.close)} />
                   </div>
-                  <div className="rounded-lg bg-surface-2 border border-border p-3">
-                    <div className="text-xs font-semibold text-text-secondary mb-2">At exit</div>
+                  <div className="rounded-xl bg-surface-2 border border-border p-4">
+                    <div className="text-sm font-semibold text-text-secondary mb-3">At exit</div>
                     <Row label="EMA 9 / 20 / 50" value={`${n(detail.exitEMA9)} / ${n(detail.exitEMA20)} / ${n(detail.exitEMA50)}`} />
                     <Row label="RSI" value={n(detail.exitRSI)} />
                     <Row label="ATR ($)" value={n(detail.exitATR)} />
@@ -438,11 +439,11 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
 
               {detail.notes && (
                 <Section title="Notes">
-                  <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{detail.notes}</p>
+                  <p className="text-base text-text-secondary leading-relaxed whitespace-pre-wrap">{detail.notes}</p>
                 </Section>
               )}
 
-              <p className="text-[11px] text-text-muted text-center pt-2">
+              <p className="text-sm text-text-muted text-center pt-3">
                 Saved {formatSavedAt(detail.createdAt)}
                 {detail.updatedAt !== detail.createdAt ? ` · Updated ${formatSavedAt(detail.updatedAt)}` : ''}
               </p>
@@ -451,12 +452,12 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
         </div>
 
         {/* Footer actions */}
-        <div className="shrink-0 border-t border-border bg-surface-2 px-5 py-4 space-y-3">
-          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+        <div className="shrink-0 border-t border-border bg-surface-2 px-6 lg:px-8 py-5">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-lg border border-border text-text-secondary hover:bg-surface-3 text-sm font-medium transition-colors"
+              className="px-5 py-3 rounded-xl border border-border text-text-secondary hover:bg-surface-3 text-base font-medium transition-colors"
             >
               Close
             </button>
@@ -467,7 +468,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 if (!detail) return;
                 onEdit(detailToTradeForEdit(detail));
               }}
-              className="px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+              className="px-5 py-3 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-base font-semibold transition-colors"
             >
               Edit trade
             </button>
@@ -481,13 +482,14 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 setDeleting(false);
                 if (ok) onClose();
               }}
-              className="px-4 py-2.5 rounded-lg bg-loss/90 hover:bg-loss disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+              className="px-5 py-3 rounded-xl bg-loss/90 hover:bg-loss disabled:opacity-40 text-white text-base font-semibold transition-colors"
             >
               {deleting ? 'Deleting…' : 'Delete'}
             </button>
           </div>
         </div>
       </aside>
+      </div>
     </>
   );
 }

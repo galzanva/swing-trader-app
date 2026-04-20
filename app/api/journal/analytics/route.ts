@@ -1,12 +1,12 @@
 /**
- * GET /api/journal/analytics — Compute Tradervue-style analytics from trade data.
- * Returns breakdown reports: by strategy, time-of-day, price range, sector, ticker,
- * day-of-week, R-multiple distribution, holding period, and overall stats.
+ * GET /api/journal/analytics — Compute analytics from trade data with optional date filtering.
+ * Query params: from (YYYY-MM-DD), to (YYYY-MM-DD), tz (optional; client may send for compatibility — day/dow buckets use stored calendar dates, not tz-shifted instants)
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
+import { journalStoredWeekdayShort, journalStoredYmd } from '@/lib/trade-dates';
 
 interface BucketStats {
   label: string;
@@ -74,20 +74,9 @@ function getPriceRange(price: number): string {
   return '$50+';
 }
 
-/** floatShares is stored in millions of shares (Finnhub shareOutstanding). */
 const FLOAT_BUCKET_ORDER = [
-  'Under 1M',
-  '1M–5M',
-  '6M–9M',
-  '10M–15M',
-  '16M–20M',
-  '20M–30M',
-  '31M–40M',
-  '41M–50M',
-  '51M–100M',
-  '101M–200M',
-  '200M+',
-  'Unknown',
+  'Under 1M', '1M–5M', '6M–9M', '10M–15M', '16M–20M',
+  '20M–30M', '31M–40M', '41M–50M', '51M–100M', '101M–200M', '200M+', 'Unknown',
 ];
 
 function getFloatRange(floatM: number | null): string {
@@ -105,28 +94,54 @@ function getFloatRange(floatM: number | null): string {
   return '200M+';
 }
 
-function getDayOfWeek(dateStr: string): string {
-  const d = new Date(dateStr);
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+function getHoldingBucket(holdingDays: number | null): string {
+  if (holdingDays === null || holdingDays === undefined) return 'Unknown';
+  if (holdingDays === 0) return 'Same Day';
+  if (holdingDays <= 1) return '1 Day';
+  if (holdingDays <= 3) return '2-3 Days';
+  if (holdingDays <= 7) return '4-7 Days';
+  if (holdingDays <= 14) return '1-2 Weeks';
+  if (holdingDays <= 30) return '2-4 Weeks';
+  return '1+ Month';
 }
 
-export async function GET() {
+function getDirectionLabel(dir: string): string {
+  return dir === 'long' ? 'Long' : dir === 'short' ? 'Short' : dir;
+}
+
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    const where: any = {
+      userId: session.user.id,
+      isOpen: false,
+      returnPct: { not: null },
+    };
+
+    // entryDate is stored as midnight UTC (date-only), so filter with plain UTC boundaries
+    if (fromParam) {
+      where.entryDate = { ...where.entryDate, gte: new Date(fromParam + 'T00:00:00.000Z') };
+    }
+    if (toParam) {
+      where.entryDate = { ...where.entryDate, lte: new Date(toParam + 'T23:59:59.999Z') };
+    }
+
     const trades = await prisma.tradeJournal.findMany({
-      where: { userId: session.user.id, isOpen: false, returnPct: { not: null } },
+      where,
       orderBy: { entryDate: 'desc' },
     });
 
     if (trades.length === 0) {
-      return NextResponse.json({ success: true, reports: null, message: 'No closed trades to analyze' });
+      return NextResponse.json({ success: true, reports: null, message: 'No closed trades in selected range' });
     }
 
-    // Overall stats
     const overall = computeBucket('Overall', trades);
     const intradayTrades = trades.filter(t => t.tradeType === 'intraday');
     const swingTrades = trades.filter(t => t.tradeType === 'swing');
@@ -142,7 +157,7 @@ export async function GET() {
       .map(([k, v]) => computeBucket(k, v))
       .sort((a, b) => b.totalPL - a.totalPL);
 
-    // By time of day (entry time)
+    // By time of day (intraday only)
     const timeMap = new Map<string, any[]>();
     for (const t of intradayTrades) {
       const key = getHourBucket(t.entryTime);
@@ -196,17 +211,42 @@ export async function GET() {
         return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
       });
 
-    // By day of week
+    // By day of week (weekday of stored calendar date — not the instant in `tz`, which would shift UTC midnight into the prior local evening)
     const dowMap = new Map<string, any[]>();
     for (const t of trades) {
-      const key = getDayOfWeek(t.entryDate.toISOString());
+      const key = journalStoredWeekdayShort(t.entryDate);
       if (!dowMap.has(key)) dowMap.set(key, []);
       dowMap.get(key)!.push(t);
     }
     const byDayOfWeek = [...dowMap.entries()]
       .map(([k, v]) => computeBucket(k, v))
       .sort((a, b) => {
-        const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return order.indexOf(a.label) - order.indexOf(b.label);
+      });
+
+    // By direction (long vs short)
+    const dirMap = new Map<string, any[]>();
+    for (const t of trades) {
+      const key = getDirectionLabel(t.direction);
+      if (!dirMap.has(key)) dirMap.set(key, []);
+      dirMap.get(key)!.push(t);
+    }
+    const byDirection = [...dirMap.entries()]
+      .map(([k, v]) => computeBucket(k, v))
+      .sort((a, b) => b.totalPL - a.totalPL);
+
+    // By holding period
+    const holdMap = new Map<string, any[]>();
+    for (const t of trades) {
+      const key = getHoldingBucket(t.holdingDays);
+      if (!holdMap.has(key)) holdMap.set(key, []);
+      holdMap.get(key)!.push(t);
+    }
+    const byHoldingPeriod = [...holdMap.entries()]
+      .map(([k, v]) => computeBucket(k, v))
+      .sort((a, b) => {
+        const order = ['Same Day', '1 Day', '2-3 Days', '4-7 Days', '1-2 Weeks', '2-4 Weeks', '1+ Month', 'Unknown'];
         return order.indexOf(a.label) - order.indexOf(b.label);
       });
 
@@ -221,7 +261,7 @@ export async function GET() {
       .sort((a, b) => b.trades - a.trades)
       .slice(0, 15);
 
-    // Cumulative P/L over time (daily)
+    // Cumulative P/L
     const sortedByDate = [...trades].sort(
       (a, b) => new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime()
     );
@@ -229,14 +269,25 @@ export async function GET() {
     const cumulativePL = sortedByDate.map(t => {
       cumPL += t.profitLoss ?? 0;
       return {
-        date: t.entryDate.toISOString().split('T')[0],
+        date: journalStoredYmd(t.entryDate),
         ticker: t.ticker,
         pnl: Math.round((t.profitLoss ?? 0) * 100) / 100,
         cumulative: Math.round(cumPL * 100) / 100,
       };
     });
 
-    // Enrichment coverage (sector vs float — float was missing in early API saves)
+    // Daily P/L aggregation (keys = stored journal calendar days, aligned with filters / journal list)
+    const dailyMap = new Map<string, number>();
+    for (const t of sortedByDate) {
+      const day = journalStoredYmd(t.entryDate);
+      dailyMap.set(day, (dailyMap.get(day) || 0) + (t.profitLoss ?? 0));
+    }
+    const dailyPL = [...dailyMap.entries()].map(([date, pnl]) => ({
+      date,
+      pnl: Math.round(pnl * 100) / 100,
+    }));
+
+    // Enrichment coverage
     const withSector = trades.filter(t => (t as any).sector).length;
     const withFloat = trades.filter(t => (t as any).floatShares != null).length;
 
@@ -252,8 +303,11 @@ export async function GET() {
         bySector,
         byFloat,
         byDayOfWeek,
+        byDirection,
+        byHoldingPeriod,
         byTicker,
         cumulativePL,
+        dailyPL,
         enrichmentCoverage: {
           total: trades.length,
           withSector,

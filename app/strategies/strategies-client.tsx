@@ -68,6 +68,28 @@ export default function StrategiesClient() {
     setError('');
   };
 
+  const closeFormDrawer = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
+  useEffect(() => {
+    if (!showForm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowForm(false);
+        resetForm();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [showForm]);
+
   const openCreate = () => {
     resetForm();
     setShowForm(true);
@@ -169,136 +191,152 @@ export default function StrategiesClient() {
         </button>
       </div>
 
-      {/* Strategy Form Modal */}
+      {/* Strategy Form Drawer */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-surface-1 border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="text-lg font-bold text-text-primary mb-4">
-              {editingId ? 'Edit Strategy' : 'New Strategy'}
-            </h2>
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[70] transition-opacity" aria-hidden onClick={closeFormDrawer} />
+          <div className="fixed inset-0 z-[71] flex justify-end pointer-events-none">
+            <aside
+              className="pointer-events-auto h-full w-full sm:max-w-3xl xl:max-w-[56rem] bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="strategy-form-title"
+            >
+            <div className="shrink-0 border-b border-border bg-surface-2 px-6 lg:px-8 py-5 flex items-center justify-between gap-4">
+              <h2 id="strategy-form-title" className="text-2xl font-bold text-text-primary">
+                {editingId ? 'Edit Strategy' : 'New Strategy'}
+              </h2>
+              <button
+                type="button"
+                onClick={closeFormDrawer}
+                className="shrink-0 text-text-muted hover:text-text-primary p-2 rounded-lg hover:bg-surface-3 transition-colors"
+                title="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-            {error && (
-              <div className="bg-loss/10 border border-loss/30 rounded-lg p-3 text-sm text-loss mb-4">{error}</div>
-            )}
+            <div className="flex-1 overflow-y-auto px-6 lg:px-8 py-6">
+              {error && (
+                <div className="bg-loss/10 border border-loss/30 rounded-xl p-4 text-base text-loss mb-6">{error}</div>
+              )}
 
-            <div className="space-y-4">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Name *</label>
-                <input
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Gap & Go, VWAP Bounce"
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Brief overview of what this strategy does and when to use it"
-                  rows={2}
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none"
-                />
-              </div>
-
-              {/* Trade Type */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Trade Type</label>
-                <div className="flex gap-2">
-                  {(['intraday', 'swing', 'both'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTradeType(t)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        tradeType === t
-                          ? 'bg-accent text-white'
-                          : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
-                      }`}
-                    >
-                      {t === 'intraday' ? 'Day Trade' : t === 'swing' ? 'Swing' : 'Both'}
-                    </button>
-                  ))}
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">Name *</label>
+                  <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="e.g. Gap & Go, VWAP Bounce"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                  />
                 </div>
-              </div>
 
-              {/* Entry Rules */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  Entry Rules <span className="text-text-muted font-normal">(one per line)</span>
-                </label>
-                <textarea
-                  value={entryRules}
-                  onChange={e => setEntryRules(e.target.value)}
-                  placeholder={"Stock gaps up 5%+ premarket\nVolume > 2x avg in first 5 min\nPrice holds above VWAP"}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none text-sm"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">Description</label>
+                  <textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Brief overview of what this strategy does and when to use it"
+                    rows={3}
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none"
+                  />
+                </div>
 
-              {/* Exit Rules */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  Exit Rules <span className="text-text-muted font-normal">(one per line)</span>
-                </label>
-                <textarea
-                  value={exitRules}
-                  onChange={e => setExitRules(e.target.value)}
-                  placeholder={"Take profit at 2R\nStop loss at -1R\nTrailing stop if up 1R+"}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none text-sm"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">Trade Type</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(['intraday', 'swing', 'both'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTradeType(t)}
+                        className={`px-4 py-2.5 rounded-xl text-base font-medium transition-colors ${
+                          tradeType === t
+                            ? 'bg-accent text-white'
+                            : 'bg-surface-2 text-text-secondary border border-border hover:bg-surface-3'
+                        }`}
+                      >
+                        {t === 'intraday' ? 'Day Trade' : t === 'swing' ? 'Swing' : 'Both'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Indicators */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  Indicators <span className="text-text-muted font-normal">(comma separated)</span>
-                </label>
-                <input
-                  value={indicators}
-                  onChange={e => setIndicators(e.target.value)}
-                  placeholder="VWAP, EMA 9, EMA 20, RSI, Volume"
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-sm"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">
+                    Entry Rules <span className="text-text-muted font-normal">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={entryRules}
+                    onChange={e => setEntryRules(e.target.value)}
+                    placeholder={"Stock gaps up 5%+ premarket\nVolume > 2x avg in first 5 min\nPrice holds above VWAP"}
+                    rows={4}
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none"
+                  />
+                </div>
 
-              {/* Timeframes */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
-                  Timeframes <span className="text-text-muted font-normal">(comma separated)</span>
-                </label>
-                <input
-                  value={timeframes}
-                  onChange={e => setTimeframes(e.target.value)}
-                  placeholder="1m, 5m, 15m, daily"
-                  className="w-full px-3 py-2 bg-surface-2 border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-sm"
-                />
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">
+                    Exit Rules <span className="text-text-muted font-normal">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={exitRules}
+                    onChange={e => setExitRules(e.target.value)}
+                    placeholder={"Take profit at 2R\nStop loss at -1R\nTrailing stop if up 1R+"}
+                    rows={4}
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">
+                    Indicators <span className="text-text-muted font-normal">(comma separated)</span>
+                  </label>
+                  <input
+                    value={indicators}
+                    onChange={e => setIndicators(e.target.value)}
+                    placeholder="VWAP, EMA 9, EMA 20, RSI, Volume"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">
+                    Timeframes <span className="text-text-muted font-normal">(comma separated)</span>
+                  </label>
+                  <input
+                    value={timeframes}
+                    onChange={e => setTimeframes(e.target.value)}
+                    placeholder="1m, 5m, 15m, daily"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="shrink-0 border-t border-border bg-surface-2 px-6 lg:px-8 py-5 flex flex-col-reverse sm:flex-row justify-end gap-3">
               <button
-                onClick={() => { setShowForm(false); resetForm(); }}
-                className="px-4 py-2 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-lg text-sm transition-colors"
+                type="button"
+                onClick={closeFormDrawer}
+                className="px-6 py-3 bg-surface-2 text-text-secondary border border-border hover:bg-surface-3 rounded-xl text-base font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors"
+                className="px-6 py-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white font-semibold rounded-xl text-base transition-colors"
               >
                 {saving ? 'Saving...' : editingId ? 'Update Strategy' : 'Create Strategy'}
               </button>
             </div>
+          </aside>
           </div>
-        </div>
+        </>
       )}
 
       {/* Strategies List */}

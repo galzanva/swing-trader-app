@@ -10,6 +10,7 @@ import { isLLMConfigured, getModelDisplayName } from "@/lib/llm/config";
  * Technical Analysis API - AI-Enhanced Technical Analysis
  * Uses the configured LLM for intelligent interpretation of technical data
  * Provides reasoning-backed signal grades, projections, and recommendations
+ * Market data: Polygon.io / Massive aggregates API (POLYGON_API_KEY).
  */
 
 export async function POST(request: Request) {

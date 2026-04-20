@@ -27,8 +27,9 @@ export default function TradeCalculatorHelpModal({ isOpen, onClose, section = 'o
         onClick={onClose}
       />
       
-      {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 z-[101] w-full sm:max-w-2xl bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border">
+      {/* Drawer — outer shell avoids transform+fixed gap at top */}
+      <div className="fixed inset-0 z-[101] flex justify-end pointer-events-none">
+        <div className="pointer-events-auto h-full w-full sm:max-w-3xl xl:max-w-[56rem] bg-surface-1 shadow-2xl flex flex-col animate-slide-in sm:border-l border-border">
         {/* Header */}
         <div className="bg-surface-2 border-b border-border p-6 flex items-center justify-between shrink-0">
           <div>
@@ -89,6 +90,7 @@ export default function TradeCalculatorHelpModal({ isOpen, onClose, section = 'o
             Got it!
           </button>
         </div>
+      </div>
       </div>
     </>
   );

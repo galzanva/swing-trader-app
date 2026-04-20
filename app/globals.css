@@ -65,10 +65,14 @@
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
 /* Animations */
+/* translate3d on the sliding panel only — avoid combining transform + fixed on one node (subpixel gap at top edge). */
 @keyframes slide-in {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from { transform: translate3d(100%, 0, 0); opacity: 0; }
+  to   { transform: translate3d(0, 0, 0); opacity: 1; }
 }
-.animate-slide-in { animation: slide-in 0.3s ease-out; }
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out forwards;
+  backface-visibility: hidden;
+}
 
 .sidebar-transition { transition: width 200ms ease-in-out; }

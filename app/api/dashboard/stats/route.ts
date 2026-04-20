@@ -1,10 +1,7 @@
 /**
- * API endpoint to fetch dashboard statistics
- * - Recent activity (saved reports, trades)
- * - Performance metrics
- * - Strategy usage
+ * GET /api/dashboard/stats — Dashboard data with date range filtering.
+ * Query params: from (YYYY-MM-DD), to (YYYY-MM-DD)
  */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -12,144 +9,128 @@ import { prisma } from '@/lib/db/prisma';
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const userId = session.user.id;
+    const { searchParams } = new URL(request.url);
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
 
-    // Fetch various stats in parallel
-    const [
-      recentReports,
-      totalReports,
-      totalTrades,
-      recentTrades,
-      tradeStats
-    ] = await Promise.all([
-      // Recent saved reports
-      prisma.savedReport.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-        select: {
-          id: true,
-          title: true,
-          type: true,
-          createdAt: true,
-          parameters: true
-        }
-      }),
-      
-      // Total reports count
-      prisma.savedReport.count({
-        where: { userId }
-      }),
-      
-      // Total trades count
-      prisma.tradeJournal.count({
-        where: { userId }
-      }),
-      
-      // Recent trades
+    const dateFilter: any = {};
+    if (fromParam) dateFilter.gte = new Date(fromParam + 'T00:00:00.000Z');
+    if (toParam) dateFilter.lte = new Date(toParam + 'T23:59:59.999Z');
+
+    const hasDateFilter = fromParam || toParam;
+
+    const closedWhere: any = {
+      userId,
+      isOpen: false,
+      returnPct: { not: null },
+      ...(hasDateFilter ? { entryDate: dateFilter } : {}),
+    };
+
+    const allWhere: any = {
+      userId,
+      ...(hasDateFilter ? { entryDate: dateFilter } : {}),
+    };
+
+    const [closedTrades, recentTrades] = await Promise.all([
       prisma.tradeJournal.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
+        where: closedWhere,
+        orderBy: { entryDate: 'desc' },
+        select: {
+          id: true, ticker: true, direction: true, tradeType: true,
+          entryDate: true, exitDate: true, entryTime: true, exitTime: true,
+          entryPrice: true, exitPrice: true,
+          isOpen: true, returnPct: true, profitLoss: true, strategy: true,
+        },
+      }),
+      prisma.tradeJournal.findMany({
+        where: allWhere,
+        orderBy: [{ exitDate: { sort: 'desc', nulls: 'last' } }, { entryDate: 'desc' }],
         take: 5,
         select: {
-          id: true,
-          ticker: true,
-          direction: true,
-          entryDate: true,
-          isOpen: true,
-          returnPct: true,
-          profitLoss: true
-        }
+          id: true, ticker: true, direction: true, tradeType: true,
+          entryDate: true, exitDate: true, exitTime: true,
+          isOpen: true, returnPct: true, profitLoss: true,
+        },
       }),
-      
-      // Trade performance stats
-      prisma.tradeJournal.aggregate({
-        where: {
-          userId,
-          isOpen: false,
-          returnPct: { not: null }
-        },
-        _avg: {
-          returnPct: true,
-          profitLoss: true
-        },
-        _sum: {
-          profitLoss: true
-        }
-      })
     ]);
 
-    // Calculate win rate
-    const closedTrades = await prisma.tradeJournal.findMany({
-      where: {
-        userId,
-        isOpen: false,
-        returnPct: { not: null }
-      },
-      select: {
-        returnPct: true
-      }
-    });
-
-    const winningTrades = closedTrades.filter((t: any) => (t.returnPct || 0) > 0).length;
-    const winRate = closedTrades.length > 0 
-      ? (winningTrades / closedTrades.length) * 100 
+    const totalTrades = closedTrades.length;
+    const wins = closedTrades.filter(t => (t.profitLoss ?? 0) > 0);
+    const losses = closedTrades.filter(t => (t.profitLoss ?? 0) < 0);
+    const winRate = totalTrades > 0 ? Math.round((wins.length / totalTrades) * 100) : 0;
+    const totalPL = closedTrades.reduce((s, t) => s + (t.profitLoss ?? 0), 0);
+    const avgReturn = totalTrades > 0
+      ? closedTrades.reduce((s, t) => s + (t.returnPct ?? 0), 0) / totalTrades
       : 0;
+    const avgPL = totalTrades > 0 ? totalPL / totalTrades : 0;
 
-    // Get today's date for activity tracking
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + (t.profitLoss ?? 0), 0) / wins.length : 0;
+    const avgLoss = losses.length > 0 ? losses.reduce((s, t) => s + (t.profitLoss ?? 0), 0) / losses.length : 0;
 
-    const todayActivity = await prisma.savedReport.count({
-      where: {
-        userId,
-        createdAt: { gte: today }
-      }
-    });
+    const sortedByPL = [...closedTrades].sort((a, b) => (b.profitLoss ?? 0) - (a.profitLoss ?? 0));
+    const largestWin = sortedByPL.length > 0 ? sortedByPL[0] : null;
+    const largestLoss = sortedByPL.length > 0 ? sortedByPL[sortedByPL.length - 1] : null;
 
-    console.log(`[Dashboard] Fetched stats for user ${userId}`);
+    // Daily breakdown for calendar view
+    const dailyMap = new Map<string, { pnl: number; trades: number }>();
+    for (const t of closedTrades) {
+      const day = t.entryDate.toISOString().split('T')[0];
+      const existing = dailyMap.get(day) || { pnl: 0, trades: 0 };
+      existing.pnl += t.profitLoss ?? 0;
+      existing.trades += 1;
+      dailyMap.set(day, existing);
+    }
+    const dailyBreakdown = [...dailyMap.entries()]
+      .map(([date, d]) => ({ date, pnl: Math.round(d.pnl * 100) / 100, trades: d.trades }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalReports,
         totalTrades,
-        winRate: Math.round(winRate),
-        avgReturn: tradeStats._avg.returnPct?.toFixed(2) || '0.00',
-        avgPL: tradeStats._avg.profitLoss?.toFixed(2) || '0.00',
-        totalPL: tradeStats._sum.profitLoss?.toFixed(2) || '0.00',
-        todayActivity
+        winRate,
+        totalPL: Math.round(totalPL * 100) / 100,
+        avgReturn: Math.round(avgReturn * 100) / 100,
+        avgPL: Math.round(avgPL * 100) / 100,
+        wins: wins.length,
+        losses: losses.length,
+        avgWin: Math.round(avgWin * 100) / 100,
+        avgLoss: Math.round(avgLoss * 100) / 100,
+        largestWin: largestWin ? {
+          ticker: largestWin.ticker,
+          pnl: Math.round((largestWin.profitLoss ?? 0) * 100) / 100,
+          returnPct: Math.round((largestWin.returnPct ?? 0) * 100) / 100,
+          date: largestWin.entryDate.toISOString().split('T')[0],
+        } : null,
+        largestLoss: largestLoss && (largestLoss.profitLoss ?? 0) < 0 ? {
+          ticker: largestLoss.ticker,
+          pnl: Math.round((largestLoss.profitLoss ?? 0) * 100) / 100,
+          returnPct: Math.round((largestLoss.returnPct ?? 0) * 100) / 100,
+          date: largestLoss.entryDate.toISOString().split('T')[0],
+        } : null,
       },
-      recentReports: recentReports.map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        type: r.type,
-        createdAt: r.createdAt.toISOString(),
-        symbol: (r.parameters as any)?.symbol || 'N/A'
-      })),
-      recentTrades: recentTrades.map((t: any) => ({
+      dailyBreakdown,
+      recentTrades: recentTrades.map(t => ({
         id: t.id,
         ticker: t.ticker,
         direction: t.direction,
+        tradeType: t.tradeType,
         entryDate: t.entryDate.toISOString(),
+        exitDate: t.exitDate?.toISOString() || null,
+        exitTime: t.exitTime || null,
         isOpen: t.isOpen,
         returnPct: t.returnPct,
-        profitLoss: t.profitLoss
-      }))
+        profitLoss: t.profitLoss,
+      })),
     });
-
   } catch (error: any) {
-    console.error('[Dashboard] Error fetching stats:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[Dashboard] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

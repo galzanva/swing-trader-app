@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import HelpIcon from '@/app/components/help-icon';
 import TradeCalculatorHelpModal from '@/app/components/trade-calculator-help-modal';
 
@@ -11,21 +11,11 @@ interface Preset {
   riskPercent: number;
 }
 
+const DEFAULT_PRESET: Preset = { accountSize: 10000, riskPercent: 1 };
+
 export default function TradeCalculatorClient() {
-  // Load presets from localStorage
-  const [preset, setPreset] = useState<Preset>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('tradeCalcPreset');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          return { accountSize: 10000, riskPercent: 1 };
-        }
-      }
-    }
-    return { accountSize: 10000, riskPercent: 1 };
-  });
+  // Same default on server + first client paint — localStorage is applied in useEffect to avoid hydration mismatch
+  const [preset, setPreset] = useState<Preset>(DEFAULT_PRESET);
 
   // Inputs
   const [mode, setMode] = useState<CalculatorMode>('risk-to-size');
@@ -45,8 +35,32 @@ export default function TradeCalculatorClient() {
   // Validation errors
   const [errors, setErrors] = useState<string[]>([]);
 
-  // Save preset to localStorage whenever it changes
+  const skipPresetSaveRef = useRef(true);
+
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('tradeCalcPreset');
+      if (saved) {
+        const p = JSON.parse(saved) as Preset;
+        if (
+          typeof p.accountSize === 'number' &&
+          typeof p.riskPercent === 'number' &&
+          Number.isFinite(p.accountSize) &&
+          Number.isFinite(p.riskPercent)
+        ) {
+          setPreset({ accountSize: p.accountSize, riskPercent: p.riskPercent });
+        }
+      }
+    } catch {
+      /* keep default */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (skipPresetSaveRef.current) {
+      skipPresetSaveRef.current = false;
+      return;
+    }
     localStorage.setItem('tradeCalcPreset', JSON.stringify(preset));
   }, [preset]);
 
