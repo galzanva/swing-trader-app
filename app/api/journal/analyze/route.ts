@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import { journalStoredYmd } from '@/lib/trade-dates';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 import { callLLM } from '@/lib/llm/client';
@@ -298,7 +299,7 @@ function detectEarlyExits(trades: any[]) {
 
 function formatTrade(t: any, i: number): string {
   const type = t.tradeType === 'intraday' || t.holdingDays === 0 ? 'INTRADAY' : 'SWING';
-  const entryDate = new Date(t.entryDate).toISOString().slice(0, 10);
+  const entryDate = journalStoredYmd(t.entryDate);
   let line = `${i + 1}. [${type}] ${t.ticker} ${t.direction.toUpperCase()} | Entry: $${t.entryPrice.toFixed(2)} (${entryDate})`;
   if (t.exitPrice) line += ` → Exit: $${t.exitPrice.toFixed(2)}`;
   line += ` | Return: ${(t.returnPct ?? 0) > 0 ? '+' : ''}${(t.returnPct ?? 0).toFixed(2)}%`;

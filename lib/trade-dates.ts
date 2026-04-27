@@ -2,6 +2,14 @@
  * Journal / Polygon date alignment.
  * Trades store entryDate as `YYYY-MM-DD` + `T00:00:00.000Z` (UTC midnight on that calendar date).
  * Polygon daily bar `t` is UTC; US session labels follow **America/New_York** calendar days.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * GOLDEN RULE:  Never use local getDay/getDate/getMonth/getFullYear or
+ *               toLocaleDateString() without { timeZone: 'UTC' } on a
+ *               journal entryDate / exitDate.  Those instants are UTC
+ *               midnight; in western-hemisphere zones local interpretation
+ *               shifts them to "yesterday evening" and the wrong calendar day.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 
 const NY = 'America/New_York';
@@ -113,4 +121,45 @@ export function journalStoredWeekdayShort(iso: string | Date): string {
   if (!y || !m || !day) return '—';
   const utcNoon = new Date(Date.UTC(y, m - 1, day, 12, 0, 0));
   return utcNoon.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+}
+
+/**
+ * Short display for a stored journal date: "Apr 18" (UTC calendar day).
+ * Use for compact tables / dashboard where full weekday + year is too long.
+ */
+export function formatJournalDateShort(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return typeof iso === 'string' ? iso.slice(0, 10) : '';
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
+ * UTC "today" as YYYY-MM-DD.
+ * Use only for server-side comparisons with Prisma-returned Date objects.
+ * For user-facing "today" (week strips, date presets), use {@link todayInTimezone}.
+ */
+export function todayUtcYmd(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * "Today" in the user's wall-clock timezone as YYYY-MM-DD.
+ *
+ * Journal dates are stored as `YYYY-MM-DDT00:00:00Z` where the YYYY-MM-DD
+ * matches the user's wall-clock calendar date at the time of entry. Therefore,
+ * user-facing "today" / "this week" / "this month" boundaries must use the user's
+ * timezone, not UTC.  At 10 PM ET on Sunday, UTC is already Monday; pure-UTC
+ * "today" would shift the week calendar forward by a day.
+ */
+export function todayInTimezone(tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }

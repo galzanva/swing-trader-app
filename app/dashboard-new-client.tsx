@@ -5,6 +5,7 @@ import { Session } from 'next-auth';
 import Link from 'next/link';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { WinRateRing } from '@/app/components/charts';
+import { formatJournalDateShort, todayInTimezone } from '@/lib/trade-dates';
 
 interface Stats {
   totalTrades: number;
@@ -86,23 +87,27 @@ export default function DashboardNewClient({ session }: { session: Session }) {
     if (dateRange) fetchData(dateRange);
   }, [dateRange, fetchData]);
 
-  // Build week calendar: current week Mon-Sun
+  // Build week calendar: current week Mon–Sun anchored to the user's timezone "today".
+  // Journal dates are stored as YYYY-MM-DDT00:00:00Z where the YYYY-MM-DD matches the
+  // user's wall-clock date when the trade was entered. dailyBreakdown keys are the same
+  // YYYY-MM-DD. So we use the user-tz "today" for week boundaries, and plain YYYY-MM-DD
+  // strings for matching — no UTC/local mismatch.
   const weekDays = useMemo(() => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset);
+    const todayStr = todayInTimezone(timezone);
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    const todayDate = new Date(ty, tm - 1, td);
+    const dow = todayDate.getDay(); // 0 Sun .. 6 Sat
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(ty, tm - 1, td + mondayOffset);
 
     const days = [];
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const daily = dailyBreakdown.find(db => db.date === dateStr);
-      const isToday = dateStr === today.toISOString().split('T')[0];
-      const isFuture = d > today;
+      const isToday = dateStr === todayStr;
+      const isFuture = dateStr > todayStr;
       days.push({
         dayName: dayNames[i],
         dayNum: d.getDate(),
@@ -114,7 +119,7 @@ export default function DashboardNewClient({ session }: { session: Session }) {
       });
     }
     return days;
-  }, [dailyBreakdown]);
+  }, [dailyBreakdown, timezone]);
 
   if (!dateRange) {
     return <div className="py-20 text-center"><div className="w-6 h-6 border-2 border-text-muted border-t-accent rounded-full animate-spin mx-auto" /></div>;
@@ -307,11 +312,11 @@ export default function DashboardNewClient({ session }: { session: Session }) {
                       }`}>{t.direction.toUpperCase()}</span>
                     </td>
                     <td className="px-6 lg:px-8 py-5 text-text-secondary text-lg">
-                      {new Date(t.entryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatJournalDateShort(t.entryDate)}
                     </td>
                     <td className="px-6 lg:px-8 py-5 text-text-secondary text-lg">
                       {t.exitDate
-                        ? `${new Date(t.exitDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${t.exitTime ? ' ' + t.exitTime : ''}`
+                        ? `${formatJournalDateShort(t.exitDate)}${t.exitTime ? ' ' + t.exitTime : ''}`
                         : '—'}
                     </td>
                     <td className={`px-6 lg:px-8 py-5 text-right text-lg font-semibold tabular-nums ${

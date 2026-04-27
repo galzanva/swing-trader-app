@@ -101,10 +101,11 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Calculate days held
       const entryDate = new Date(trade.entryDate);
-      const today = new Date();
-      const daysHeld = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+      const nowUtc = new Date();
+      const todayUtc = Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), nowUtc.getUTCDate());
+      const entryUtc = Date.UTC(entryDate.getUTCFullYear(), entryDate.getUTCMonth(), entryDate.getUTCDate());
+      const daysHeld = Math.floor((todayUtc - entryUtc) / (1000 * 60 * 60 * 24));
 
       return {
         id: trade.id,

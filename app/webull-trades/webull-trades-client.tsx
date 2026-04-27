@@ -42,12 +42,17 @@ export default function WebullTradesClient() {
   const [forceUpdate, setForceUpdate] = useState(false);
   const [mergeManual, setMergeManual] = useState(false);
 
-  // Set default date range: last 30 days
   useEffect(() => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    setEndDate(now.toISOString().split('T')[0]);
-    setStartDate(thirtyDaysAgo.toISOString().split('T')[0]);
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const today = new Date(todayStr + 'T12:00:00');
+    const thirtyAgo = new Date(today);
+    thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setEndDate(todayStr);
+    setStartDate(fmt(thirtyAgo));
   }, []);
 
   const fetchStatus = useCallback(async () => {

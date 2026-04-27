@@ -1,11 +1,16 @@
 /**
  * GET /api/dashboard/stats — Dashboard data with date range filtering.
  * Query params: from (YYYY-MM-DD), to (YYYY-MM-DD)
+ *
+ * Journal entryDate / exitDate are stored as UTC midnight on the intended calendar date.
+ * All bucketing and date keys use `journalStoredYmd` (UTC YYYY-MM-DD) so they match
+ * the client-side week calendar and date filters.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
+import { journalStoredYmd } from '@/lib/trade-dates';
 
 export async function GET(request: NextRequest) {
   try {
@@ -77,10 +82,10 @@ export async function GET(request: NextRequest) {
     const largestWin = sortedByPL.length > 0 ? sortedByPL[0] : null;
     const largestLoss = sortedByPL.length > 0 ? sortedByPL[sortedByPL.length - 1] : null;
 
-    // Daily breakdown for calendar view
+    // Daily breakdown for calendar view — use journalStoredYmd (UTC YYYY-MM-DD)
     const dailyMap = new Map<string, { pnl: number; trades: number }>();
     for (const t of closedTrades) {
-      const day = t.entryDate.toISOString().split('T')[0];
+      const day = journalStoredYmd(t.entryDate);
       const existing = dailyMap.get(day) || { pnl: 0, trades: 0 };
       existing.pnl += t.profitLoss ?? 0;
       existing.trades += 1;
@@ -106,13 +111,13 @@ export async function GET(request: NextRequest) {
           ticker: largestWin.ticker,
           pnl: Math.round((largestWin.profitLoss ?? 0) * 100) / 100,
           returnPct: Math.round((largestWin.returnPct ?? 0) * 100) / 100,
-          date: largestWin.entryDate.toISOString().split('T')[0],
+          date: journalStoredYmd(largestWin.entryDate),
         } : null,
         largestLoss: largestLoss && (largestLoss.profitLoss ?? 0) < 0 ? {
           ticker: largestLoss.ticker,
           pnl: Math.round((largestLoss.profitLoss ?? 0) * 100) / 100,
           returnPct: Math.round((largestLoss.returnPct ?? 0) * 100) / 100,
-          date: largestLoss.entryDate.toISOString().split('T')[0],
+          date: journalStoredYmd(largestLoss.entryDate),
         } : null,
       },
       dailyBreakdown,

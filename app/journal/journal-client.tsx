@@ -155,10 +155,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [direction, setDirection] = useState<'long' | 'short'>('long');
   const [tradeType, setTradeType] = useState<'swing' | 'intraday'>('intraday');
   const [entryPrice, setEntryPrice] = useState('');
-  const [entryDate, setEntryDate] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
+  const [entryDate, setEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [exitPrice, setExitPrice] = useState('');
   const [exitDate, setExitDate] = useState('');
   const [entryTimeForm, setEntryTimeForm] = useState('');
@@ -233,9 +230,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     return () => clearTimeout(timer);
   }, [ticker]);
 
-  // Get local date string YYYY-MM-DD without timezone shift
-  const localDateStr = (d: Date = new Date()) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const localDateStr = () => new Date().toISOString().slice(0, 10);
 
   // Extract YYYY-MM-DD from a trade's ISO date string (stored as UTC midnight)
   const tradeDateStr = (isoString: string) => isoString.slice(0, 10);
@@ -1172,7 +1167,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                     <optgroup label={`Reports for ${ticker}`}>
                       {tickerReports.map(report => (
                         <option key={report.id} value={report.id}>
-                          {report.type === 'strategy-analysis' ? 'Strategy' : report.type === 'technical-analysis' ? 'TA' : 'Deep'} — {report.title.substring(0, 35)}... ({new Date(report.createdAt).toLocaleDateString()})
+                          {report.type === 'strategy-analysis' ? 'Strategy' : report.type === 'technical-analysis' ? 'TA' : 'Deep'} — {report.title.substring(0, 35)}... ({new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
                         </option>
                       ))}
                     </optgroup>

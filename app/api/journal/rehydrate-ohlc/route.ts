@@ -14,6 +14,7 @@ import {
   computeJournalPolygonPatchFromBars,
   fetchUnadjustedDailyBars,
 } from '@/lib/journal-polygon-enrichment';
+import { journalStoredYmd } from '@/lib/trade-dates';
 
 const MAX_TRADES = 2000;
 const TICKER_DELAY_MS = 280;
@@ -102,8 +103,8 @@ export async function POST(request: NextRequest) {
 
         for (const trade of list) {
           try {
-            const entryYmd = trade.entryDate.toISOString().slice(0, 10);
-            const exitYmd = trade.exitDate ? trade.exitDate.toISOString().slice(0, 10) : null;
+            const entryYmd = journalStoredYmd(trade.entryDate);
+            const exitYmd = trade.exitDate ? journalStoredYmd(trade.exitDate) : null;
             const direction = trade.direction === 'short' ? 'short' : 'long';
 
             const patch = computeJournalPolygonPatchFromBars(bars, {

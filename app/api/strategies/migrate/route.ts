@@ -73,6 +73,28 @@ const STARTER_STRATEGIES = [
       timeframes: ['1m', '5m', '15m'],
     },
   },
+  {
+    name: 'Micro Pullback',
+    description:
+      'Trend-continuation intraday: price stays above VWAP in a strong push, then forms a tight bullish flag (small red / inside candles) off the impulse. Enter on the first green candle that breaks the micro pullback — not the deep dip, the shallow pause in the move.',
+    tradeType: 'intraday',
+    criteria: {
+      entry_rules: [
+        'Price is above VWAP and has already made a clear impulse / leg higher (the “big move”)',
+        'Pullback is shallow — bullish flag / tight consolidation, not a full trend break',
+        'Micro pullback: one or more small red (or doji) candles within the flag, lower volume than the impulse',
+        'Enter on the first green candle that closes above the highs of those small red candles (confirmation)',
+        'Avoid if price loses VWAP or the flag breaks down on volume',
+      ],
+      exit_rules: [
+        'Target retest of prior swing high or next intraday resistance / HOD extension',
+        'Stop below the flag low or below the entry candle low — keep risk tight for micro structure',
+        'If the first green candle fails (immediate red reversal), scratch or reduce',
+      ],
+      indicators: ['VWAP', 'EMA 9', 'Volume', 'Candle structure'],
+      timeframes: ['1m', '5m'],
+    },
+  },
 ];
 
 const KEEP_NAMES = new Set(
@@ -87,7 +109,7 @@ export async function POST() {
     }
     const userId = session.user.id;
 
-    // 1. Upsert the 3 starter strategies
+    // 1. Upsert starter strategies
     const strategyMap = new Map<string, string>(); // lowercase name → id
     for (const s of STARTER_STRATEGIES) {
       const record = await prisma.strategy.upsert({

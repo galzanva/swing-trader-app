@@ -14,52 +14,70 @@ interface DateRangeFilterProps {
   timezone: string;
 }
 
-function todayInTZ(tz: string): Date {
-  const s = new Date().toLocaleDateString('en-CA', { timeZone: tz });
-  return new Date(s + 'T00:00:00');
+/**
+ * "Today" in the user's timezone as a plain YYYY-MM-DD string.
+ * Journal dates are stored as YYYY-MM-DDT00:00:00Z (UTC midnight on the intended calendar date).
+ * The YYYY-MM-DD portion already matches the user's wall-clock date at the time the trade was
+ * entered, so filter boundaries must use the user's wall-clock "today" — NOT UTC today.
+ * (At 10pm ET on Sunday, UTC is already Monday; using UTC "today" would shift week/month presets.)
+ */
+function todayYmd(tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
 }
 
-function formatISO(d: Date): string {
-  return d.toISOString().split('T')[0];
+function ymdToDate(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function startOfWeek(d: Date): Date {
-  const day = d.getDay();
-  const diff = day === 0 ? 6 : day - 1;
+function fmtLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(d: Date, days: number): Date {
   const r = new Date(d);
-  r.setDate(r.getDate() - diff);
+  r.setDate(r.getDate() + days);
   return r;
 }
 
+function startOfWeek(d: Date): Date {
+  const dow = d.getDay(); // 0 Sun .. 6 Sat
+  const diff = dow === 0 ? 6 : dow - 1; // Mon=0
+  return addDays(d, -diff);
+}
+
 function getPresets(tz: string): { label: string; from: string; to: string }[] {
-  const today = todayInTZ(tz);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const todayStr = todayYmd(tz);
+  const today = ymdToDate(todayStr);
+  const yesterday = addDays(today, -1);
 
   const thisWeekStart = startOfWeek(today);
-  const lastWeekEnd = new Date(thisWeekStart);
-  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+  const lastWeekEnd = addDays(thisWeekStart, -1);
   const lastWeekStart = startOfWeek(lastWeekEnd);
 
   const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  const lastMonthEnd = addDays(thisMonthStart, -1);
   const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
 
   const ytdStart = new Date(today.getFullYear(), 0, 1);
-
-  const last30 = new Date(today);
-  last30.setDate(last30.getDate() - 29);
+  const last30 = addDays(today, -29);
 
   return [
-    { label: 'Today', from: formatISO(today), to: formatISO(today) },
-    { label: 'Yesterday', from: formatISO(yesterday), to: formatISO(yesterday) },
-    { label: 'This Week', from: formatISO(thisWeekStart), to: formatISO(today) },
-    { label: 'Last Week', from: formatISO(lastWeekStart), to: formatISO(lastWeekEnd) },
-    { label: 'Last 30 Days', from: formatISO(last30), to: formatISO(today) },
-    { label: 'This Month', from: formatISO(thisMonthStart), to: formatISO(today) },
-    { label: 'Last Month', from: formatISO(lastMonthStart), to: formatISO(lastMonthEnd) },
-    { label: 'YTD', from: formatISO(ytdStart), to: formatISO(today) },
-    { label: 'All Time', from: '2000-01-01', to: formatISO(today) },
+    { label: 'Today', from: todayStr, to: todayStr },
+    { label: 'Yesterday', from: fmtLocal(yesterday), to: fmtLocal(yesterday) },
+    { label: 'This Week', from: fmtLocal(thisWeekStart), to: todayStr },
+    { label: 'Last Week', from: fmtLocal(lastWeekStart), to: fmtLocal(lastWeekEnd) },
+    { label: 'Last 30 Days', from: fmtLocal(last30), to: todayStr },
+    { label: 'This Month', from: fmtLocal(thisMonthStart), to: todayStr },
+    { label: 'Last Month', from: fmtLocal(lastMonthStart), to: fmtLocal(lastMonthEnd) },
+    { label: 'YTD', from: fmtLocal(ytdStart), to: todayStr },
+    { label: 'All Time', from: '2000-01-01', to: todayStr },
   ];
 }
 
@@ -137,8 +155,8 @@ export default function DateRangeFilter({ value, onChange, timezone }: DateRange
   const presets = useMemo(() => getPresets(timezone), [timezone]);
 
   const [calMonth, setCalMonth] = useState(() => {
-    const now = todayInTZ(timezone);
-    return { month: now.getMonth(), year: now.getFullYear() };
+    const d = ymdToDate(todayYmd(timezone));
+    return { month: d.getMonth(), year: d.getFullYear() };
   });
 
   useEffect(() => {
@@ -242,13 +260,12 @@ export default function DateRangeFilter({ value, onChange, timezone }: DateRange
 }
 
 export function getDefaultAllTimeRange(tz: string): DateRange {
-  const today = todayInTZ(tz);
-  return { from: '2000-01-01', to: formatISO(today), label: 'All Time' };
+  return { from: '2000-01-01', to: todayYmd(tz), label: 'All Time' };
 }
 
 export function getDefault30DayRange(tz: string): DateRange {
-  const today = todayInTZ(tz);
-  const from = new Date(today);
-  from.setDate(from.getDate() - 29);
-  return { from: formatISO(from), to: formatISO(today), label: 'Last 30 Days' };
+  const todayStr = todayYmd(tz);
+  const today = ymdToDate(todayStr);
+  const from = addDays(today, -29);
+  return { from: fmtLocal(from), to: todayStr, label: 'Last 30 Days' };
 }
