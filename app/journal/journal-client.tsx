@@ -171,6 +171,8 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   // Strategies from DB
   const [dbStrategies, setDbStrategies] = useState<{ id: string; name: string; tradeType: string }[]>([]);
+  // Broker accounts from DB
+  const [brokerAccounts, setBrokerAccounts] = useState<{ slug: string; name: string }[]>([]);
 
   const exitReasonOptions = [
     { value: 'hit_target', label: 'Hit Target' },
@@ -189,6 +191,9 @@ export default function JournalClient({ session }: JournalClientProps) {
       })
       .catch(() => setDateRange(getDefault30DayRange('America/New_York')));
     fetchTrades(); fetchSavedAnalyses(); fetchStrategies();
+    fetch('/api/brokers').then(r => r.json()).then(d => {
+      if (d.success && d.brokers) setBrokerAccounts(d.brokers.map((b: any) => ({ slug: b.slug, name: b.name })));
+    }).catch(() => {});
   }, []);
 
   // Close edit drawer on Escape
@@ -777,9 +782,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         <select value={brokerFilter} onChange={e => setBrokerFilter(e.target.value)}
           className="px-4 py-2.5 bg-surface-2 border border-border rounded-xl text-base font-medium text-text-secondary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
           <option value="all">All Accounts</option>
-          <option value="webull">Webull</option>
-          <option value="robinhood">Robinhood</option>
-          <option value="tradethepool">TradeThePool</option>
+          {brokerAccounts.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
         </select>
         {hasStrategyFilter && (
           <span className="text-sm text-text-muted">Showing <span className="font-semibold text-text-primary">{strategyFilterLabel}</span> only</span>
@@ -975,7 +978,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                       <div className="flex items-center gap-2">
                         <span className="text-base font-semibold text-text-primary">{trade.ticker}</span>
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-surface-3 text-text-secondary uppercase">
-                          {(trade.broker || 'webull') === 'tradethepool' ? 'TTP' : (trade.broker || 'webull') === 'robinhood' ? 'RH' : 'WB'}
+                          {(() => { const b = trade.broker || 'webull'; if (b === 'robinhood') return 'RH'; if (b.startsWith('tradethepool')) return b.includes('funded') ? 'TTP-F' : 'TTP-E'; if (b === 'webull') return 'WB'; return b.slice(0, 3).toUpperCase(); })()}
                         </span>
                         {trade.isOpen && <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-lg bg-profit/10 text-profit">OPEN</span>}
                       </div>
@@ -1124,9 +1127,8 @@ export default function JournalClient({ session }: JournalClientProps) {
                   <label className="block text-sm font-semibold text-text-secondary mb-2">Account</label>
                   <select value={brokerForm} onChange={(e) => setBrokerForm(e.target.value)}
                     className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
-                    <option value="webull">Webull</option>
-                    <option value="robinhood">Robinhood</option>
-                    <option value="tradethepool">TradeThePool</option>
+                    {brokerAccounts.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
+                    {brokerAccounts.length === 0 && <option value="webull">Webull</option>}
                   </select>
                 </div>
               </div>

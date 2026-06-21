@@ -201,6 +201,7 @@ export default function AnalyticsClient() {
   const [timezone, setTimezone] = useState('America/New_York');
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [brokerFilter, setBrokerFilter] = useState<string>('all');
+  const [brokerAccounts, setBrokerAccounts] = useState<{ slug: string; name: string }[]>([]);
   const [tab, setTab] = useState<ViewTab>('overview');
 
   useEffect(() => {
@@ -214,6 +215,9 @@ export default function AnalyticsClient() {
       .catch(() => {
         setDateRange(getDefaultAllTimeRange('America/New_York'));
       });
+    fetch('/api/brokers').then(r => r.json()).then(d => {
+      if (d.success && d.brokers) setBrokerAccounts(d.brokers.map((b: any) => ({ slug: b.slug, name: b.name })));
+    }).catch(() => {});
   }, []);
 
   const fetchAnalytics = useCallback(async (range: DateRange, tz: string, broker: string) => {
@@ -307,7 +311,7 @@ export default function AnalyticsClient() {
   if (loading) {
     return (
       <div className="space-y-8">
-        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} />
+        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} brokerAccounts={brokerAccounts} />
         <div className="py-20 text-center">
           <div className="w-8 h-8 border-2 border-text-muted border-t-accent rounded-full animate-spin mx-auto" />
           <p className="text-text-muted text-base mt-4">Analyzing trades...</p>
@@ -319,7 +323,7 @@ export default function AnalyticsClient() {
   if (!reports) {
     return (
       <div className="space-y-8">
-        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} />
+        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} brokerAccounts={brokerAccounts} />
         <div className="py-20 text-center px-4">
           <p className="text-text-secondary text-lg">No closed trades found in selected range.</p>
           <p className="text-text-muted text-base mt-2">Try expanding your date range or close some trades first.</p>
@@ -346,6 +350,7 @@ export default function AnalyticsClient() {
         onTabChange={setTab}
         brokerFilter={brokerFilter}
         onBrokerChange={setBrokerFilter}
+        brokerAccounts={brokerAccounts}
         enrichCoverage={reports.enrichmentCoverage}
         onEnrich={handleEnrich}
         enriching={enriching}
@@ -455,7 +460,7 @@ export default function AnalyticsClient() {
 
 /* ── Page Header ───────────────────────────────────────────────── */
 
-function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, brokerFilter, onBrokerChange, enrichCoverage, onEnrich, enriching }: {
+function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, brokerFilter, onBrokerChange, brokerAccounts, enrichCoverage, onEnrich, enriching }: {
   dateRange: DateRange;
   onDateChange: (r: DateRange) => void;
   timezone: string;
@@ -463,6 +468,7 @@ function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, broke
   onTabChange: (t: ViewTab) => void;
   brokerFilter: string;
   onBrokerChange: (b: string) => void;
+  brokerAccounts: { slug: string; name: string }[];
   enrichCoverage?: Reports['enrichmentCoverage'];
   onEnrich?: () => void;
   enriching?: boolean;
@@ -490,9 +496,7 @@ function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, broke
           <select value={brokerFilter} onChange={e => onBrokerChange(e.target.value)}
             className="px-4 py-2.5 bg-surface-2 border border-border rounded-xl text-base font-medium text-text-secondary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
             <option value="all">All Accounts</option>
-            <option value="webull">Webull</option>
-            <option value="robinhood">Robinhood</option>
-            <option value="tradethepool">TradeThePool</option>
+            {brokerAccounts.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
           </select>
           <DateRangeFilter value={dateRange} onChange={onDateChange} timezone={timezone} />
         </div>

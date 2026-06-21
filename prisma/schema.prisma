@@ -31,6 +31,7 @@ model User {
   tradeJournal  TradeJournal[]
   journalAnalyses JournalAnalysis[]
   strategies    Strategy[]
+  brokerAccounts BrokerAccount[]
   webullConnection WebullConnection?
   
   @@index([email])
@@ -246,6 +247,23 @@ model TradeJournal {
   @@index([broker])
   @@index([analysisReportId])
   @@index([exitReason])
+}
+
+// Broker/trading accounts for per-account P/L tracking
+model BrokerAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  slug        String   @db.VarChar(50)   // lowercase identifier used in trades (e.g. "webull", "tradethepool-eval")
+  name        String   @db.VarChar(100)  // display name (e.g. "Webull", "TradeThePool (Eval)")
+  accountType String   @default("cash") @db.VarChar(20) // "cash" | "margin" | "prop-eval" | "prop-funded"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slug])
+  @@index([userId])
 }
 
 // Reusable trading strategies with descriptions and criteria
