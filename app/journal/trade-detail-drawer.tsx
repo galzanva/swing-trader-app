@@ -157,6 +157,7 @@ function detailToTradeForEdit(d: TradeDetail): Trade {
     strategyId: d.strategyId ?? null,
     analysisReportId: d.analysisReportId,
     source: d.source,
+    broker: (d as any).broker || 'webull',
     externalOrderId: d.externalOrderId,
     createdAt: iso(d.createdAt as string),
     updatedAt: iso(d.updatedAt as string),
@@ -261,11 +262,9 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                     <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border">
                       {detail.tradeType === 'intraday' ? 'INTRADAY' : 'SWING'}
                     </span>
-                    {(detail.source || 'manual') === 'webull' && (
-                      <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border">
-                        WEBULL
-                      </span>
-                    )}
+                    <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border uppercase">
+                      {(detail as any).broker || 'webull'}
+                    </span>
                   </div>
                   <p className="text-sm text-text-muted mt-2">
                     {detail.isOpen ? 'Open position' : 'Closed trade'}
@@ -425,17 +424,21 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 </div>
               </Section>
 
-              {(detail.source || 'manual') === 'webull' && (
-                <Section title="Broker / import">
-                  <Row label="Order type" value={detail.orderType || '—'} />
-                  <Row label="Instrument" value={detail.instrumentType || '—'} />
-                  <Row label="Filled qty" value={detail.filledQty != null ? String(detail.filledQty) : '—'} />
-                  <Row label="Avg fill" value={detail.avgFillPrice != null ? `$${detail.avgFillPrice.toFixed(4)}` : '—'} />
-                  {detail.externalOrderId && (
-                    <Row label="External ID" value={<span className="font-mono text-[11px] break-all">{detail.externalOrderId}</span>} />
-                  )}
-                </Section>
-              )}
+              <Section title="Account / Broker">
+                <Row label="Account" value={((detail as any).broker || 'webull').charAt(0).toUpperCase() + ((detail as any).broker || 'webull').slice(1)} />
+                <Row label="Source" value={detail.source || 'manual'} />
+                {(detail.source || 'manual') === 'webull' && (
+                  <>
+                    <Row label="Order type" value={detail.orderType || '—'} />
+                    <Row label="Instrument" value={detail.instrumentType || '—'} />
+                    <Row label="Filled qty" value={detail.filledQty != null ? String(detail.filledQty) : '—'} />
+                    <Row label="Avg fill" value={detail.avgFillPrice != null ? `$${detail.avgFillPrice.toFixed(4)}` : '—'} />
+                  </>
+                )}
+                {detail.externalOrderId && (
+                  <Row label="External ID" value={<span className="font-mono text-[11px] break-all">{detail.externalOrderId}</span>} />
+                )}
+              </Section>
 
               {detail.notes && (
                 <Section title="Notes">

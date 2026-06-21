@@ -273,6 +273,7 @@ export async function POST(request: NextRequest) {
               where: { id: match.id },
               data: {
                 source: 'webull',
+                broker: 'webull',
                 externalOrderId: trade.externalOrderId,
                 entryTime: trade.entryTime,
                 exitTime: trade.exitTime,
@@ -310,6 +311,7 @@ export async function POST(request: NextRequest) {
             holdingDays: trade.holdingDays,
             isOpen: false,
             source: 'webull',
+            broker: 'webull',
             externalOrderId: trade.externalOrderId,
             filledQty: trade.filledQty,
             avgFillPrice: trade.avgFillPrice,

@@ -139,6 +139,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [typeFilter, setTypeFilter] = useState<'all' | 'intraday' | 'swing'>('all');
   const [strategyFilter, setStrategyFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'webull'>('all');
+  const [brokerFilter, setBrokerFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [rehydratingOhlc, setRehydratingOhlc] = useState(false);
@@ -154,6 +155,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [ticker, setTicker] = useState('');
   const [direction, setDirection] = useState<'long' | 'short'>('long');
   const [tradeType, setTradeType] = useState<'swing' | 'intraday'>('intraday');
+  const [brokerForm, setBrokerForm] = useState('webull');
   const [entryPrice, setEntryPrice] = useState('');
   const [entryDate, setEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [exitPrice, setExitPrice] = useState('');
@@ -274,13 +276,18 @@ export default function JournalClient({ session }: JournalClientProps) {
       result = result.filter(trade => (trade.source || 'manual') === sourceFilter);
     }
 
+    // Broker filter
+    if (brokerFilter !== 'all') {
+      result = result.filter(trade => (trade.broker || 'webull') === brokerFilter);
+    }
+
     return [...result].sort((a, b) => {
       const kb = journalTradeSortKey(b);
       const ka = journalTradeSortKey(a);
       if (kb !== ka) return kb - ka;
       return b.id.localeCompare(a.id);
     });
-  }, [trades, dateRange, typeFilter, strategyFilter, sourceFilter]);
+  }, [trades, dateRange, typeFilter, strategyFilter, sourceFilter, brokerFilter]);
 
   const hasTradesWithNoStrategy = useMemo(() =>
     trades.some(t => !t.strategy || !t.strategy.trim()),
@@ -301,7 +308,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   useEffect(() => {
     setTradesPage(1);
     setSelectedIds(new Set());
-  }, [dateRange, typeFilter, strategyFilter, sourceFilter]);
+  }, [dateRange, typeFilter, strategyFilter, sourceFilter, brokerFilter]);
 
   const tradesTotalPages = Math.max(1, Math.ceil(filteredTrades.length / tradesPerPage));
   const tradesPageSafe = Math.min(tradesPage, tradesTotalPages);
@@ -417,6 +424,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         ticker: ticker.toUpperCase(),
         direction,
         tradeType,
+        broker: brokerForm,
         entryPrice: parseFloat(entryPrice),
         entryDate,
         exitPrice: exitPrice ? parseFloat(exitPrice) : undefined,
@@ -450,6 +458,7 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   const resetForm = () => {
     setTicker(''); setDirection('long'); setTradeType('intraday');
+    setBrokerForm('webull');
     setEntryPrice(''); setEntryDate(localDateStr());
     setExitPrice(''); setExitDate(''); setAmount('');
     setEntryTimeForm(''); setExitTimeForm('');
@@ -463,6 +472,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setTicker(trade.ticker);
     setDirection(trade.direction);
     setTradeType(trade.tradeType || (trade.holdingDays === 0 ? 'intraday' : 'swing'));
+    setBrokerForm(trade.broker || 'webull');
     setEntryPrice(trade.entryPrice.toString());
     setEntryDate(trade.entryDate.split('T')[0]);
     setExitPrice(trade.exitPrice?.toString() || '');
@@ -512,6 +522,26 @@ export default function JournalClient({ session }: JournalClientProps) {
       pageIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
       return next;
     });
+  };
+
+  const handleExportCSV = () => {
+    const params = new URLSearchParams();
+    if (dateRange) {
+      params.set('from', dateRange.from);
+      params.set('to', dateRange.to);
+    }
+    if (typeFilter !== 'all') params.set('type', typeFilter);
+    if (strategyFilter) params.set('strategy', strategyFilter);
+    if (sourceFilter !== 'all') params.set('source', sourceFilter);
+    if (brokerFilter !== 'all') params.set('broker', brokerFilter);
+
+    const url = `/api/journal/export?${params.toString()}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const handleRehydrateOhlc = async () => {
@@ -701,6 +731,11 @@ export default function JournalClient({ session }: JournalClientProps) {
                   className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   {rehydratingOhlc ? 'Refreshing...' : `Refresh OHLC (${filteredTrades.length})`}
                 </button>
+                <button onClick={() => { setShowToolsMenu(false); handleExportCSV(); }}
+                  disabled={filteredTrades.length === 0}
+                  className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  Export CSV ({filteredTrades.length})
+                </button>
                 <button onClick={() => { setShowToolsMenu(false); handleAnalyze(); }}
                   disabled={analyzing || filteredClosedCount === 0}
                   className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -738,6 +773,13 @@ export default function JournalClient({ session }: JournalClientProps) {
           <option value="all">All Sources</option>
           <option value="manual">Manual</option>
           <option value="webull">Webull</option>
+        </select>
+        <select value={brokerFilter} onChange={e => setBrokerFilter(e.target.value)}
+          className="px-4 py-2.5 bg-surface-2 border border-border rounded-xl text-base font-medium text-text-secondary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+          <option value="all">All Accounts</option>
+          <option value="webull">Webull</option>
+          <option value="robinhood">Robinhood</option>
+          <option value="tradethepool">TradeThePool</option>
         </select>
         {hasStrategyFilter && (
           <span className="text-sm text-text-muted">Showing <span className="font-semibold text-text-primary">{strategyFilterLabel}</span> only</span>
@@ -932,9 +974,9 @@ export default function JournalClient({ session }: JournalClientProps) {
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span className="text-base font-semibold text-text-primary">{trade.ticker}</span>
-                        {(trade.source || 'manual') === 'webull' && (
-                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-surface-3 text-text-secondary uppercase">WB</span>
-                        )}
+                        <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-surface-3 text-text-secondary uppercase">
+                          {(trade.broker || 'webull') === 'tradethepool' ? 'TTP' : (trade.broker || 'webull') === 'robinhood' ? 'RH' : 'WB'}
+                        </span>
                         {trade.isOpen && <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-lg bg-profit/10 text-profit">OPEN</span>}
                       </div>
                       {trade.entryTime && (
@@ -1056,7 +1098,7 @@ export default function JournalClient({ session }: JournalClientProps) {
 
             {/* Drawer Body */}
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 lg:px-8 py-6 space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-text-secondary mb-2">Ticker *</label>
                   <input type="text" value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase())} placeholder="AAPL"
@@ -1076,6 +1118,15 @@ export default function JournalClient({ session }: JournalClientProps) {
                     className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
                     <option value="long">Long</option>
                     <option value="short">Short</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">Account</label>
+                  <select value={brokerForm} onChange={(e) => setBrokerForm(e.target.value)}
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+                    <option value="webull">Webull</option>
+                    <option value="robinhood">Robinhood</option>
+                    <option value="tradethepool">TradeThePool</option>
                   </select>
                 </div>
               </div>

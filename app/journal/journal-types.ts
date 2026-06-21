@@ -24,6 +24,7 @@ export interface Trade {
   strategyId?: string | null;
   analysisReportId: string | null;
   source: string;
+  broker: string;
   externalOrderId: string | null;
   createdAt: string;
   updatedAt: string;

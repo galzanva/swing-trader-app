@@ -200,6 +200,7 @@ export default function AnalyticsClient() {
   const [enrichMsg, setEnrichMsg] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [brokerFilter, setBrokerFilter] = useState<string>('all');
   const [tab, setTab] = useState<ViewTab>('overview');
 
   useEffect(() => {
@@ -215,10 +216,11 @@ export default function AnalyticsClient() {
       });
   }, []);
 
-  const fetchAnalytics = useCallback(async (range: DateRange, tz: string) => {
+  const fetchAnalytics = useCallback(async (range: DateRange, tz: string, broker: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ from: range.from, to: range.to, tz });
+      if (broker !== 'all') params.set('broker', broker);
       const res = await fetch(`/api/journal/analytics?${params}`);
       const d = await res.json();
       if (d.success && d.reports) setReports(d.reports);
@@ -231,8 +233,8 @@ export default function AnalyticsClient() {
   }, []);
 
   useEffect(() => {
-    if (dateRange) fetchAnalytics(dateRange, timezone);
-  }, [dateRange, timezone, fetchAnalytics]);
+    if (dateRange) fetchAnalytics(dateRange, timezone, brokerFilter);
+  }, [dateRange, timezone, brokerFilter, fetchAnalytics]);
 
   const handleDateChange = (range: DateRange) => setDateRange(range);
 
@@ -244,7 +246,7 @@ export default function AnalyticsClient() {
       const data = await res.json();
       if (data.success) {
         setEnrichMsg(data.message || `Updated ${data.summary?.enriched || 0} trade(s)`);
-        if (dateRange) fetchAnalytics(dateRange, timezone);
+        if (dateRange) fetchAnalytics(dateRange, timezone, brokerFilter);
       } else {
         setEnrichMsg(data.error || 'Enrichment failed');
       }
@@ -305,7 +307,7 @@ export default function AnalyticsClient() {
   if (loading) {
     return (
       <div className="space-y-8">
-        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} />
+        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} />
         <div className="py-20 text-center">
           <div className="w-8 h-8 border-2 border-text-muted border-t-accent rounded-full animate-spin mx-auto" />
           <p className="text-text-muted text-base mt-4">Analyzing trades...</p>
@@ -317,7 +319,7 @@ export default function AnalyticsClient() {
   if (!reports) {
     return (
       <div className="space-y-8">
-        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} />
+        <PageHeader dateRange={dateRange} onDateChange={handleDateChange} timezone={timezone} tab={tab} onTabChange={setTab} brokerFilter={brokerFilter} onBrokerChange={setBrokerFilter} />
         <div className="py-20 text-center px-4">
           <p className="text-text-secondary text-lg">No closed trades found in selected range.</p>
           <p className="text-text-muted text-base mt-2">Try expanding your date range or close some trades first.</p>
@@ -342,6 +344,8 @@ export default function AnalyticsClient() {
         timezone={timezone}
         tab={tab}
         onTabChange={setTab}
+        brokerFilter={brokerFilter}
+        onBrokerChange={setBrokerFilter}
         enrichCoverage={reports.enrichmentCoverage}
         onEnrich={handleEnrich}
         enriching={enriching}
@@ -451,12 +455,14 @@ export default function AnalyticsClient() {
 
 /* ── Page Header ───────────────────────────────────────────────── */
 
-function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, enrichCoverage, onEnrich, enriching }: {
+function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, brokerFilter, onBrokerChange, enrichCoverage, onEnrich, enriching }: {
   dateRange: DateRange;
   onDateChange: (r: DateRange) => void;
   timezone: string;
   tab: ViewTab;
   onTabChange: (t: ViewTab) => void;
+  brokerFilter: string;
+  onBrokerChange: (b: string) => void;
   enrichCoverage?: Reports['enrichmentCoverage'];
   onEnrich?: () => void;
   enriching?: boolean;
@@ -481,6 +487,13 @@ function PageHeader({ dateRange, onDateChange, timezone, tab, onTabChange, enric
               {enriching ? 'Enriching...' : 'Enrich Data'}
             </button>
           )}
+          <select value={brokerFilter} onChange={e => onBrokerChange(e.target.value)}
+            className="px-4 py-2.5 bg-surface-2 border border-border rounded-xl text-base font-medium text-text-secondary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+            <option value="all">All Accounts</option>
+            <option value="webull">Webull</option>
+            <option value="robinhood">Robinhood</option>
+            <option value="tradethepool">TradeThePool</option>
+          </select>
           <DateRangeFilter value={dateRange} onChange={onDateChange} timezone={timezone} />
         </div>
       </div>

@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
         profitLoss: true,
         analysisReportId: true,
         source: true,
+        broker: true,
         externalOrderId: true,
         createdAt: true,
         updatedAt: true,

@@ -30,6 +30,7 @@ interface TradeInput {
   notes?: string;
   isOpen?: boolean;
   exitReason?: 'hit_target' | 'stopped_out' | 'manual_exit' | 'time_exit';
+  broker?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest) {
       notes: body.notes ?? null,
       isOpen,
       exitReason: body.exitReason ?? null,
+      broker: body.broker ?? 'webull',
       returnPct,
       rMultiple,
       holdingDays,

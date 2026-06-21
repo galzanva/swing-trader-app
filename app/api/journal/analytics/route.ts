@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const fromParam = searchParams.get('from');
     const toParam = searchParams.get('to');
+    const brokerParam = searchParams.get('broker');
     const where: any = {
       userId: session.user.id,
       isOpen: false,
@@ -131,6 +132,9 @@ export async function GET(request: NextRequest) {
     }
     if (toParam) {
       where.entryDate = { ...where.entryDate, lte: new Date(toParam + 'T23:59:59.999Z') };
+    }
+    if (brokerParam && brokerParam !== 'all') {
+      where.broker = brokerParam;
     }
 
     const trades = await prisma.tradeJournal.findMany({

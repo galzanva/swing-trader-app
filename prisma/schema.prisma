@@ -175,6 +175,9 @@ model TradeJournal {
   source          String  @default("manual") @db.VarChar(20)  // "manual" | "webull"
   externalOrderId String? @db.VarChar(100) // Webull order ID for deduplication
 
+  // Broker / account tracking
+  broker          String  @default("webull") @db.VarChar(30)  // "webull" | "robinhood" | "tradethepool" | etc.
+
   // User-provided fields (optional)
   strategy    String?  @db.VarChar(100)  // Strategy name or "Other"
   strategyId  String?                     // FK to Strategy model
@@ -240,6 +243,7 @@ model TradeJournal {
   @@index([direction])
   @@index([isOpen])
   @@index([source])
+  @@index([broker])
   @@index([analysisReportId])
   @@index([exitReason])
 }
