@@ -106,6 +106,10 @@ export async function GET(request: NextRequest) {
     const avgReturn = totalClosed > 0 
       ? closedTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalClosed 
       : 0;
+
+    const grossProfit = closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) > 0 ? (t.profitLoss ?? 0) : 0), 0);
+    const grossLoss = Math.abs(closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) < 0 ? (t.profitLoss ?? 0) : 0), 0));
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
     
     const avgRMultiple = closedTrades.filter(t => t.rMultiple !== null).length > 0
       ? closedTrades.filter(t => t.rMultiple !== null).reduce((sum, t) => sum + (t.rMultiple ?? 0), 0) / closedTrades.filter(t => t.rMultiple !== null).length
@@ -126,6 +130,7 @@ export async function GET(request: NextRequest) {
       totalPL: parseFloat(totalPL.toFixed(2)),
       avgPL: parseFloat(avgPL.toFixed(2)),
       avgReturn: parseFloat(avgReturn.toFixed(2)),
+      profitFactor: isFinite(profitFactor) ? parseFloat(profitFactor.toFixed(2)) : profitFactor,
       avgRMultiple: avgRMultiple !== null ? parseFloat(avgRMultiple.toFixed(2)) : null,
       avgHoldingDays: avgHoldingDays !== null ? Math.round(avgHoldingDays) : null,
     };

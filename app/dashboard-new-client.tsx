@@ -191,7 +191,7 @@ export default function DashboardNewClient({ session }: { session: Session }) {
         <StatCard label="Total Trades" value={stats.totalTrades.toString()} />
         <StatCard label="Win Rate" value={`${stats.winRate}%`} variant={stats.winRate >= 50 ? 'profit' : 'loss'} />
         <StatCard label="Total P/L" value={fmt(stats.totalPL)} variant={stats.totalPL >= 0 ? 'profit' : 'loss'} />
-        <StatCard label="Avg Return" value={`${stats.avgReturn > 0 ? '+' : ''}${stats.avgReturn}%`} variant={stats.avgReturn >= 0 ? 'profit' : 'loss'} />
+        <StatCard label="Profit Factor" value={stats.profitFactor === Infinity ? '∞' : stats.profitFactor?.toFixed(2) ?? '0'} variant={stats.profitFactor >= 1 ? 'profit' : 'loss'} />
         <StatCard label="Avg P/L" value={fmt(stats.avgPL)} variant={stats.avgPL >= 0 ? 'profit' : 'loss'} />
       </div>
 

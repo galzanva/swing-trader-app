@@ -339,6 +339,9 @@ export default function JournalClient({ session }: JournalClientProps) {
     const totalPL = closedTrades.reduce((sum, t) => sum + (t.profitLoss ?? 0), 0);
     const avgPL = totalClosed > 0 ? totalPL / totalClosed : 0;
     const avgReturn = totalClosed > 0 ? closedTrades.reduce((sum, t) => sum + (t.returnPct ?? 0), 0) / totalClosed : 0;
+    const grossProfit = closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) > 0 ? (t.profitLoss ?? 0) : 0), 0);
+    const grossLossAbs = Math.abs(closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) < 0 ? (t.profitLoss ?? 0) : 0), 0));
+    const profitFactor = grossLossAbs > 0 ? grossProfit / grossLossAbs : (grossProfit > 0 ? Infinity : 0);
     const dTrades = closedTrades.filter(t => t.holdingDays !== null);
     const avgHoldingDays = dTrades.length > 0 ? dTrades.reduce((sum, t) => sum + (t.holdingDays ?? 0), 0) / dTrades.length : null;
 
@@ -366,6 +369,7 @@ export default function JournalClient({ session }: JournalClientProps) {
       totalPL: parseFloat(totalPL.toFixed(2)),
       avgPL: parseFloat(avgPL.toFixed(2)),
       avgReturn: parseFloat(avgReturn.toFixed(2)),
+      profitFactor: isFinite(profitFactor) ? parseFloat(profitFactor.toFixed(2)) : profitFactor,
       avgHoldingDays: avgHoldingDays !== null ? Math.round(avgHoldingDays) : null,
       avgHoldDetail,
     };
@@ -808,8 +812,8 @@ export default function JournalClient({ session }: JournalClientProps) {
             <div className="text-sm text-text-muted mt-1.5">Avg: {formatCurrency(filteredSummary.avgPL)}</div>
           </div>
           <div className="bg-surface-1 border border-border rounded-2xl p-5 lg:p-6 min-h-[112px] flex flex-col justify-center">
-            <div className="text-sm text-text-muted mb-2 font-medium uppercase tracking-wider">Avg Return</div>
-            <div className={`text-2xl lg:text-3xl font-bold tabular-nums ${filteredSummary.avgReturn >= 0 ? 'text-profit' : 'text-loss'}`}>{filteredSummary.avgReturn > 0 ? '+' : ''}{filteredSummary.avgReturn}%</div>
+            <div className="text-sm text-text-muted mb-2 font-medium uppercase tracking-wider">Profit Factor</div>
+            <div className={`text-2xl lg:text-3xl font-bold tabular-nums ${(filteredSummary.profitFactor ?? 0) >= 1 ? 'text-profit' : 'text-loss'}`}>{filteredSummary.profitFactor === Infinity ? '∞' : filteredSummary.profitFactor?.toFixed(2) ?? '0'}</div>
             <div className="text-sm text-text-muted mt-1.5">{filteredSummary.avgHoldDetail}</div>
           </div>
         </div>

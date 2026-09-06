@@ -17,6 +17,7 @@ interface BucketStats {
   totalPL: number;
   avgPL: number;
   avgReturn: number;
+  profitFactor: number;
   avgR: number | null;
   totalR: number | null;
 }
@@ -30,6 +31,10 @@ function computeBucket(label: string, trades: any[]): BucketStats {
   const avgReturn = closed.length > 0
     ? closed.reduce((s, t) => s + (t.returnPct ?? 0), 0) / closed.length
     : 0;
+  const grossProfit = closed.reduce((s, t) => s + ((t.profitLoss ?? 0) > 0 ? (t.profitLoss ?? 0) : 0), 0);
+  const grossLoss = Math.abs(closed.reduce((s, t) => s + ((t.profitLoss ?? 0) < 0 ? (t.profitLoss ?? 0) : 0), 0));
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
+
   const rTrades = closed.filter(t => t.rMultiple !== null);
   const avgR = rTrades.length > 0
     ? rTrades.reduce((s, t) => s + (t.rMultiple ?? 0), 0) / rTrades.length
@@ -47,6 +52,7 @@ function computeBucket(label: string, trades: any[]): BucketStats {
     totalPL: Math.round(totalPL * 100) / 100,
     avgPL: Math.round(avgPL * 100) / 100,
     avgReturn: Math.round(avgReturn * 100) / 100,
+    profitFactor: isFinite(profitFactor) ? Math.round(profitFactor * 100) / 100 : profitFactor,
     avgR: avgR !== null ? Math.round(avgR * 100) / 100 : null,
     totalR: totalR !== null ? Math.round(totalR * 100) / 100 : null,
   };
@@ -62,7 +68,10 @@ function getHourBucket(timeStr: string | null): string {
   if (h < 13) return '12:00-13:00';
   if (h < 14) return '13:00-14:00';
   if (h < 15) return '14:00-15:00';
-  return '15:00-16:00';
+  if (h < 16) return '15:00-16:00';
+  if (h < 18) return '16:00-18:00';
+  if (h < 20) return '18:00-20:00';
+  return '20:00+';
 }
 
 function getPriceRange(price: number): string {
@@ -161,9 +170,10 @@ export async function GET(request: NextRequest) {
       .map(([k, v]) => computeBucket(k, v))
       .sort((a, b) => b.totalPL - a.totalPL);
 
-    // By time of day (intraday only)
+    // By time of day (all trades with entryTime — includes futures evening sessions)
+    const tradesWithTime = trades.filter(t => t.entryTime);
     const timeMap = new Map<string, any[]>();
-    for (const t of intradayTrades) {
+    for (const t of tradesWithTime) {
       const key = getHourBucket(t.entryTime);
       if (!timeMap.has(key)) timeMap.set(key, []);
       timeMap.get(key)!.push(t);
@@ -171,7 +181,7 @@ export async function GET(request: NextRequest) {
     const byTimeOfDay = [...timeMap.entries()]
       .map(([k, v]) => computeBucket(k, v))
       .sort((a, b) => {
-        const order = ['9:30-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:00', '13:00-14:00', '14:00-15:00', '15:00-16:00', 'Unknown'];
+        const order = ['9:30-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:00', '13:00-14:00', '14:00-15:00', '15:00-16:00', '16:00-18:00', '18:00-20:00', '20:00+', 'Unknown'];
         return order.indexOf(a.label) - order.indexOf(b.label);
       });
 

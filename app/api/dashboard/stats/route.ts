@@ -75,6 +75,10 @@ export async function GET(request: NextRequest) {
       : 0;
     const avgPL = totalTrades > 0 ? totalPL / totalTrades : 0;
 
+    const grossProfit = closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) > 0 ? (t.profitLoss ?? 0) : 0), 0);
+    const grossLoss = Math.abs(closedTrades.reduce((s, t) => s + ((t.profitLoss ?? 0) < 0 ? (t.profitLoss ?? 0) : 0), 0));
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
+
     const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + (t.profitLoss ?? 0), 0) / wins.length : 0;
     const avgLoss = losses.length > 0 ? losses.reduce((s, t) => s + (t.profitLoss ?? 0), 0) / losses.length : 0;
 
@@ -102,6 +106,7 @@ export async function GET(request: NextRequest) {
         winRate,
         totalPL: Math.round(totalPL * 100) / 100,
         avgReturn: Math.round(avgReturn * 100) / 100,
+        profitFactor: isFinite(profitFactor) ? Math.round(profitFactor * 100) / 100 : profitFactor,
         avgPL: Math.round(avgPL * 100) / 100,
         wins: wins.length,
         losses: losses.length,

@@ -13,6 +13,7 @@ interface BucketStats {
   totalPL: number;
   avgPL: number;
   avgReturn: number;
+  profitFactor: number;
   avgR: number | null;
   totalR: number | null;
 }
@@ -49,7 +50,7 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 const plColor = (n: number) => n > 0 ? 'text-profit' : n < 0 ? 'text-loss' : 'text-text-secondary';
 
 type SortDir = 'asc' | 'desc';
-type SortCol = 'label' | 'trades' | 'winRate' | 'totalPL' | 'avgPL' | 'avgReturn' | 'avgR';
+type SortCol = 'label' | 'trades' | 'winRate' | 'totalPL' | 'avgPL' | 'profitFactor' | 'avgR';
 
 function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -88,6 +89,9 @@ function ReportTable({ title, data, showR = false }: {
       } else if (sortCol === 'avgR') {
         av = a.avgR ?? -Infinity;
         bv = b.avgR ?? -Infinity;
+      } else if (sortCol === 'profitFactor') {
+        av = isFinite(a.profitFactor) ? a.profitFactor : 9999;
+        bv = isFinite(b.profitFactor) ? b.profitFactor : 9999;
       } else {
         av = a[sortCol];
         bv = b[sortCol];
@@ -108,7 +112,7 @@ function ReportTable({ title, data, showR = false }: {
     { key: 'winRate', label: 'Win Rate', align: 'right' },
     { key: 'totalPL', label: 'Total P/L', align: 'right' },
     { key: 'avgPL', label: 'Avg P/L', align: 'right' },
-    { key: 'avgReturn', label: 'Avg Return', align: 'right' },
+    { key: 'profitFactor', label: 'Profit Factor', align: 'right' },
     ...(showR ? [{ key: 'avgR' as SortCol, label: 'Avg R', align: 'right' as const }] : []),
   ];
 
@@ -146,7 +150,7 @@ function ReportTable({ title, data, showR = false }: {
                 </td>
                 <td className={`px-5 lg:px-6 py-4 text-right font-semibold tabular-nums ${plColor(row.totalPL)}`}>{fmt(row.totalPL)}</td>
                 <td className={`px-5 lg:px-6 py-4 text-right tabular-nums ${plColor(row.avgPL)}`}>{fmt(row.avgPL)}</td>
-                <td className={`px-5 lg:px-6 py-4 text-right tabular-nums ${plColor(row.avgReturn)}`}>{fmtPct(row.avgReturn)}</td>
+                <td className={`px-5 lg:px-6 py-4 text-right tabular-nums ${(row.profitFactor ?? 0) >= 1 ? 'text-profit' : 'text-loss'}`}>{row.profitFactor === Infinity ? '∞' : row.profitFactor?.toFixed(2) ?? '0'}</td>
                 {showR && (
                   <td className={`px-5 lg:px-6 py-4 text-right tabular-nums ${row.avgR !== null ? plColor(row.avgR) : 'text-text-muted'}`}>
                     {row.avgR !== null ? `${row.avgR.toFixed(2)}R` : '—'}
@@ -363,21 +367,12 @@ export default function AnalyticsClient() {
       {tab === 'overview' && reports && o && (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 lg:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-5">
             <StatCard label="Total P/L" value={fmt(o.totalPL)} color={plColor(o.totalPL)} />
             <StatCard label="Win Rate" value={`${o.winRate}%`} sub={`${o.wins}W / ${o.losses}L`} color={o.winRate >= 50 ? 'text-profit' : 'text-loss'} />
             <StatCard label="Avg P/L" value={fmt(o.avgPL)} color={plColor(o.avgPL)} />
-            <StatCard label="Avg Return" value={fmtPct(o.avgReturn)} color={plColor(o.avgReturn)} />
+            <StatCard label="Profit Factor" value={o.profitFactor === Infinity ? '∞' : o.profitFactor?.toFixed(2) ?? '0'} color={(o.profitFactor ?? 0) >= 1 ? 'text-profit' : 'text-loss'} />
             <StatCard label="Total Trades" value={`${o.trades}`} sub={`${reports.intraday.trades} day / ${reports.swing.trades} swing`} />
-            <StatCard
-              label="Profit Factor"
-              value={(() => {
-                const gp = reports.cumulativePL.reduce((s, p) => s + (p.pnl > 0 ? p.pnl : 0), 0);
-                const gl = Math.abs(reports.cumulativePL.reduce((s, p) => s + (p.pnl < 0 ? p.pnl : 0), 0));
-                return gl > 0 ? (gp / gl).toFixed(2) : '∞';
-              })()}
-              color="text-text-primary"
-            />
           </div>
 
           {/* Key Insights */}
@@ -428,7 +423,7 @@ export default function AnalyticsClient() {
         <>
           <ReportTable title="By Strategy" data={reports.byStrategy} showR />
           {reports.byDirection.length > 0 && <ReportTable title="Long vs Short" data={reports.byDirection} />}
-          {reports.byTimeOfDay.length > 0 && <ReportTable title="By Time of Day (Intraday)" data={reports.byTimeOfDay} />}
+          {reports.byTimeOfDay.length > 0 && <ReportTable title="By Time of Day" data={reports.byTimeOfDay} />}
           <ReportTable title="By Day of Week" data={reports.byDayOfWeek} />
           {reports.byHoldingPeriod.length > 0 && <ReportTable title="By Holding Period" data={reports.byHoldingPeriod} />}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
