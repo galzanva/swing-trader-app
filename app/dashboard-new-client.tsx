@@ -12,6 +12,7 @@ interface Stats {
   winRate: number;
   totalPL: number;
   avgReturn: number;
+  profitFactor: number;
   avgPL: number;
   wins: number;
   losses: number;
