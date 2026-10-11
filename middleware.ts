@@ -1,34 +1,31 @@
-import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export default withAuth(
-  function middleware(req) {
-    // Allow access to authenticated users
+const SESSION_COOKIES = [
+  "__Secure-next-auth.session-token",
+  "next-auth.session-token",
+  "__Host-next-auth.session-token",
+];
+
+function hasSessionCookie(req: NextRequest) {
+  return SESSION_COOKIES.some((name) => Boolean(req.cookies.get(name)?.value));
+}
+
+export function middleware(req: NextRequest) {
+  if (hasSessionCookie(req)) {
     return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-    pages: {
-      signIn: "/login",
-    },
   }
-);
 
-// Protect all routes except public ones
+  const login = new URL("/login", req.url);
+  const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+  if (nextPath && nextPath !== "/") {
+    login.searchParams.set("callbackUrl", nextPath);
+  }
+  return NextResponse.redirect(login);
+}
+
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - /api/auth (authentication endpoints)
-     * - /login (login page)
-     * - /_next/static (static files)
-     * - /_next/image (image optimization files)
-     * - /favicon.ico (favicon file)
-     * - /public (public files)
-     */
     "/((?!api/auth|login|_next/static|_next/image|favicon.ico|public).*)",
   ],
 };
-

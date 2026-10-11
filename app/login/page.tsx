@@ -16,7 +16,8 @@ function LoginForm() {
     setError("");
     setIsLoading(true);
 
-    const callbackUrl = searchParams.get("callbackUrl") || "/";
+    const rawCallback = searchParams.get("callbackUrl") || "/dashboard";
+    const callbackUrl = rawCallback === "/" ? "/dashboard" : rawCallback;
 
     try {
       const result = await signIn("credentials", {
@@ -31,10 +32,16 @@ function LoginForm() {
         return;
       }
 
-      // Hard navigation so the session cookie is sent on the next request.
-      // router.push() can leave this page stuck on "Signing in..." when
-      // middleware redirects an unauthenticated / back to /login.
-      window.location.assign(result.url || callbackUrl);
+      const session = await fetch("/api/auth/session", { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => null);
+
+      if (!session?.user) {
+        setError("Could not create a session. Confirm NEXTAUTH_URL is https://www.tradingdzen.com and NEXTAUTH_SECRET is set in Vercel.");
+        return;
+      }
+
+      window.location.assign(callbackUrl);
     } catch {
       setError("An error occurred. Please try again.");
     } finally {
