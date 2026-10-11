@@ -3,6 +3,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/db/prisma";
 import bcrypt from "bcrypt";
 
+const useSecureCookies =
+  process.env.NEXTAUTH_URL?.startsWith("https://") || process.env.VERCEL === "1";
+
 export const authOptions: NextAuthOptions = {
   // Credentials + JWT only. A Prisma adapter is not needed and the v5
   // @auth/prisma-adapter is incompatible with next-auth v4 (hangs sign-in).
@@ -83,6 +86,20 @@ export const authOptions: NextAuthOptions = {
       return session;
     }
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+  useSecureCookies,
+  cookies: {
+    sessionToken: {
+      name: useSecureCookies
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+      },
+    },
+  },
   debug: process.env.NODE_ENV === "development",
 };
