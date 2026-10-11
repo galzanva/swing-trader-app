@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Session } from 'next-auth';
 import type { Trade } from './journal-types';
 import TradeDetailDrawer from './trade-detail-drawer';
+import PasteImportModal from './paste-import-modal';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { formatJournalStoredDate } from '@/lib/trade-dates';
 
@@ -149,6 +150,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const tradesPerPage = 20;
   const editDrawerRef = useRef<HTMLDivElement>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showPasteImport, setShowPasteImport] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
 
   // Form state
@@ -722,6 +724,10 @@ export default function JournalClient({ session }: JournalClientProps) {
           <p className="text-text-muted text-base mt-1.5">Track your trades and discover patterns with AI analysis</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => setShowPasteImport(true)}
+            className="px-5 py-2.5 bg-surface-2 border border-border text-text-primary rounded-xl text-base font-semibold hover:bg-surface-3 transition-all">
+            Paste Import
+          </button>
           <button onClick={openAddDrawer}
             className="px-5 py-2.5 bg-accent text-white rounded-xl text-base font-semibold hover:bg-accent-hover transition-all flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -739,6 +745,10 @@ export default function JournalClient({ session }: JournalClientProps) {
                   disabled={rehydratingOhlc || filteredTrades.length === 0}
                   className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   {rehydratingOhlc ? 'Refreshing...' : `Refresh OHLC (${filteredTrades.length})`}
+                </button>
+                <button onClick={() => { setShowToolsMenu(false); setShowPasteImport(true); }}
+                  className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-surface-2 transition-colors">
+                  Paste Import
                 </button>
                 <button onClick={() => { setShowToolsMenu(false); handleExportCSV(); }}
                   disabled={filteredTrades.length === 0}
@@ -1273,6 +1283,14 @@ export default function JournalClient({ session }: JournalClientProps) {
           </div>
         </>
       )}
+
+      <PasteImportModal
+        open={showPasteImport}
+        onClose={() => setShowPasteImport(false)}
+        brokers={brokerAccounts}
+        defaultBroker={brokerFilter !== 'all' ? brokerFilter : (brokerAccounts[0]?.slug || 'webull')}
+        onImported={() => { void fetchTrades(); }}
+      />
     </div>
   );
 }
