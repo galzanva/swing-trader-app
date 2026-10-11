@@ -2,10 +2,9 @@
 
 import { signIn } from "next-auth/react";
 import { Suspense, useState, FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,24 +16,28 @@ function LoginForm() {
     setError("");
     setIsLoading(true);
 
+    const callbackUrl = searchParams.get("callbackUrl") || "/";
+
     try {
       const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
+        callbackUrl,
       });
 
-      if (result?.error) {
+      if (!result || result.error || result.ok === false) {
         setError("Invalid email or password");
-        setIsLoading(false);
         return;
       }
 
-      const callbackUrl = searchParams.get("callbackUrl") || "/";
-      router.push(callbackUrl);
-      router.refresh();
+      // Hard navigation so the session cookie is sent on the next request.
+      // router.push() can leave this page stuck on "Signing in..." when
+      // middleware redirects an unauthenticated / back to /login.
+      window.location.assign(result.url || callbackUrl);
     } catch {
       setError("An error occurred. Please try again.");
+    } finally {
       setIsLoading(false);
     }
   };

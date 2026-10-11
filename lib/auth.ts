@@ -1,12 +1,11 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db/prisma";
 import bcrypt from "bcrypt";
-import { Adapter } from "next-auth/adapters";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as Adapter,
+  // Credentials + JWT only. A Prisma adapter is not needed and the v5
+  // @auth/prisma-adapter is incompatible with next-auth v4 (hangs sign-in).
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -16,7 +15,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing email or password");
+          return null;
         }
 
         const user = await prisma.user.findUnique({
@@ -24,7 +23,7 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.passwordHash) {
-          throw new Error("Invalid credentials");
+          return null;
         }
 
         const isValid = await bcrypt.compare(
@@ -33,14 +32,17 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!isValid) {
-          throw new Error("Invalid credentials");
+          return null;
         }
 
-        // Update last login
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() }
-        });
+        try {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+          });
+        } catch (err) {
+          console.error("Failed to update lastLoginAt", err);
+        }
 
         return {
           id: user.id,
@@ -65,12 +67,11 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.name = user.name;
       }
-      
-      // Handle session updates (e.g., profile name change)
+
       if (trigger === "update" && session?.name) {
         token.name = session.name;
       }
-      
+
       return token;
     },
     async session({ session, token }) {
@@ -85,4 +86,3 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
 };
-
