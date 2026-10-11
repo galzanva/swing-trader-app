@@ -163,3 +163,40 @@ export function todayInTimezone(tz: string): string {
     day: '2-digit',
   }).format(new Date());
 }
+
+/** HH:MM or HH:MM:SS → HH:MM:SS */
+export function normalizeClock(time: string | null | undefined): string {
+  if (!time || !/^\d{1,2}:\d{2}/.test(time)) return '09:30:00';
+  const parts = time.split(':').map((n) => parseInt(n, 10));
+  const hh = String(parts[0] ?? 9).padStart(2, '0');
+  const mm = String(parts[1] ?? 0).padStart(2, '0');
+  const ss = String(parts[2] ?? 0).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+/**
+ * Journal calendar date + clock as epoch ms, interpreted in America/New_York
+ * (US session / most prop-desk prints).
+ */
+export function journalDateTimeMs(ymd: string, time?: string | null): number {
+  const day = ymd.slice(0, 10);
+  const clock = normalizeClock(time);
+  const edt = Date.parse(`${day}T${clock}-04:00`);
+  const est = Date.parse(`${day}T${clock}-05:00`);
+  const matches = (ms: number) => {
+    if (!Number.isFinite(ms)) return false;
+    const got = new Intl.DateTimeFormat('en-CA', {
+      timeZone: NY,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(ms));
+    return got.startsWith(day) && got.includes(clock.slice(0, 5));
+  };
+  if (matches(edt)) return edt;
+  if (matches(est)) return est;
+  return Number.isFinite(edt) ? edt : est;
+}

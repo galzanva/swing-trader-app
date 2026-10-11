@@ -400,6 +400,38 @@ export class PolygonClient {
   }
 
   /**
+   * Date-bounded aggregates for journal charts (delayed is fine).
+   * Does not fetch ticker details — works for stocks and index tickers like I:NDX.
+   */
+  async getAggregatesRange(
+    symbol: string,
+    multiplier: number,
+    timespan: 'minute' | 'hour' | 'day',
+    fromYmd: string,
+    toYmd: string,
+    limit = 50000,
+  ): Promise<{ timestamp: number; open: number; high: number; low: number; close: number; volume: number }[]> {
+    const ticker = encodeURIComponent(symbol.toUpperCase());
+    const url = `${this.baseUrl}/v2/aggs/ticker/${ticker}/range/${multiplier}/${timespan}/${fromYmd}/${toYmd}?adjusted=true&sort=asc&limit=${limit}&apiKey=${this.apiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Polygon API error: ${response.status} ${response.statusText}`);
+    }
+    const data: PolygonAggregatesResponse = await response.json();
+    if (!data.results || data.results.length === 0) {
+      throw new Error(`No bars for ${symbol} ${fromYmd}–${toYmd}`);
+    }
+    return data.results.map((bar) => ({
+      timestamp: bar.t,
+      open: bar.o,
+      high: bar.h,
+      low: bar.l,
+      close: bar.c,
+      volume: bar.v,
+    }));
+  }
+
+  /**
    * Get ticker details
    */
   async getTickerDetails(symbol: string): Promise<{

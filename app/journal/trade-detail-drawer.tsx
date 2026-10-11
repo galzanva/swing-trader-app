@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { Trade, TradeDetail, OHLCBar } from './journal-types';
 import { formatJournalStoredDate, nyseCalendarDateString } from '@/lib/trade-dates';
+import TradeChartModal from './trade-chart-modal';
 
 function formatSavedAt(iso: string) {
   try {
@@ -176,6 +177,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [chartOpen, setChartOpen] = useState(false);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -200,6 +202,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
     if (!tradeId) {
       setDetail(null);
       setError(null);
+      setChartOpen(false);
       return;
     }
     void load(tradeId);
@@ -265,6 +268,13 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                     <span className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-surface-3 text-text-secondary border border-border uppercase">
                       {(detail as any).broker || 'webull'}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setChartOpen(true)}
+                      className="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20"
+                    >
+                      Chart
+                    </button>
                   </div>
                   <p className="text-sm text-text-muted mt-2">
                     {detail.isOpen ? 'Open position' : 'Closed trade'}
@@ -459,6 +469,14 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
           <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
             <button
               type="button"
+              disabled={!detail}
+              onClick={() => setChartOpen(true)}
+              className="px-5 py-3 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 disabled:opacity-40 text-base font-semibold transition-colors sm:mr-auto"
+            >
+              Open chart
+            </button>
+            <button
+              type="button"
               onClick={onClose}
               className="px-5 py-3 rounded-xl border border-border text-text-secondary hover:bg-surface-3 text-base font-medium transition-colors"
             >
@@ -493,6 +511,13 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
         </div>
       </aside>
       </div>
+      {chartOpen && (
+        <TradeChartModal
+          tradeId={tradeId}
+          tradeType={detail?.tradeType}
+          onClose={() => setChartOpen(false)}
+        />
+      )}
     </>
   );
 }
