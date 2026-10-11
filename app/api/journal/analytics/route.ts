@@ -146,23 +146,42 @@ export async function GET(request: NextRequest) {
       where.broker = brokerParam;
     }
 
-    const trades = await prisma.tradeJournal.findMany({
-      where,
-      orderBy: { entryDate: 'desc' },
-    });
+    const [trades, officialStrategies] = await Promise.all([
+      prisma.tradeJournal.findMany({
+        where,
+        orderBy: { entryDate: 'desc' },
+      }),
+      prisma.strategy.findMany({
+        where: { userId: session.user.id },
+        select: { id: true, name: true },
+      }),
+    ]);
 
     if (trades.length === 0) {
       return NextResponse.json({ success: true, reports: null, message: 'No closed trades in selected range' });
     }
 
+    const officialById = new Map(officialStrategies.map(s => [s.id, s.name]));
+    const officialByName = new Map(officialStrategies.map(s => [s.name.trim().toLowerCase(), s.name]));
+
+    const officialStrategyLabel = (t: { strategy?: string | null; strategyId?: string | null }) => {
+      if (t.strategyId && officialById.has(t.strategyId)) return officialById.get(t.strategyId)!;
+      const name = t.strategy?.trim();
+      if (name) {
+        const official = officialByName.get(name.toLowerCase());
+        if (official) return official;
+      }
+      return 'No Strategy';
+    };
+
     const overall = computeBucket('Overall', trades);
     const intradayTrades = trades.filter(t => t.tradeType === 'intraday');
     const swingTrades = trades.filter(t => t.tradeType === 'swing');
 
-    // By strategy
+    // By strategy — only names from the Strategies page (edit/delete list)
     const stratMap = new Map<string, any[]>();
     for (const t of trades) {
-      const key = t.strategy?.trim() || 'No Strategy';
+      const key = officialStrategyLabel(t);
       if (!stratMap.has(key)) stratMap.set(key, []);
       stratMap.get(key)!.push(t);
     }

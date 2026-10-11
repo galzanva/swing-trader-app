@@ -337,8 +337,9 @@ export default function AnalyticsClient() {
   }
 
   const o = reports?.overall;
-  const bestStrategy = reports && reports.byStrategy.length > 0 ? reports.byStrategy[0] : null;
-  const worstStrategy = reports && reports.byStrategy.length > 1 ? reports.byStrategy[reports.byStrategy.length - 1] : null;
+  const namedStrategies = (reports?.byStrategy || []).filter(s => s.label !== 'No Strategy');
+  const bestStrategy = namedStrategies.length > 0 ? namedStrategies[0] : null;
+  const worstStrategy = namedStrategies.length > 1 ? namedStrategies[namedStrategies.length - 1] : null;
   const bestTime = reports ? reports.byTimeOfDay.reduce((best, cur) =>
     cur.totalPL > (best?.totalPL ?? -Infinity) ? cur : best, reports.byTimeOfDay[0]) : null;
   const bestDay = reports ? reports.byDayOfWeek.reduce((best, cur) =>
