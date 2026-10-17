@@ -178,12 +178,56 @@ export function inferBroker(text: string, brokers: BrokerRef[]): string | null {
   return null;
 }
 
+const FUTURES_SYM_RE = /\b(MNQ[A-Z]?\d?|MES[A-Z]?\d?|MYM[A-Z]?\d?|M2K[A-Z]?\d?|NQ[A-Z]?\d?|ES[A-Z]?\d?|YM[A-Z]?\d?|RTY[A-Z]?\d?)\b/gi;
+
+function normalizeTicker(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Use a cell as a ticker only if it looks like a symbol, not a qty. */
+function cellTicker(raw: string | undefined): string {
+  if (!raw) return '';
+  const t = normalizeTicker(raw);
+  if (!t || parseNum(t) != null) return '';
+  if (/^[A-Z]{1,6}[A-Z]?\d{0,2}$/.test(t)) return t;
+  return '';
+}
+
+function lookTicker(row: Record<string, string>): string {
+  for (const k of ['symbol', 'ticker', 'contract', 'instrument', 'product', 'underlying']) {
+    const t = cellTicker(row[k]);
+    if (t) return t;
+  }
+  const contracts = cellTicker(row.contracts);
+  if (contracts && /[A-Z]/.test(contracts)) return contracts;
+  return '';
+}
+
+function inferTickerFromPrice(price: number): string | null {
+  // NQ/MNQ prints sit well above equity-index micros. ES vs MES cannot be told
+  // apart from price — never guess those.
+  if (price >= 15000) return 'MNQZ6';
+  return null;
+}
+
 function inferTicker(text: string): string | null {
-  const contract = text.match(/Contract:\s*([A-Z0-9]+)/i);
-  if (contract) return contract[1].toUpperCase();
-  const header = text.match(/===\s*(MNQ[A-Z0-9]*)/i);
-  if (header) return header[1].toUpperCase().length <= 4 ? 'MNQZ6' : header[1].toUpperCase();
-  if (/\bMNQ\b/i.test(text)) return 'MNQZ6';
+  const labeled = text.match(/Contract:\s*([A-Z0-9]+)/i);
+  if (labeled) return normalizeTicker(labeled[1]);
+  const header = text.match(/===\s*(MNQ[A-Z0-9]*|MES[A-Z0-9]*|ES[A-Z0-9]*|NQ[A-Z0-9]*)/i);
+  if (header) {
+    const t = normalizeTicker(header[1]);
+    if (t === 'MNQ' || t === 'MNQZ') return 'MNQZ6';
+    if (t === 'MES' || t === 'MESZ') return 'MESZ6';
+    if (t === 'ES' || t === 'ESZ') return 'ESZ6';
+    return t;
+  }
+  const found = [...text.matchAll(FUTURES_SYM_RE)].map((m) => {
+    const t = normalizeTicker(m[1]);
+    if (t === 'MNQ' || t === 'MNQZ') return 'MNQZ6';
+    return t;
+  });
+  const unique = [...new Set(found)];
+  if (unique.length === 1) return unique[0];
   return null;
 }
 
@@ -308,11 +352,17 @@ function parseClockRange(raw: string, fallbackDate: string | null, year: number)
   return { date, entryTime: padTime(range[3]), exitTime: padTime(range[4] || range[3]) };
 }
 
-function parseTable(text: string, defaultBroker: string, strategies: StrategyRef[], year: number): PasteTrade[] {
+function parseTable(
+  text: string,
+  defaultBroker: string,
+  strategies: StrategyRef[],
+  year: number,
+  warnings: string[],
+): PasteTrade[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) return [];
 
-  const headerLine = lines.find((l) => /date|time|symbol|side|entry|pnl|p&l|setup/i.test(l) && (l.includes(',') || l.includes('|')));
+  const headerLine = lines.find((l) => /date|time|symbol|contract|ticker|side|entry|pnl|p&l|setup/i.test(l) && (l.includes(',') || l.includes('|')));
   if (!headerLine) return [];
 
   const delim = headerLine.includes('|') && (headerLine.split('|').length >= headerLine.split(',').length) ? '|' : ',';
@@ -356,12 +406,22 @@ function parseTable(text: string, defaultBroker: string, strategies: StrategyRef
       ? `Physical ${physicalDate} evening (Asia/Globex) · trading day ${sessionDay}`
       : '';
 
-    const rawTicker = (look(row, 'symbol', 'ticker') || defaultTicker || '').toUpperCase();
+    const rawTicker = lookTicker(row) || defaultTicker || '';
     const setupName = look(row, 'strategy', 'setup');
     const looksFutures = (entry != null && entry > 5000)
       || /lod|hod-?short|micro\s*pullback|b&r|break\s*&\s*retest/i.test(setupName);
-    const ticker = rawTicker || (looksFutures ? 'MNQZ6' : '');
-    if (!ticker) continue;
+    const ticker = rawTicker || (looksFutures ? inferTickerFromPrice(entry) || '' : '');
+    if (!ticker) {
+      warnings.push(`Skipped row with no contract/ticker (entry ${entry}${clock.entryTime ? ` @ ${clock.entryTime}` : ''})`);
+      continue;
+    }
+    const root = futuresRoot(ticker);
+    if (root === 'MNQ' && entry < 12000) {
+      warnings.push(`${ticker} @ ${entry} looks like ES/MES, not MNQ. Check the contract column.`);
+    }
+    if ((root === 'MES' || root === 'ES') && entry >= 15000) {
+      warnings.push(`${ticker} @ ${entry} looks like MNQ/NQ, not ${root}. Check the contract column.`);
+    }
 
     const strat = matchStrategy(look(row, 'strategy', 'setup') || null, strategies);
     const notesParts = [
@@ -446,7 +506,7 @@ export function parseDeterministic(
   ]);
   const broker = inferredBroker || defaultBroker;
 
-  const table = parseTable(text, broker, strategies, year);
+  const table = parseTable(text, broker, strategies, year, warnings);
   const tlines = table.length ? [] : parseTLines(text, broker, strategies, year);
   const trades = table.length ? table : tlines;
 
@@ -500,6 +560,8 @@ Rules:
 - Buy/Long = long. Sell/Short = short.
 - Times are session-local, keep as written. Normalize to HH:MM:SS.
 - If year missing use ${args.year}.
+- ticker MUST come from that row's contract/symbol/ticker cell. Mixed dumps (MNQ then MES/ES) are common. Never copy MNQ onto a ~5k–8k ES/MES print, and never copy MES/ES onto a ~20k–30k MNQ/NQ print.
+- ES = $50/pt, MES = $5/pt, MNQ = $2/pt, NQ = $20/pt.
 - Map setup names onto these strategies when close: ${args.strategies.map((s) => s.name).join('; ')}
 - Broker slugs: ${args.brokers.map((b) => `${b.slug} (${b.name})`).join('; ')}
 - Skip prose, totals, and rule lists that are not fills.
@@ -530,7 +592,7 @@ export function tradesFromLlmJson(raw: string, defaultBroker: string, strategies
   for (const r of rows) {
     const side = parseSide(String(r.direction || r.side || ''));
     const entry = parseNum(r.entryPrice ?? r.entry);
-    const ticker = String(r.ticker || r.symbol || parsed.defaultTicker || '').toUpperCase();
+    const ticker = normalizeTicker(String(r.ticker || r.symbol || r.contract || parsed.defaultTicker || ''));
     const date = String(r.entryDate || r.date || '');
     if (!side || entry == null || !ticker || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       warnings.push(`Skipped incomplete AI row: ${ticker || '?'} ${r.entryDate || ''}`);
