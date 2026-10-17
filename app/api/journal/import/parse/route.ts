@@ -49,7 +49,10 @@ export async function POST(request: NextRequest) {
     let llmError: string | null = null;
 
     const messy = det.trades.length === 0 || /===\s*MNQ|T\d+\s+\d{1,2}:\d{2}/i.test(text);
-    if (preferLlm && isLLMConfigured() && (messy || det.trades.length === 0)) {
+    const structuredContractTable = det.trades.length > 0
+      && /\b(contract|symbol|ticker)\b/i.test(text)
+      && (text.includes('|') || text.includes(','));
+    if (preferLlm && isLLMConfigured() && !structuredContractTable && (messy || det.trades.length === 0)) {
       try {
         const prompt = llmParsePrompt({ text, brokers, strategies, defaultBroker, year });
         const llm = await callLLM({
