@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 import { finalizeTrade, pasteFingerprint } from '@/lib/journal-paste-import';
+import { syncTradeStrategies } from '@/lib/trade-strategies';
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        await prisma.tradeJournal.create({
+        const createdRow = await prisma.tradeJournal.create({
           data: {
             userId: session.user.id,
             ticker: trade.ticker.slice(0, 10),
@@ -97,6 +98,9 @@ export async function POST(request: NextRequest) {
             externalOrderId,
           },
         });
+        if (trade.strategyId) {
+          await syncTradeStrategies(createdRow.id, [{ id: trade.strategyId, name: trade.strategy || '' }]);
+        }
         created++;
       } catch (err: any) {
         errors.push(err?.message || 'Row failed');

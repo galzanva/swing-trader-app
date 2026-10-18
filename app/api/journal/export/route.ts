@@ -189,7 +189,11 @@ export async function GET(request: NextRequest) {
     if (strategy === '__none__') {
       where.OR = [{ strategy: null }, { strategy: '' }];
     } else if (strategy) {
-      where.strategy = { equals: strategy, mode: 'insensitive' };
+      where.OR = [
+        { strategy: { equals: strategy, mode: 'insensitive' } },
+        { strategyLinks: { some: { strategy: { name: { equals: strategy, mode: 'insensitive' } } } } },
+        { strategy: { contains: strategy, mode: 'insensitive' } },
+      ];
     }
     if (source && source !== 'all') {
       where.source = source;

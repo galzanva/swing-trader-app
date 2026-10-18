@@ -12,6 +12,7 @@ import {
   computeJournalPolygonPatchFromBars,
   fetchUnadjustedDailyBars,
 } from '@/lib/journal-polygon-enrichment';
+import { resolveStrategySelection, strategyLabel, syncTradeStrategies } from '@/lib/trade-strategies';
 
 interface TradeInput {
   id?: string;
@@ -26,6 +27,7 @@ interface TradeInput {
   exitTime?: string;
   amount: number;
   strategy?: string;
+  strategyIds?: string[];
   analysisReportId?: string;
   notes?: string;
   isOpen?: boolean;
@@ -203,6 +205,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const strategyPicks = await resolveStrategySelection(userId, body);
+    const strategyText = strategyPicks.length
+      ? strategyLabel(strategyPicks)
+      : (body.strategy?.trim() || null);
+
     // 4. Save to database
     const tradeData = {
       userId,
@@ -216,7 +223,8 @@ export async function POST(request: NextRequest) {
       entryTime: body.entryTime ?? null,
       exitTime: body.exitTime ?? null,
       amount: body.amount,
-      strategy: body.strategy ?? null,
+      strategy: strategyText,
+      strategyId: strategyPicks[0]?.id ?? null,
       notes: body.notes ?? null,
       isOpen,
       exitReason: body.exitReason ?? null,
@@ -256,6 +264,8 @@ export async function POST(request: NextRequest) {
       });
       console.log(`[Journal] Created new trade: ${trade.id}`);
     }
+
+    await syncTradeStrategies(trade.id, strategyPicks);
 
     return NextResponse.json({
       success: true,

@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
       where.broker = brokerParam;
     }
 
-    const [trades, officialStrategies] = await Promise.all([
+    const [trades, officialStrategies, strategyLinks] = await Promise.all([
       prisma.tradeJournal.findMany({
         where,
         orderBy: { entryDate: 'desc' },
@@ -154,6 +154,10 @@ export async function GET(request: NextRequest) {
       prisma.strategy.findMany({
         where: { userId: session.user.id },
         select: { id: true, name: true },
+      }),
+      prisma.tradeStrategy.findMany({
+        where: { trade: { userId: session.user.id } },
+        select: { tradeId: true, strategy: { select: { name: true } } },
       }),
     ]);
 
@@ -178,12 +182,22 @@ export async function GET(request: NextRequest) {
     const intradayTrades = trades.filter(t => t.tradeType === 'intraday');
     const swingTrades = trades.filter(t => t.tradeType === 'swing');
 
-    // By strategy — only names from the Strategies page (edit/delete list)
+    const labelsByTrade = new Map<string, string[]>();
+    for (const link of strategyLinks) {
+      const list = labelsByTrade.get(link.tradeId) || [];
+      list.push(link.strategy.name);
+      labelsByTrade.set(link.tradeId, list);
+    }
+
+    // By strategy — a trade tagged with several strategies counts in each
     const stratMap = new Map<string, any[]>();
     for (const t of trades) {
-      const key = officialStrategyLabel(t);
-      if (!stratMap.has(key)) stratMap.set(key, []);
-      stratMap.get(key)!.push(t);
+      const linked = labelsByTrade.get(t.id);
+      const keys = linked?.length ? [...new Set(linked)] : [officialStrategyLabel(t)];
+      for (const key of keys) {
+        if (!stratMap.has(key)) stratMap.set(key, []);
+        stratMap.get(key)!.push(t);
+      }
     }
     const byStrategy = [...stratMap.entries()]
       .map(([k, v]) => computeBucket(k, v))

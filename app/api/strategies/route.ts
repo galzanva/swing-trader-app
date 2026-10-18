@@ -13,10 +13,16 @@ export async function GET() {
     const strategies = await prisma.strategy.findMany({
       where: { userId: session.user.id },
       orderBy: { name: 'asc' },
-      include: { _count: { select: { trades: true } } },
+      include: { _count: { select: { tradeLinks: true } } },
     });
 
-    return NextResponse.json({ success: true, strategies });
+    return NextResponse.json({
+      success: true,
+      strategies: strategies.map((s) => ({
+        ...s,
+        _count: { trades: s._count.tradeLinks },
+      })),
+    });
   } catch (error: any) {
     console.error('[Strategies] GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

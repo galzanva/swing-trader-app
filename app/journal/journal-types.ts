@@ -13,6 +13,7 @@ export interface Trade {
   exitTime: string | null;
   amount: number;
   strategy: string | null;
+  strategies?: { id: string; name: string }[];
   notes: string | null;
   isOpen: boolean;
   exitReason: string | null;

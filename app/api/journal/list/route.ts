@@ -64,7 +64,11 @@ export async function GET(request: NextRequest) {
         exitTime: true,
         amount: true,
         strategy: true,
+        strategyId: true,
         notes: true,
+        strategyLinks: {
+          select: { strategy: { select: { id: true, name: true } } },
+        },
         isOpen: true,
         exitReason: true,
         returnPct: true,
@@ -85,6 +89,16 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(`[Journal List] Found ${trades.length} trades`);
+
+    const tradesOut = trades.map((t) => {
+      const strategies = t.strategyLinks.map((l) => l.strategy);
+      const { strategyLinks: _links, ...rest } = t;
+      return {
+        ...rest,
+        strategies,
+        strategy: strategies.length ? strategies.map((s) => s.name).join(' · ') : t.strategy,
+      };
+    });
 
     // Calculate summary statistics
     const closedTrades = trades.filter(t => !t.isOpen && t.returnPct !== null);
@@ -137,7 +151,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      trades,
+      trades: tradesOut,
       summary,
     });
 

@@ -31,6 +31,8 @@ model User {
   tradeJournal  TradeJournal[]
   journalAnalyses JournalAnalysis[]
   strategies    Strategy[]
+  playbooks     Playbook[]
+  sessionNotes  SessionNote[]
   brokerAccounts BrokerAccount[]
   propLedger     PropLedgerEntry[]
   webullConnection WebullConnection?
@@ -181,8 +183,8 @@ model TradeJournal {
   broker          String  @default("webull") @db.VarChar(30)  // "webull" | "robinhood" | "tradethepool" | etc.
 
   // User-provided fields (optional)
-  strategy    String?  @db.VarChar(100)  // Strategy name or "Other"
-  strategyId  String?                     // FK to Strategy model
+  strategy    String?  @db.VarChar(400)  // Joined strategy names (first is primary)
+  strategyId  String?                     // Primary strategy FK; extras live on TradeStrategy
   notes       String?  @db.Text          // Free-text notes for AI analysis
   isOpen      Boolean  @default(false)   // Is trade still open?
   exitReason  String?  @db.VarChar(20)   // hit_target, stopped_out, manual_exit, time_exit
@@ -235,6 +237,8 @@ model TradeJournal {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   analysisReport SavedReport? @relation(fields: [analysisReportId], references: [id], onDelete: SetNull)
   strategyRef    Strategy?    @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  strategyLinks  TradeStrategy[]
+  screenshots    TradeScreenshot[]
   
   @@unique([userId, externalOrderId])
   @@index([userId])
@@ -299,11 +303,122 @@ model Strategy {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades TradeJournal[]
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades     TradeJournal[]
+  tradeLinks TradeStrategy[]
+  playbooks  PlaybookStrategy[]
+  sessionNotes SessionNote[]
 
   @@unique([userId, name])
   @@index([userId])
+}
+
+// Live intraday scratch notes. Not a trade until pasted into the journal.
+model SessionNote {
+  id         String   @id @default(cuid())
+  userId     String
+  date       DateTime
+  time       String?  @db.VarChar(8)
+  strategyId String?
+  checks     Json?
+  body       String   @default("") @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+}
+
+// A trade can belong to more than one official strategy.
+model TradeStrategy {
+  tradeId    String
+  strategyId String
+  trade      TradeJournal @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  strategy   Strategy     @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@id([tradeId, strategyId])
+  @@index([strategyId])
+}
+
+model TradeScreenshot {
+  id        String   @id @default(cuid())
+  tradeId   String
+  userId    String
+  data      String   @db.Text
+  createdAt DateTime @default(now())
+  trade     TradeJournal @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+}
+
+// Named set of rules + strategies tracked day by day.
+model Playbook {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   @db.VarChar(120)
+  tickers   String?  @db.VarChar(300)
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules      PlaybookRule[]
+  strategies PlaybookStrategy[]
+  days       PlaybookDay[]
+
+  @@index([userId])
+}
+
+model PlaybookRule {
+  id         String @id @default(cuid())
+  playbookId String
+  text       String @db.Text
+  sortOrder  Int    @default(0)
+
+  playbook Playbook           @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  checks   PlaybookDayCheck[]
+
+  @@index([playbookId])
+}
+
+model PlaybookStrategy {
+  playbookId String
+  strategyId String
+  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@id([playbookId, strategyId])
+  @@index([strategyId])
+}
+
+model PlaybookDay {
+  id          String   @id @default(cuid())
+  playbookId  String
+  userId      String
+  date        DateTime
+  followedAll Boolean  @default(false)
+  note        String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  playbook Playbook           @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  checks   PlaybookDayCheck[]
+
+  @@unique([playbookId, date])
+  @@index([userId, date])
+}
+
+model PlaybookDayCheck {
+  dayId    String
+  ruleId   String
+  followed Boolean @default(false)
+
+  day  PlaybookDay  @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  rule PlaybookRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@id([dayId, ruleId])
 }
 
 // Webull API connection credentials and token state
