@@ -60,6 +60,22 @@ function IconStrategy() {
   );
 }
 
+function IconNotes() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 7.125L16.862 4.487" />
+    </svg>
+  );
+}
+
+function IconPlaybook() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 function IconImport() {
   return (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -144,9 +160,11 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { href: '/dashboard',           label: 'Dashboard',          icon: <IconDashboard />,  exact: true },
   { href: '/journal',             label: 'Journal',            icon: <IconJournal />,    exact: true },
+  { href: '/session-notes',       label: 'Session Notes',      icon: <IconNotes /> },
   { href: '/analytics',           label: 'Analytics',          icon: <IconChart /> },
   { href: '/technical-analysis',  label: 'Technical Analysis', icon: <IconAnalysis /> },
   { href: '/strategies',          label: 'Strategies',         icon: <IconStrategy /> },
+  { href: '/playbook',            label: 'Playbook',           icon: <IconPlaybook /> },
   { href: '/webull-trades',       label: 'Import Trades',      icon: <IconImport /> },
   { href: '/journal/analyses',    label: 'AI Analyses',        icon: <IconAI /> },
   { href: '/ticker-history',      label: 'Ticker History',     icon: <IconTicker /> },

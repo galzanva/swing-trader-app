@@ -15,11 +15,63 @@ interface Strategy {
   _count: { trades: number };
 }
 
+interface ChecklistSection {
+  title: string;
+  items: string[];
+}
+
 interface CriteriaData {
   entry_rules: string[];
   exit_rules: string[];
   indicators: string[];
   timeframes: string[];
+  checklist?: ChecklistSection[];
+}
+
+function parseChecklist(text: string): ChecklistSection[] {
+  const sections: ChecklistSection[] = [];
+  let current: ChecklistSection | null = null;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('## ') || line.startsWith('# ')) {
+      current = { title: line.replace(/^#+\s*/, ''), items: [] };
+      sections.push(current);
+      continue;
+    }
+    if (!current) {
+      current = { title: 'Checklist', items: [] };
+      sections.push(current);
+    }
+    current.items.push(line.replace(/^[-*]\s*/, '').replace(/^\[\s?\]\s*/, ''));
+  }
+  return sections.filter((s) => s.items.length > 0);
+}
+
+function formatChecklist(sections: ChecklistSection[] | undefined): string {
+  if (!sections?.length) return '';
+  return sections.map((s) => [`## ${s.title}`, ...s.items].join('\n')).join('\n\n');
+}
+
+function ChecklistView({ sections }: { sections: ChecklistSection[] }) {
+  if (!sections.length) return null;
+  return (
+    <div className="mt-3 space-y-3">
+      {sections.map((sec) => (
+        <div key={sec.title}>
+          <div className="text-xs font-semibold text-text-secondary mb-1.5">{sec.title}</div>
+          <ul className="space-y-1.5">
+            {sec.items.map((item) => (
+              <li key={item} className="flex gap-2 text-sm text-text-secondary">
+                <span className="mt-0.5 w-3.5 h-3.5 shrink-0 rounded border border-border bg-surface-2" aria-hidden />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const EMPTY_CRITERIA: CriteriaData = {
@@ -42,6 +94,7 @@ export default function StrategiesClient() {
   const [tradeType, setTradeType] = useState<'intraday' | 'swing' | 'both'>('intraday');
   const [entryRules, setEntryRules] = useState('');
   const [exitRules, setExitRules] = useState('');
+  const [checklistText, setChecklistText] = useState('');
   const [indicators, setIndicators] = useState('');
   const [timeframes, setTimeframes] = useState('');
 
@@ -62,6 +115,7 @@ export default function StrategiesClient() {
     setTradeType('intraday');
     setEntryRules('');
     setExitRules('');
+    setChecklistText('');
     setIndicators('');
     setTimeframes('');
     setEditingId(null);
@@ -101,10 +155,11 @@ export default function StrategiesClient() {
     setDescription(s.description || '');
     setTradeType(s.tradeType as 'intraday' | 'swing' | 'both');
     const c = (s.criteria as CriteriaData | null) || EMPTY_CRITERIA;
-    setEntryRules(c.entry_rules.join('\n'));
-    setExitRules(c.exit_rules.join('\n'));
-    setIndicators(c.indicators.join(', '));
-    setTimeframes(c.timeframes.join(', '));
+    setEntryRules((c.entry_rules || []).join('\n'));
+    setExitRules((c.exit_rules || []).join('\n'));
+    setChecklistText(formatChecklist(c.checklist));
+    setIndicators((c.indicators || []).join(', '));
+    setTimeframes((c.timeframes || []).join(', '));
     setShowForm(true);
     setError('');
   };
@@ -122,6 +177,7 @@ export default function StrategiesClient() {
       exit_rules: splitLines(exitRules),
       indicators: splitCommas(indicators),
       timeframes: splitCommas(timeframes),
+      checklist: parseChecklist(checklistText),
     };
 
     const payload = { name: name.trim(), description, tradeType, criteria };
@@ -267,6 +323,19 @@ export default function StrategiesClient() {
 
                 <div>
                   <label className="block text-sm font-semibold text-text-secondary mb-2">
+                    Checklist <span className="text-text-muted font-normal">(## section, then one item per line)</span>
+                  </label>
+                  <textarea
+                    value={checklistText}
+                    onChange={e => setChecklistText(e.target.value)}
+                    placeholder={'## Entry (all must be true)\nLevel is marked before the session\nFailed extreme with a lower high or higher low'}
+                    rows={8}
+                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-sm placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">
                     Entry Rules <span className="text-text-muted font-normal">(one per line)</span>
                   </label>
                   <textarea
@@ -379,30 +448,31 @@ export default function StrategiesClient() {
                       </span>
                     </div>
                     {s.description && (
-                      <p className="text-sm text-text-secondary mb-2">{s.description}</p>
+                      <p className="text-sm text-text-secondary mb-2 whitespace-pre-wrap">{s.description}</p>
                     )}
+                    <ChecklistView sections={criteria.checklist || []} />
 
                     {/* Criteria summary */}
                     <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
-                      {criteria.entry_rules.length > 0 && (
+                      {!criteria.checklist?.length && criteria.entry_rules?.length > 0 && (
                         <div>
                           <span className="text-profit font-medium">Entry: </span>
                           <span className="text-text-muted">{criteria.entry_rules.join(' · ')}</span>
                         </div>
                       )}
-                      {criteria.exit_rules.length > 0 && (
+                      {!criteria.checklist?.length && criteria.exit_rules?.length > 0 && (
                         <div>
                           <span className="text-loss font-medium">Exit: </span>
                           <span className="text-text-muted">{criteria.exit_rules.join(' · ')}</span>
                         </div>
                       )}
-                      {criteria.indicators.length > 0 && (
+                      {(criteria.indicators || []).length > 0 && (
                         <div>
                           <span className="text-accent font-medium">Indicators: </span>
                           <span className="text-text-muted">{criteria.indicators.join(', ')}</span>
                         </div>
                       )}
-                      {criteria.timeframes.length > 0 && (
+                      {(criteria.timeframes || []).length > 0 && (
                         <div>
                           <span className="text-text-secondary font-medium">TF: </span>
                           <span className="text-text-muted">{criteria.timeframes.join(', ')}</span>

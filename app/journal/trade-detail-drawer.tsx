@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { Trade, TradeDetail, OHLCBar } from './journal-types';
 import { formatJournalStoredDate, nyseCalendarDateString } from '@/lib/trade-dates';
 import TradeChartModal from './trade-chart-modal';
+import TradeScreenshots from './trade-screenshots';
 
 function formatSavedAt(iso: string) {
   try {
@@ -367,7 +368,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 />
                 {detail.exitTime && <Row label="Exit time" value={detail.exitTime} />}
                 <Row label="Size" value={formatMoney(detail.amount)} />
-                <Row label="Strategy" value={detail.strategy || '—'} />
+                <Row label="Strategies" value={detail.strategy || '—'} />
                 {detail.exitReason && (
                   <Row label="Exit reason" value={EXIT_REASON_LABELS[detail.exitReason] || detail.exitReason} />
                 )}
@@ -448,6 +449,10 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 {detail.externalOrderId && (
                   <Row label="External ID" value={<span className="font-mono text-[11px] break-all">{detail.externalOrderId}</span>} />
                 )}
+              </Section>
+
+              <Section title="Screenshots">
+                <TradeScreenshots tradeId={tradeId} />
               </Section>
 
               {detail.notes && (

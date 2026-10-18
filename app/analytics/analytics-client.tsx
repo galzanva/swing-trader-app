@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import DateRangeFilter, { DateRange, getDefaultAllTimeRange } from '@/app/components/date-range-filter';
 import { HBarChart, VBarChart, LineChart, WinRateRing } from '@/app/components/charts';
+import PlaybookDiscipline from '@/app/playbook/playbook-discipline';
 
 interface BucketStats {
   label: string;
@@ -395,6 +396,7 @@ export default function AnalyticsClient() {
                 detail={`${fmt(bestDay.totalPL)} · ${bestDay.winRate}% WR · ${bestDay.trades} trades`} variant="accent" />
             )}
           </div>
+          <PlaybookDiscipline />
 
           {/* Win Rate + Day vs Swing */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -423,6 +425,8 @@ export default function AnalyticsClient() {
       {tab === 'breakdown' && reports && (
         <>
           <ReportTable title="By Strategy" data={reports.byStrategy} showR />
+          <p className="text-xs text-text-muted -mt-2">A trade tagged with more than one strategy is counted in each.</p>
+          <PlaybookDiscipline />
           {reports.byDirection.length > 0 && <ReportTable title="Long vs Short" data={reports.byDirection} />}
           {reports.byTimeOfDay.length > 0 && <ReportTable title="By Time of Day" data={reports.byTimeOfDay} />}
           <ReportTable title="By Day of Week" data={reports.byDayOfWeek} />

@@ -5,6 +5,7 @@ import { Session } from 'next-auth';
 import type { Trade } from './journal-types';
 import TradeDetailDrawer from './trade-detail-drawer';
 import PasteImportModal from './paste-import-modal';
+import TradeScreenshots from './trade-screenshots';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { formatJournalStoredDate } from '@/lib/trade-dates';
 
@@ -120,6 +121,17 @@ function journalTradeSortKey(t: Trade): number {
   return (Number.isNaN(dayMs) ? 0 : dayMs) + msFromJournalTime(t.entryTime);
 }
 
+function tradeStrategyNames(trade: Trade): string[] {
+  if (trade.strategies?.length) return trade.strategies.map((s) => s.name);
+  return (trade.strategy || '').split('·').map((s) => s.trim()).filter(Boolean);
+}
+
+function idsForTrade(trade: Trade, known: { id: string; name: string }[]): string[] {
+  if (trade.strategies?.length) return trade.strategies.map((s) => s.id);
+  const names = new Set(tradeStrategyNames(trade).map((n) => n.toLowerCase()));
+  return known.filter((s) => names.has(s.name.toLowerCase())).map((s) => s.id);
+}
+
 export default function JournalClient({ session }: JournalClientProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -165,7 +177,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [entryTimeForm, setEntryTimeForm] = useState('');
   const [exitTimeForm, setExitTimeForm] = useState('');
   const [amount, setAmount] = useState('');
-  const [strategy, setStrategy] = useState('');
+  const [strategyIds, setStrategyIds] = useState<string[]>([]);
   const [selectedReportId, setSelectedReportId] = useState('');
   const [notes, setNotes] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -270,12 +282,12 @@ export default function JournalClient({ session }: JournalClientProps) {
       });
     }
 
-    // Strategy filter
+    // Strategy filter — a trade matches if any of its strategies match
     if (strategyFilter === '__none__') {
-      result = result.filter(trade => !trade.strategy || !trade.strategy.trim());
+      result = result.filter(trade => tradeStrategyNames(trade).length === 0);
     } else if (strategyFilter.trim() !== '') {
       const want = normalizeStrategy(strategyFilter);
-      result = result.filter(trade => normalizeStrategy(trade.strategy) === want);
+      result = result.filter(trade => tradeStrategyNames(trade).some(name => normalizeStrategy(name) === want));
     }
 
     // Source filter
@@ -297,14 +309,13 @@ export default function JournalClient({ session }: JournalClientProps) {
   }, [trades, dateRange, typeFilter, strategyFilter, sourceFilter, brokerFilter]);
 
   const hasTradesWithNoStrategy = useMemo(() =>
-    trades.some(t => !t.strategy || !t.strategy.trim()),
+    trades.some(t => tradeStrategyNames(t).length === 0),
   [trades]);
 
   const strategyChoices = useMemo(() => {
     const all = new Set<string>();
     for (const t of trades) {
-      const s = (t.strategy ?? '').trim();
-      if (s) all.add(s);
+      for (const name of tradeStrategyNames(t)) all.add(name);
     }
     for (const s of dbStrategies) {
       all.add(s.name);
@@ -443,7 +454,7 @@ export default function JournalClient({ session }: JournalClientProps) {
         entryTime: entryTimeForm || undefined,
         exitTime: exitTimeForm || undefined,
         amount: parseFloat(amount),
-        strategy: strategy || undefined,
+        strategyIds,
         analysisReportId: selectedReportId || undefined,
         notes: notes || undefined,
         isOpen: isIntraday ? (exitPrice ? false : true) : isOpen,
@@ -473,7 +484,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setEntryPrice(''); setEntryDate(localDateStr());
     setExitPrice(''); setExitDate(''); setAmount('');
     setEntryTimeForm(''); setExitTimeForm('');
-    setStrategy(''); setSelectedReportId(''); setNotes('');
+    setStrategyIds([]); setSelectedReportId(''); setNotes('');
     setIsOpen(false); setExitReason('');
   };
 
@@ -491,14 +502,14 @@ export default function JournalClient({ session }: JournalClientProps) {
     setEntryTimeForm(trade.entryTime || '');
     setExitTimeForm(trade.exitTime || '');
     setAmount(trade.amount.toString());
-    setStrategy(trade.strategy || '');
+    setStrategyIds(idsForTrade(trade, dbStrategies));
     setSelectedReportId(trade.analysisReportId || '');
     setNotes(trade.notes || '');
     setIsOpen(trade.isOpen);
     setExitReason(trade.exitReason || '');
     setViewTradeId(null);
     setDrawerMode('edit');
-  }, []);
+  }, [dbStrategies]);
 
   const handleDelete = async (tradeId: string): Promise<boolean> => {
     if (!confirm('Are you sure you want to delete this trade?')) return false;
@@ -1037,7 +1048,9 @@ export default function JournalClient({ session }: JournalClientProps) {
                       ) : <div className="text-base text-text-muted">—</div>}
                     </td>
                     <td className="px-4 lg:px-5 py-4">
-                      <div className="text-base text-text-secondary max-w-[140px] truncate">{trade.strategy || '—'}</div>
+                      <div className="text-base text-text-secondary max-w-[180px] truncate" title={tradeStrategyNames(trade).join(' · ')}>
+                        {tradeStrategyNames(trade).join(' · ') || '—'}
+                      </div>
                       {trade.notes && (
                         <div className="text-sm text-text-muted max-w-[140px] truncate mt-0.5" title={trade.notes}>{trade.notes}</div>
                       )}
@@ -1245,18 +1258,30 @@ export default function JournalClient({ session }: JournalClientProps) {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-semibold text-text-secondary">Strategy</label>
+                  <label className="block text-sm font-semibold text-text-secondary">Strategies</label>
                   <a href="/strategies" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:text-accent-hover transition-colors">Manage Strategies →</a>
                 </div>
-                <select value={strategy} onChange={(e) => setStrategy(e.target.value)}
-                  className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
-                  <option value="">Select a strategy...</option>
-                  {dbStrategies.length > 0 && (
-                    <optgroup label="Your Strategies">
-                      {dbStrategies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                    </optgroup>
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-2 p-2 space-y-0.5">
+                  {dbStrategies.length === 0 && (
+                    <p className="px-2 py-2 text-sm text-text-muted">No strategies yet.</p>
                   )}
-                </select>
+                  {dbStrategies.map(s => (
+                    <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-3 cursor-pointer text-sm text-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={strategyIds.includes(s.id)}
+                        onChange={() => setStrategyIds(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-1.5">A trade can use more than one. Analytics counts it under each.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-text-secondary mb-2">Screenshots</label>
+                <TradeScreenshots tradeId={editingTrade?.id || null} />
               </div>
 
               <div>
