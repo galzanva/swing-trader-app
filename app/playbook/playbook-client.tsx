@@ -14,13 +14,6 @@ type Playbook = {
   strategies: { strategy: Strategy }[];
 };
 
-function localYmd() {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
 export default function PlaybookClient() {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -33,11 +26,6 @@ export default function PlaybookClient() {
   const [tickers, setTickers] = useState('');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
-  const [date, setDate] = useState(localYmd);
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
-  const [note, setNote] = useState('');
-  const [checkSaved, setCheckSaved] = useState<string | null>(null);
 
   const active = playbooks.find((p) => p.isActive) || null;
 
@@ -52,19 +40,6 @@ export default function PlaybookClient() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-
-  const loadCheckin = useCallback(async (playbookId: string, day: string) => {
-    const res = await fetch(`/api/playbook-checkin?date=${day}&playbookId=${playbookId}`);
-    const data = await res.json();
-    setChecks(data.day?.checks || {});
-    setNote(data.day?.note || '');
-    setCheckSaved(data.day ? (data.day.followedAll ? 'Followed' : 'Missed') : null);
-  }, []);
-
-  useEffect(() => {
-    if (!active) return;
-    void loadCheckin(active.id, date);
-  }, [active, date, loadCheckin]);
 
   const openNew = () => {
     setEditing(null);
@@ -124,19 +99,6 @@ export default function PlaybookClient() {
     await load();
   };
 
-  const saveCheckin = async () => {
-    if (!active) return;
-    setSaving(true);
-    const res = await fetch('/api/playbook-checkin', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, playbookId: active.id, checks, note }),
-    });
-    const data = await res.json();
-    setSaving(false);
-    if (data.success) setCheckSaved(data.followedAll ? 'Followed' : 'Missed');
-  };
-
   const toggleStrategy = (id: string) => {
     setStrategyIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -147,74 +109,13 @@ export default function PlaybookClient() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary mb-1">Playbook</h1>
           <p className="text-text-muted text-sm">
-            One active playbook. Check its rules at the end of the day and see how that lines up with P/L.
+            Edit playbooks here. Check today’s rules on Session Notes, and review how following them lines up with P/L below.
           </p>
         </div>
         <button type="button" onClick={openNew} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white font-medium rounded-lg text-sm">
           + New playbook
         </button>
       </div>
-
-      {active && (
-        <div className="bg-surface-1 border border-border rounded-2xl p-6 space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-accent">Active today</div>
-              <h2 className="text-lg font-semibold text-text-primary">{active.name}</h2>
-            </div>
-            <label className="text-sm text-text-muted">
-              Date
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="ml-2 px-3 py-2 bg-surface-2 border border-border rounded-xl text-text-primary"
-              />
-            </label>
-          </div>
-          {active.rules.length === 0 ? (
-            <p className="text-sm text-text-muted">Add rules to this playbook before checking in.</p>
-          ) : (
-            <ul className="space-y-2">
-              {active.rules.map((r) => (
-                <li key={r.id}>
-                  <label className="flex items-start gap-3 text-sm text-text-secondary cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={checks[r.id] === true}
-                      onChange={(e) => setChecks((prev) => ({ ...prev, [r.id]: e.target.checked }))}
-                    />
-                    <span>{r.text}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={2}
-            placeholder="Optional note for the day"
-            className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-sm text-text-primary placeholder-text-muted"
-          />
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={saving || active.rules.length === 0}
-              onClick={() => void saveCheckin()}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium"
-            >
-              {saving ? 'Saving…' : 'Save check-in'}
-            </button>
-            {checkSaved && (
-              <span className={checkSaved === 'Followed' ? 'text-sm text-profit' : 'text-sm text-loss'}>
-                {checkSaved === 'Followed' ? 'All rules followed' : 'A rule was missed'}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
       <PlaybookDiscipline playbookId={active?.id} />
 

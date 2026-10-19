@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PlaybookDayCheck from '@/app/playbook/playbook-day-check';
 
 type Section = { title: string; items: string[] };
 type Strategy = { id: string; name: string; criteria: { checklist?: Section[]; entry_rules?: string[] } | null };
@@ -111,7 +112,11 @@ export default function SessionNotesClient() {
     });
     const data = await res.json();
     if (data.success) {
-      setNotes((prev) => [...prev, { ...data.note, checks: [], body: '' }]);
+      const note = { ...data.note, checks: [] as string[], body: '' };
+      setNotes((prev) => [note, ...prev]);
+      requestAnimationFrame(() => {
+        document.getElementById(`note-${note.id}`)?.scrollIntoView({ block: 'start' });
+      });
     }
   };
 
@@ -168,9 +173,11 @@ export default function SessionNotesClient() {
         </div>
       </div>
 
+      <PlaybookDayCheck date={date} />
+
       {loading && <p className="text-sm text-text-muted">Loading notes…</p>}
       {!loading && notes.length === 0 && (
-        <p className="text-sm text-text-muted">No notes for this day. Add one when you see a setup.</p>
+        <p className="text-sm text-text-muted">No notes for this day. The newest one stays at the top.</p>
       )}
 
       <div className="space-y-4">
@@ -178,7 +185,7 @@ export default function SessionNotesClient() {
           const strategy = strategies.find((s) => s.id === note.strategyId);
           const sections = sectionsOf(strategy);
           return (
-            <article key={note.id} className="bg-surface-1 border border-border rounded-2xl p-5 space-y-4">
+            <article id={`note-${note.id}`} key={note.id} className="bg-surface-1 border border-border rounded-2xl p-5 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <input
                   type="time"
