@@ -19,6 +19,25 @@ function clock(raw: unknown): string | null {
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (request.nextUrl.searchParams.get('recent') === '1') {
+    const latest = await prisma.sessionNote.findFirst({
+      where: { userId: session.user.id },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      select: { date: true },
+    });
+    if (!latest) return NextResponse.json({ success: true, date: null, notes: [] });
+    const notes = await prisma.sessionNote.findMany({
+      where: { userId: session.user.id, date: latest.date },
+      orderBy: [{ createdAt: 'desc' }],
+      include: { strategy: { select: { id: true, name: true, criteria: true } } },
+    });
+    return NextResponse.json({
+      success: true,
+      date: latest.date.toISOString().slice(0, 10),
+      notes,
+    });
+  }
+
   const date = request.nextUrl.searchParams.get('date');
   if (!ymdOk(date)) return NextResponse.json({ error: 'Date required' }, { status: 400 });
 
@@ -27,7 +46,7 @@ export async function GET(request: NextRequest) {
       userId: session.user.id,
       date: new Date(`${date}T00:00:00.000Z`),
     },
-    orderBy: [{ time: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ createdAt: 'desc' }],
   });
   return NextResponse.json({ success: true, notes });
 }
