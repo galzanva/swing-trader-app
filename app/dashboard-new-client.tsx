@@ -6,6 +6,8 @@ import Link from 'next/link';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { WinRateRing } from '@/app/components/charts';
 import { formatJournalDateShort, todayInTimezone } from '@/lib/trade-dates';
+import { entryClockLine, entryPriceLine, exitPriceLine } from '@/lib/journal-fills';
+import { formatPointMove, futuresPointMove, isFuturesTrade } from '@/lib/futures-trade';
 import PlaybookDiscipline from '@/app/playbook/playbook-discipline';
 import SessionSummary from '@/app/session-notes/session-summary';
 
@@ -33,7 +35,15 @@ interface RecentTrade {
   tradeType: string;
   entryDate: string;
   exitDate: string | null;
+  entryTime: string | null;
   exitTime: string | null;
+  exit2Time?: string | null;
+  entryPrice: number;
+  exitPrice: number | null;
+  exit2Price?: number | null;
+  fills?: { side: 'entry' | 'exit'; time: string; price: number }[] | null;
+  filledQty?: number | null;
+  instrumentType?: string | null;
   isOpen: boolean;
   returnPct: number | null;
   profitLoss: number | null;
@@ -306,26 +316,46 @@ export default function DashboardNewClient({ session }: { session: Session }) {
                 </tr>
               </thead>
               <tbody>
-                {recentTrades.map(t => (
+                {recentTrades.map(t => {
+                  const points = isFuturesTrade(t) ? futuresPointMove(t) : null;
+                  return (
                   <tr key={t.id} className="border-b border-border last:border-b-0 hover:bg-card-hover transition-colors">
-                    <td className="px-6 lg:px-8 py-5 text-lg font-semibold text-text-primary">{t.ticker}</td>
+                    <td className="px-6 lg:px-8 py-5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold text-text-primary">{t.ticker}</span>
+                        {isFuturesTrade(t) && t.filledQty != null && (
+                          <span className="text-xs font-medium text-text-muted">{t.filledQty} ct</span>
+                        )}
+                      </div>
+                      {t.entryTime && (
+                        <div className="text-sm text-text-muted mt-0.5">{entryClockLine(t)}</div>
+                      )}
+                    </td>
                     <td className="px-6 lg:px-8 py-5">
                       <span className={`text-sm font-semibold px-3 py-1 rounded-lg ${
                         t.direction === 'long' ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss'
                       }`}>{t.direction.toUpperCase()}</span>
                     </td>
-                    <td className="px-6 lg:px-8 py-5 text-text-secondary text-lg">
-                      {formatJournalDateShort(t.entryDate)}
+                    <td className="px-6 lg:px-8 py-5 whitespace-nowrap">
+                      <div className="text-text-primary tabular-nums">{entryPriceLine(t.entryPrice, t)}</div>
+                      <div className="text-sm text-text-muted">{formatJournalDateShort(t.entryDate)}</div>
                     </td>
-                    <td className="px-6 lg:px-8 py-5 text-text-secondary text-lg">
-                      {t.exitDate
-                        ? `${formatJournalDateShort(t.exitDate)}${t.exitTime ? ' ' + t.exitTime : ''}`
-                        : '—'}
+                    <td className="px-6 lg:px-8 py-5 whitespace-nowrap">
+                      {t.exitPrice != null ? (
+                        <>
+                          <div className="text-text-primary tabular-nums">{exitPriceLine(t)}</div>
+                          {t.exitDate && <div className="text-sm text-text-muted">{formatJournalDateShort(t.exitDate)}</div>}
+                        </>
+                      ) : <div className="text-text-muted">—</div>}
                     </td>
                     <td className={`px-6 lg:px-8 py-5 text-right text-lg font-semibold tabular-nums ${
-                      t.returnPct === null ? 'text-text-muted' : t.returnPct >= 0 ? 'text-profit' : 'text-loss'
+                      points != null
+                        ? (points > 0 ? 'text-profit' : points < 0 ? 'text-loss' : 'text-text-muted')
+                        : t.returnPct === null ? 'text-text-muted' : t.returnPct >= 0 ? 'text-profit' : 'text-loss'
                     }`}>
-                      {t.returnPct !== null ? `${t.returnPct > 0 ? '+' : ''}${t.returnPct.toFixed(2)}%` : '—'}
+                      {points != null
+                        ? formatPointMove(points)
+                        : t.returnPct !== null ? `${t.returnPct > 0 ? '+' : ''}${t.returnPct.toFixed(2)}%` : '—'}
                     </td>
                     <td className={`px-6 lg:px-8 py-5 text-right text-lg font-semibold tabular-nums ${
                       t.profitLoss === null ? 'text-text-muted' : t.profitLoss >= 0 ? 'text-profit' : 'text-loss'
@@ -333,7 +363,8 @@ export default function DashboardNewClient({ session }: { session: Session }) {
                       {t.profitLoss !== null ? fmt(t.profitLoss) : '—'}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -16,6 +16,8 @@ export interface Trade {
   /** Adds and trims after the first entry and the first two exits. */
   fills?: { side: 'entry' | 'exit'; time: string; price: number }[] | null;
   amount: number;
+  filledQty?: number | null;
+  instrumentType?: string | null;
   strategy: string | null;
   strategies?: { id: string; name: string }[];
   notes: string | null;
