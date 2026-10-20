@@ -13,15 +13,15 @@ Centralized AI/LLM provider configuration. All LLM calls across the app go throu
 Set env vars in `.env.local`:
 
 ```bash
-# Default (OpenAI GPT-5 Mini)
+# Default (DeepSeek Flash)
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-flash
+DEEPSEEK_API_KEY=sk-...
+
+# OpenAI
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-5-mini
 OPENAI_API_KEY=sk-...
-
-# DeepSeek R1
-LLM_PROVIDER=deepseek
-LLM_MODEL=deepseek-reasoner
-DEEPSEEK_API_KEY=sk-...
 
 # Anthropic Claude
 LLM_PROVIDER=anthropic
@@ -34,7 +34,7 @@ LLM_MODEL=gemini-2.0-flash
 GOOGLE_AI_API_KEY=AIza...
 ```
 
-If `LLM_PROVIDER` / `LLM_MODEL` are not set, defaults to **OpenAI gpt-5-mini**.
+If `LLM_PROVIDER` / `LLM_MODEL` are not set, defaults to **DeepSeek deepseek-flash**.
 
 ## Supported Providers
 

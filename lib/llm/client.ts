@@ -108,6 +108,12 @@ async function callOpenAICompatible(config: LLMConfig, options: LLMCallOptions):
     body.response_format = { type: 'json_object' };
   }
 
+  // Flash thinks by default and can spend the whole token budget on reasoning.
+  // Journal parsing and the other prompts expect the answer in content.
+  if (config.provider === 'deepseek') {
+    body.thinking = { type: 'disabled' };
+  }
+
   console.log(`[LLM] Calling ${config.provider}/${config.model} (reasoning=${reasoning}, tokens=${body.max_completion_tokens ?? body.max_tokens})`);
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
