@@ -1,3 +1,5 @@
+import { parseJournalFills, type JournalFill } from '@/lib/journal-fills';
+
 /** Parse pasted journal dumps (CSV, pipe tables, MNQ session notes) into trade rows. */
 
 export interface PasteTrade {
@@ -8,8 +10,11 @@ export interface PasteTrade {
   exitDate: string | null;
   entryTime: string | null;
   exitTime: string | null;
+  exit2Time: string | null;
   entryPrice: number;
   exitPrice: number | null;
+  exit2Price: number | null;
+  fills: JournalFill[] | null;
   qty: number | null;
   amount: number;
   profitLoss: number | null;
@@ -117,6 +122,56 @@ export function padTime(raw: string | null | undefined): string | null {
   const mm = String(Math.min(59, parseInt(m[2], 10))).padStart(2, '0');
   const ss = String(Math.min(59, parseInt(m[3] || '0', 10))).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
+}
+
+function splitParts(raw: unknown): string[] {
+  if (raw == null) return [];
+  return String(raw).split(/\s*\/\s*/).map((p) => p.trim()).filter(Boolean);
+}
+
+function clocksIn(raw: string): string[] {
+  const out: string[] = [];
+  const re = /(\d{1,2}:\d{2})(?::\d{2})?/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    const padded = padTime(match[0]);
+    if (padded) out.push(padded);
+  }
+  return out;
+}
+
+/** "10:21 / 10:26 → 10:46 / 10:50 / 11:02" → adds and every trim. */
+function scaleFromText(timeRaw: unknown, priceRaw: unknown): {
+  entryTime: string | null;
+  entryPrice: number | null;
+  adds: JournalFill[];
+  exits: { time: string | null; price: number | null }[];
+} {
+  const timeText = timeRaw == null ? '' : String(timeRaw);
+  const priceText = priceRaw == null ? '' : String(priceRaw);
+  const timeSides = timeText.split(/\s*(?:→|->)\s*/);
+  const priceSides = priceText.split(/\s*(?:→|->)\s*/);
+  const entryTimes = timeSides.length > 1 ? clocksIn(timeSides[0]) : clocksIn(timeText);
+  const exitTimes = timeSides.length > 1 ? clocksIn(timeSides.slice(1).join(' ')) : [];
+  const entryPrices = (priceSides.length > 1 ? splitParts(priceSides[0]) : splitParts(priceText)).map(parseNum);
+  const exitPrices = priceSides.length > 1 ? splitParts(priceSides.slice(1).join(' ')).map(parseNum) : [];
+  const adds: JournalFill[] = [];
+  for (let i = 1; i < Math.max(entryTimes.length, entryPrices.length); i++) {
+    const time = entryTimes[i];
+    const price = entryPrices[i];
+    if (time && price != null) adds.push({ side: 'entry', time, price });
+  }
+  const exitCount = Math.max(exitTimes.length, exitPrices.length);
+  const exits: { time: string | null; price: number | null }[] = [];
+  for (let i = 0; i < exitCount; i++) {
+    exits.push({ time: exitTimes[i] || null, price: exitPrices[i] ?? null });
+  }
+  return {
+    entryTime: entryTimes[0] || null,
+    entryPrice: entryPrices[0] ?? null,
+    adds,
+    exits,
+  };
 }
 
 function parseNum(raw: unknown): number | null {
@@ -302,8 +357,11 @@ export function finalizeTrade(
     exitDate,
     entryTime: padTime(partial.entryTime),
     exitTime: padTime(partial.exitTime),
+    exit2Time: padTime(partial.exit2Time),
     entryPrice: partial.entryPrice,
     exitPrice,
+    exit2Price: partial.exit2Price ?? null,
+    fills: partial.fills?.length ? partial.fills : null,
     qty,
     amount: Math.round(amount * 100) / 100,
     profitLoss: profitLoss != null ? Math.round(profitLoss * 100) / 100 : null,
@@ -557,17 +615,20 @@ export function llmParsePrompt(args: {
   strategies: StrategyRef[];
   defaultBroker: string;
   year: number;
+  today: string;
 }): { system: string; user: string } {
   return {
     system: `You extract trading journal rows from messy pasted notes. Return ONLY valid JSON:
 {"inferredBroker":"slug-or-null","defaultTicker":"MNQZ6-or-null","sessionNotes":"short","trades":[...]}
 Each trade:
-{"ticker":"MNQZ6","direction":"long|short","tradeType":"intraday","entryDate":"YYYY-MM-DD","exitDate":"YYYY-MM-DD|null","entryTime":"HH:MM:SS|null","exitTime":"HH:MM:SS|null","entryPrice":0,"exitPrice":0,"qty":5,"profitLoss":-12.5,"strategy":"name or null","notes":"string or null","exitReason":"hit_target|stopped_out|manual_exit|null","broker":"slug or null"}
+{"ticker":"MNQZ6","direction":"long|short","tradeType":"intraday","entryDate":"YYYY-MM-DD","exitDate":"YYYY-MM-DD|null","entryTime":"HH:MM:SS|null","exitTime":"HH:MM:SS|null","exit2Time":"HH:MM:SS|null","entryPrice":0,"exitPrice":0,"exit2Price":null,"fills":[{"side":"entry|exit","time":"HH:MM:SS","price":0}],"qty":5,"profitLoss":-12.5,"strategy":"name or null","notes":"string or null","exitReason":"hit_target|stopped_out|manual_exit|null","broker":"slug or null"}
 Rules:
 - Prefer explicit P/L from the paste over recalculating.
 - Buy/Long = long. Sell/Short = short.
 - Times are session-local, keep as written. Normalize to HH:MM:SS.
-- If year missing use ${args.year}.
+- A trim can have two, three, or four exits. Keep every fill in order. "10:40→10:46 / 10:50 / 10:55" with "7743→7750 / 7742.75 / 7748" means exitTime 10:46 at 7750, exit2Time 10:50 at 7742.75, then fills [{"side":"exit","time":"10:55:00","price":7748}]. Leave exit2 and fills null when there is one exit.
+- An add is another entry before the exit. "10:21 / 10:26 → 10:30" with "7754 / 7758 → 7749.50" means entryTime 10:21 at 7754, then fills [{"side":"entry","time":"10:26:00","price":7758}], exitTime 10:30 at 7749.50. Do not drop later adds or trims.
+- If the paste names a calendar date, use it. If it has no date at all, use ${args.year} only when a month and day are written; otherwise use today, ${args.today}. Never invent January 1.
 - ticker MUST come from that row's contract/symbol/ticker cell. Mixed dumps (MNQ then MES/ES) are common. Never copy MNQ onto a ~5k–8k ES/MES print, and never copy MES/ES onto a ~20k–30k MNQ/NQ print.
 - ES = $50/pt, MES = $5/pt, MNQ = $2/pt, NQ = $20/pt.
 - Map setup names onto these strategies when close: ${args.strategies.map((s) => s.name).join('; ')}
@@ -607,16 +668,53 @@ export function tradesFromLlmJson(raw: string, defaultBroker: string, strategies
       continue;
     }
     const strat = matchStrategy(r.strategy || r.setup, strategies);
+    const entryScale = scaleFromText(r.entryTime, r.entryPrice ?? r.entry);
+    const exitTimes = splitParts(r.exitTime).flatMap((part) => clocksIn(part));
+    const exitPrices = splitParts(r.exitPrice ?? r.exit).map(parseNum);
+    if (!exitTimes.length) {
+      for (const exit of entryScale.exits) {
+        if (exit.time) exitTimes.push(exit.time);
+        if (!exitPrices.some((price) => price != null) && exit.price != null) exitPrices.push(exit.price);
+      }
+    }
+    if (r.exit2Time && exitTimes.length < 2) {
+      const padded = padTime(String(r.exit2Time));
+      if (padded) exitTimes.push(padded);
+    }
+    if (r.exit2Price != null && exitPrices.length < 2) exitPrices.push(parseNum(r.exit2Price));
+    const listed = parseJournalFills(r.fills);
+    const seen = new Set<string>();
+    const fills: JournalFill[] = [];
+    const pushFill = (fill: JournalFill) => {
+      const key = `${fill.side}|${fill.time}|${fill.price}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      fills.push(fill);
+    };
+    for (const add of [...entryScale.adds, ...listed.filter((fill) => fill.side === 'entry')]) pushFill(add);
+    exitTimes.slice(2).forEach((time, index) => {
+      const price = exitPrices[index + 2];
+      if (time && price != null) pushFill({ side: 'exit', time, price });
+    });
+    const primaryExits = new Set(
+      [0, 1].filter((index) => exitTimes[index] && exitPrices[index] != null).map((index) => `${exitTimes[index]}|${exitPrices[index]}`),
+    );
+    for (const fill of listed.filter((item) => item.side === 'exit')) {
+      if (!primaryExits.has(`${fill.time}|${fill.price}`)) pushFill(fill);
+    }
     trades.push(finalizeTrade({
       ticker,
       direction: side,
       tradeType: r.tradeType === 'swing' ? 'swing' : 'intraday',
       entryPrice: entry,
-      exitPrice: parseNum(r.exitPrice ?? r.exit),
+      exitPrice: exitPrices[0] ?? null,
+      exit2Price: exitPrices[1] ?? null,
       entryDate: date,
       exitDate: r.exitDate || date,
-      entryTime: r.entryTime,
-      exitTime: r.exitTime,
+      entryTime: entryScale.entryTime || r.entryTime,
+      exitTime: exitTimes[0] || null,
+      exit2Time: exitTimes[1] || null,
+      fills,
       qty: parseNum(r.qty ?? r.contracts),
       profitLoss: parseNum(r.profitLoss ?? r.pnl),
       strategy: strat.name,
@@ -634,6 +732,31 @@ export function tradesFromLlmJson(raw: string, defaultBroker: string, strategies
     sessionNotes: parsed.sessionNotes || null,
     parser: 'llm',
     warnings,
+  };
+}
+
+/** An undated paste must not be stored as January 1. Use the session day instead. */
+export function applyUndatedFallback(result: ParseResult, text: string, fallbackDate: string): ParseResult {
+  const dated = /\b20\d{2}-\d{2}-\d{2}\b/.test(text)
+    || /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(text);
+  if (dated) return result;
+  let changed = false;
+  const trades = result.trades.map((t) => {
+    const entry = t.entryDate.endsWith('-01-01');
+    const exit = !!t.exitDate?.endsWith('-01-01');
+    if (!entry && !exit) return t;
+    changed = true;
+    return {
+      ...t,
+      entryDate: entry ? fallbackDate : t.entryDate,
+      exitDate: exit ? fallbackDate : t.exitDate,
+    };
+  });
+  if (!changed) return result;
+  return {
+    ...result,
+    trades,
+    warnings: result.warnings.filter((w) => !w.startsWith('Some rows are missing a full date')),
   };
 }
 

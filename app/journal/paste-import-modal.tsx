@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { entryClockLine, entryPriceLine, exitPriceLine } from '@/lib/journal-fills';
 
 type PreviewTrade = {
   ticker: string;
@@ -10,8 +11,11 @@ type PreviewTrade = {
   exitDate: string | null;
   entryTime: string | null;
   exitTime: string | null;
+  exit2Time?: string | null;
   entryPrice: number;
   exitPrice: number | null;
+  exit2Price?: number | null;
+  fills?: { side: 'entry' | 'exit'; time: string; price: number }[] | null;
   qty: number | null;
   amount: number;
   profitLoss: number | null;
@@ -253,12 +257,12 @@ export default function PasteImportModal({
                           />
                         </td>
                         <td className="px-3 py-2 tabular-nums text-text-primary">{t.entryDate}</td>
-                        <td className="px-3 py-2 tabular-nums text-text-secondary">{t.entryTime?.slice(0, 5) || '—'}</td>
+                        <td className="px-3 py-2 tabular-nums text-text-secondary">{entryClockLine(t) || '—'}</td>
                         <td className="px-3 py-2 font-semibold text-text-primary">{t.ticker}</td>
                         <td className={`px-3 py-2 ${t.direction === 'long' ? 'text-profit' : 'text-loss'}`}>{t.direction}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{t.qty ?? '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{t.entryPrice}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{t.exitPrice ?? '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{entryPriceLine(t.entryPrice, t).replace(/\$/g, '')}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{t.exitPrice == null ? '—' : exitPriceLine(t).replace(/\$/g, '')}</td>
                         <td className={`px-3 py-2 text-right tabular-nums font-medium ${(t.profitLoss ?? 0) >= 0 ? 'text-profit' : 'text-loss'}`}>{fmt(t.profitLoss)}</td>
                         <td className="px-3 py-2 text-text-secondary max-w-[160px] truncate" title={t.strategy || ''}>
                           {t.duplicate ? 'Already imported' : (t.strategy || '—')}

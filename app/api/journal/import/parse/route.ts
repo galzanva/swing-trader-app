@@ -6,12 +6,14 @@ import { callLLM } from '@/lib/llm/client';
 import { isLLMConfigured } from '@/lib/llm/config';
 import {
   applyStrategyAndBroker,
+  applyUndatedFallback,
   llmParsePrompt,
   parseDeterministic,
   pasteFingerprint,
   tradesFromLlmJson,
   type ParseResult,
 } from '@/lib/journal-paste-import';
+import { todayInTimezone } from '@/lib/trade-dates';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     const year = new Date().getFullYear();
+    const today = todayInTimezone('America/New_York');
     const det = parseDeterministic(text, defaultBroker, strategies, year);
     let result: ParseResult = det;
     let llmError: string | null = null;
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
       && (text.includes('|') || text.includes(','));
     if (preferLlm && isLLMConfigured() && !structuredContractTable && (messy || det.trades.length === 0)) {
       try {
-        const prompt = llmParsePrompt({ text, brokers, strategies, defaultBroker, year });
+        const prompt = llmParsePrompt({ text, brokers, strategies, defaultBroker, year, today });
         const llm = await callLLM({
           messages: [
             { role: 'system', content: prompt.system },
@@ -86,6 +89,8 @@ export async function POST(request: NextRequest) {
         result.warnings.push(`AI parse skipped: ${llmError}`);
       }
     }
+
+    result = applyUndatedFallback(result, text, today);
 
     const broker = result.inferredBroker || defaultBroker;
     result.trades = applyStrategyAndBroker(result.trades, strategies, broker);

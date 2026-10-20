@@ -20,10 +20,8 @@ type ChartPayload = {
   timeframe: ChartTimeframe;
   bars: Bar[];
   marks: {
-    entryMs: number;
-    exitMs: number | null;
-    entryPrice: number;
-    exitPrice: number | null;
+    entries: { ms: number; price: number }[];
+    exits: { ms: number; price: number }[];
     direction: string;
   };
   trade: {
@@ -69,7 +67,8 @@ const TF_LABEL: Record<ChartTimeframe, string> = {
 
 const NY = 'America/New_York';
 const ENTRY_COLOR = '#38bdf8';
-const EXIT_COLOR = '#fbbf24';
+const ADD_COLOR = '#c4b5fd';
+const EXIT_COLORS = ['#fbbf24', '#fb923c', '#f97316', '#fdba74', '#fcd34d'];
 const LAST_COLOR = '#a3a3a3';
 
 function unixSec(time: unknown): number | null {
@@ -256,27 +255,31 @@ export default function TradeChartModal({
       );
 
       const long = data.marks.direction === 'long';
-      const entryT = nearestBarTime(data.bars, data.marks.entryMs);
-      const exitT = data.marks.exitMs ? nearestBarTime(data.bars, data.marks.exitMs) : null;
+      const entryMarks = data.marks.entries.map((fill) => ({ ...fill, bar: nearestBarTime(data.bars, fill.ms) }));
+      const exitMarks = data.marks.exits.map((fill) => ({ ...fill, bar: nearestBarTime(data.bars, fill.ms) }));
 
-      candle.createPriceLine({
-        price: data.marks.entryPrice,
-        color: ENTRY_COLOR,
-        lineWidth: 2,
-        lineStyle: lc.LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: `Entry ${nyClock(data.marks.entryMs)}`,
-      });
-      if (data.marks.exitPrice != null && data.marks.exitMs != null) {
+      entryMarks.forEach((fill, index) => {
+        const color = index === 0 ? ENTRY_COLOR : ADD_COLOR;
+        const title = index === 0 ? 'Entry' : `Add ${index}`;
         candle.createPriceLine({
-          price: data.marks.exitPrice,
-          color: EXIT_COLOR,
+          price: fill.price,
+          color,
           lineWidth: 2,
           lineStyle: lc.LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `Exit ${nyClock(data.marks.exitMs)}`,
+          title: `${title} ${nyClock(fill.ms)}`,
         });
-      }
+      });
+      exitMarks.forEach((fill, index) => {
+        candle.createPriceLine({
+          price: fill.price,
+          color: EXIT_COLORS[index % EXIT_COLORS.length],
+          lineWidth: 2,
+          lineStyle: lc.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${index === 0 ? 'Exit' : `Exit ${index + 1}`} ${nyClock(fill.ms)}`,
+        });
+      });
 
       // Dots + labels sit on the fill price. Markers on the candle series
       // use above/below the bar, which parked the exit label on the entry line.
@@ -294,30 +297,38 @@ export default function TradeChartModal({
         series.setMarkers([{ time: asTime(time), position, color, shape, text }] as any);
       };
 
-      markSeries(
-        ENTRY_COLOR,
-        entryT,
-        data.marks.entryPrice,
-        `Entry ${data.marks.entryPrice.toFixed(2)}  ${nyClock(data.marks.entryMs)} ET`,
-        long ? 'arrowUp' : 'arrowDown',
-        long ? 'belowBar' : 'aboveBar',
-      );
-      if (exitT != null && data.marks.exitPrice != null && data.marks.exitMs != null) {
+      entryMarks.forEach((fill, index) => {
+        const color = index === 0 ? ENTRY_COLOR : ADD_COLOR;
+        const title = index === 0 ? 'Entry' : `Add ${index}`;
         markSeries(
-          EXIT_COLOR,
-          exitT,
-          data.marks.exitPrice,
-          `Exit ${data.marks.exitPrice.toFixed(2)}  ${nyClock(data.marks.exitMs)} ET`,
+          color,
+          fill.bar,
+          fill.price,
+          `${title} ${fill.price.toFixed(2)}  ${nyClock(fill.ms)} ET`,
+          long ? 'arrowUp' : 'arrowDown',
+          long ? 'belowBar' : 'aboveBar',
+        );
+      });
+      exitMarks.forEach((fill, index) => {
+        const title = index === 0 ? 'Exit' : `Exit ${index + 1}`;
+        markSeries(
+          EXIT_COLORS[index % EXIT_COLORS.length],
+          fill.bar,
+          fill.price,
+          `${title} ${fill.price.toFixed(2)}  ${nyClock(fill.ms)} ET`,
           long ? 'arrowDown' : 'arrowUp',
           long ? 'aboveBar' : 'belowBar',
         );
-      }
+      });
 
-      const rangeExit = exitT ?? entryT;
+      const rangeTimes = [...entryMarks.map((fill) => fill.bar), ...exitMarks.map((fill) => fill.bar)];
+      if (!rangeTimes.length) return;
+      const rangeExit = Math.max(...rangeTimes);
+      const rangeEntry = Math.min(...rangeTimes);
       const pad = Math.max(8, Math.round(data.bars.length * 0.04));
       const times = data.bars.map((b) => Math.floor(b.timestamp / 1000));
-      const fromIdx = Math.max(0, times.findIndex((t) => t >= Math.min(entryT, rangeExit)) - pad);
-      let toIdx = times.findIndex((t) => t >= Math.max(entryT, rangeExit));
+      const fromIdx = Math.max(0, times.findIndex((t) => t >= Math.min(rangeEntry, rangeExit)) - pad);
+      let toIdx = times.findIndex((t) => t >= rangeExit);
       if (toIdx < 0) toIdx = times.length - 1;
       toIdx = Math.min(times.length - 1, toIdx + pad);
       created.timeScale().setVisibleRange({
@@ -378,7 +389,12 @@ export default function TradeChartModal({
                   )}
                   <span className="text-text-muted">·</span>
                   <span className="text-text-secondary">
-                    {formatHold(data.marks.entryMs, data.marks.exitMs, data.trade.holdingDays, data.trade.isOpen)}
+                    {formatHold(
+                      data.marks.entries[0]?.ms ?? 0,
+                      data.marks.exits.length ? Math.max(...data.marks.exits.map((fill) => fill.ms)) : null,
+                      data.trade.holdingDays,
+                      data.trade.isOpen,
+                    )}
                   </span>
                 </>
               )}
@@ -387,9 +403,19 @@ export default function TradeChartModal({
               <span className="inline-flex items-center gap-1.5 text-[#38bdf8]">
                 <span className="w-3 h-0.5 bg-[#38bdf8] inline-block" /> Entry
               </span>
+              {(data?.marks.entries.length ?? 0) > 1 && (
+                <span className="inline-flex items-center gap-1.5 text-[#c4b5fd]">
+                  <span className="w-3 h-0.5 bg-[#c4b5fd] inline-block" /> Add
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 text-[#fbbf24]">
                 <span className="w-3 h-0.5 bg-[#fbbf24] inline-block" /> Exit
               </span>
+              {(data?.marks.exits.length ?? 0) > 1 && (
+                <span className="inline-flex items-center gap-1.5 text-[#fb923c]">
+                  <span className="w-3 h-0.5 bg-[#fb923c] inline-block" /> Later exits
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 text-[#a3a3a3]">
                 <span className="w-3 h-0.5 bg-[#a3a3a3] inline-block" /> Last
               </span>
