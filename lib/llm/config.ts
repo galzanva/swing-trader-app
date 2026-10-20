@@ -6,7 +6,7 @@
  * 
  * Supported providers:
  *   - openai     (GPT-5-mini, GPT-4o-mini, etc.)
- *   - deepseek   (DeepSeek R1, etc. - OpenAI-compatible API)
+ *   - deepseek   (deepseek-flash - OpenAI-compatible API)
  *   - anthropic  (Claude 3.5/4 - different API format)
  *   - google     (Gemini - different API format)
  */
@@ -49,7 +49,7 @@ const PROVIDER_DEFAULTS: Record<LLMProvider, ProviderDefaults> = {
 function resolveProvider(): LLMProvider {
   const env = process.env.LLM_PROVIDER?.toLowerCase();
   if (env && env in PROVIDER_DEFAULTS) return env as LLMProvider;
-  return 'openai';
+  return 'deepseek';
 }
 
 function resolveModel(provider: LLMProvider): string {
@@ -57,7 +57,7 @@ function resolveModel(provider: LLMProvider): string {
   
   const defaults: Record<LLMProvider, string> = {
     openai: 'gpt-5-mini',
-    deepseek: 'deepseek-reasoner',
+    deepseek: 'deepseek-flash',
     anthropic: 'claude-sonnet-4-20250514',
     google: 'gemini-2.0-flash',
   };
@@ -103,6 +103,8 @@ export function getModelDisplayName(): string {
     'o3': 'o3',
     'o1-mini': 'o1-mini',
     'o1': 'o1',
+    'deepseek-flash': 'DeepSeek Flash',
+    'deepseek-v4-pro': 'DeepSeek V4 Pro',
     'deepseek-reasoner': 'DeepSeek R1',
     'deepseek-chat': 'DeepSeek V3',
     'claude-sonnet-4-20250514': 'Claude Sonnet 4',
