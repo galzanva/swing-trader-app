@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { Trade, TradeDetail, OHLCBar } from './journal-types';
 import { formatJournalStoredDate, nyseCalendarDateString } from '@/lib/trade-dates';
+import { addSequence, exitSequence } from '@/lib/journal-fills';
 import TradeChartModal from './trade-chart-modal';
 import TradeScreenshots from './trade-screenshots';
 
@@ -146,6 +147,9 @@ function detailToTradeForEdit(d: TradeDetail): Trade {
     exitDate: d.exitDate ? iso(d.exitDate as string) : null,
     entryTime: d.entryTime,
     exitTime: d.exitTime,
+    exit2Time: d.exit2Time,
+    exit2Price: d.exit2Price,
+    fills: d.fills,
     amount: d.amount,
     strategy: d.strategy,
     notes: d.notes,
@@ -358,6 +362,9 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
               <Section title="Execution">
                 <Row label="Entry" value={`$${detail.entryPrice.toFixed(2)} · ${formatJournalStoredDate(detail.entryDate)}`} />
                 {detail.entryTime && <Row label="Entry time" value={detail.entryTime} />}
+                {addSequence(detail).map((add, index) => (
+                  <Row key={`add-${index}`} label={addSequence(detail).length > 1 ? `Add ${index + 1}` : 'Add'} value={`$${add.price.toFixed(2)} · ${add.time}`} />
+                ))}
                 <Row
                   label="Exit"
                   value={
@@ -367,6 +374,9 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                   }
                 />
                 {detail.exitTime && <Row label="Exit time" value={detail.exitTime} />}
+                {exitSequence(detail).slice(1).map((exit, index) => (
+                  <Row key={`exit-${index}`} label={`Exit ${index + 2}`} value={`$${exit.price.toFixed(2)}${exit.time ? ` · ${exit.time}` : ''}`} />
+                ))}
                 <Row label="Size" value={formatMoney(detail.amount)} />
                 <Row label="Strategies" value={detail.strategy || '—'} />
                 {detail.exitReason && (

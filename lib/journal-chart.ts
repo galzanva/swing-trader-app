@@ -1,3 +1,4 @@
+import { addSequence, exitSequence } from '@/lib/journal-fills';
 import { journalDateTimeMs, journalStoredYmd } from '@/lib/trade-dates';
 
 export const CHART_TIMEFRAMES = ['1min', '5min', '15min', '1hour', '1day'] as const;
@@ -79,24 +80,43 @@ export function defaultChartTf(tradeType: string): ChartTimeframe {
   return tradeType === 'intraday' ? '5min' : '1day';
 }
 
+export type ChartFill = { ms: number; price: number };
+
 export function tradeMarks(trade: {
   entryDate: string | Date;
   exitDate: string | Date | null;
   entryTime?: string | null;
   exitTime?: string | null;
+  exit2Time?: string | null;
   entryPrice: number;
   exitPrice: number | null;
+  exit2Price?: number | null;
+  fills?: unknown;
   direction: string;
 }) {
-  const entryMs = journalDateTimeMs(journalStoredYmd(trade.entryDate), trade.entryTime);
-  const exitMs = trade.exitDate
-    ? journalDateTimeMs(journalStoredYmd(trade.exitDate), trade.exitTime || trade.entryTime)
-    : null;
+  const entryDay = journalStoredYmd(trade.entryDate);
+  const exitDay = trade.exitDate ? journalStoredYmd(trade.exitDate) : null;
+  const entryMs = journalDateTimeMs(entryDay, trade.entryTime);
+  const entries: ChartFill[] = [{ ms: entryMs, price: trade.entryPrice }];
+  for (const add of addSequence(trade)) {
+    entries.push({ ms: journalDateTimeMs(entryDay, add.time), price: add.price });
+  }
+  const exits: ChartFill[] = [];
+  if (exitDay) {
+    for (const exit of exitSequence(trade)) {
+      if (!exit.time) continue;
+      exits.push({ ms: journalDateTimeMs(exitDay, exit.time), price: exit.price });
+    }
+  }
   return {
+    entries,
+    exits,
     entryMs,
-    exitMs,
+    exitMs: exits[0]?.ms ?? null,
+    exit2Ms: exits[1]?.ms ?? null,
     entryPrice: trade.entryPrice,
     exitPrice: trade.exitPrice,
+    exit2Price: trade.exit2Price ?? null,
     direction: trade.direction,
   };
 }

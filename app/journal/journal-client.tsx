@@ -8,6 +8,7 @@ import PasteImportModal from './paste-import-modal';
 import TradeScreenshots from './trade-screenshots';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { formatJournalStoredDate } from '@/lib/trade-dates';
+import { entryClockLine, entryPriceLine, exitPriceLine, latestExitClock, parseJournalFills, type JournalFill } from '@/lib/journal-fills';
 
 interface Summary {
   totalTrades: number;
@@ -86,7 +87,7 @@ function closedIntradayHoldSeconds(t: Trade): number | null {
   const entryDay = tradeCalendarDay(t.entryDate);
   const exitDay = t.exitDate ? tradeCalendarDay(t.exitDate) : entryDay;
   const entryMs = new Date(`${entryDay}T00:00:00.000Z`).getTime() + msFromJournalTime(t.entryTime);
-  const exitMs = new Date(`${exitDay}T00:00:00.000Z`).getTime() + msFromJournalTime(t.exitTime);
+  const exitMs = new Date(`${exitDay}T00:00:00.000Z`).getTime() + msFromJournalTime(latestExitClock(t));
   const sec = (exitMs - entryMs) / 1000;
   if (!Number.isFinite(sec) || sec < 0) return null;
   return sec;
@@ -115,10 +116,24 @@ function journalTradeSortKey(t: Trade): number {
       const ed = new Date(`${tradeCalendarDay(t.entryDate)}T00:00:00.000Z`).getTime();
       return (Number.isNaN(ed) ? 0 : ed) + msFromJournalTime(t.entryTime);
     }
-    return dayMs + msFromJournalTime(t.exitTime);
+    return dayMs + msFromJournalTime(latestExitClock(t));
   }
   const dayMs = new Date(`${tradeCalendarDay(t.entryDate)}T00:00:00.000Z`).getTime();
   return (Number.isNaN(dayMs) ? 0 : dayMs) + msFromJournalTime(t.entryTime);
+}
+
+type FillDraft = { time: string; price: string };
+
+function draftsFromFills(fills: JournalFill[]): FillDraft[] {
+  return fills.map((fill) => ({ time: fill.time, price: String(fill.price) }));
+}
+
+function cleanDrafts(rows: FillDraft[]): { time: string; price: number }[] {
+  return rows.flatMap((row) => {
+    const time = row.time.trim();
+    const price = row.price.trim() ? parseFloat(row.price) : NaN;
+    return time && Number.isFinite(price) ? [{ time, price }] : [];
+  });
 }
 
 function tradeStrategyNames(trade: Trade): string[] {
@@ -176,6 +191,8 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [exitDate, setExitDate] = useState('');
   const [entryTimeForm, setEntryTimeForm] = useState('');
   const [exitTimeForm, setExitTimeForm] = useState('');
+  const [moreExits, setMoreExits] = useState<FillDraft[]>([]);
+  const [adds, setAdds] = useState<FillDraft[]>([]);
   const [amount, setAmount] = useState('');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
   const [selectedReportId, setSelectedReportId] = useState('');
@@ -453,6 +470,12 @@ export default function JournalClient({ session }: JournalClientProps) {
         exitDate: effectiveExitDate || undefined,
         entryTime: entryTimeForm || undefined,
         exitTime: exitTimeForm || undefined,
+        exit2Time: cleanDrafts(moreExits)[0]?.time ?? null,
+        exit2Price: cleanDrafts(moreExits)[0]?.price ?? null,
+        fills: [
+          ...cleanDrafts(adds).map((fill) => ({ side: 'entry' as const, ...fill })),
+          ...cleanDrafts(moreExits).slice(1).map((fill) => ({ side: 'exit' as const, ...fill })),
+        ],
         amount: parseFloat(amount),
         strategyIds,
         analysisReportId: selectedReportId || undefined,
@@ -483,7 +506,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setBrokerForm('webull');
     setEntryPrice(''); setEntryDate(localDateStr());
     setExitPrice(''); setExitDate(''); setAmount('');
-    setEntryTimeForm(''); setExitTimeForm('');
+    setEntryTimeForm(''); setExitTimeForm(''); setMoreExits([]); setAdds([]);
     setStrategyIds([]); setSelectedReportId(''); setNotes('');
     setIsOpen(false); setExitReason('');
   };
@@ -501,6 +524,16 @@ export default function JournalClient({ session }: JournalClientProps) {
     setExitDate(trade.exitDate ? trade.exitDate.split('T')[0] : '');
     setEntryTimeForm(trade.entryTime || '');
     setExitTimeForm(trade.exitTime || '');
+    const stored = parseJournalFills(trade.fills);
+    const exitDrafts = draftsFromFills(stored.filter((fill) => fill.side === 'exit'));
+    if (trade.exit2Time || trade.exit2Price != null) {
+      exitDrafts.unshift({
+        time: trade.exit2Time || '',
+        price: trade.exit2Price != null ? String(trade.exit2Price) : '',
+      });
+    }
+    setMoreExits(exitDrafts);
+    setAdds(draftsFromFills(stored.filter((fill) => fill.side === 'entry')));
     setAmount(trade.amount.toString());
     setStrategyIds(idsForTrade(trade, dbStrategies));
     setSelectedReportId(trade.analysisReportId || '');
@@ -1008,7 +1041,7 @@ export default function JournalClient({ session }: JournalClientProps) {
                         {trade.isOpen && <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-lg bg-profit/10 text-profit">OPEN</span>}
                       </div>
                       {trade.entryTime && (
-                        <div className="text-sm text-text-muted mt-0.5">{trade.entryTime.slice(0, 5)}{trade.exitTime ? ` → ${trade.exitTime.slice(0, 5)}` : ''}</div>
+                        <div className="text-sm text-text-muted mt-0.5">{entryClockLine(trade)}</div>
                       )}
                     </td>
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap">
@@ -1022,13 +1055,13 @@ export default function JournalClient({ session }: JournalClientProps) {
                       </span>
                     </td>
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap">
-                      <div className="text-base text-text-primary tabular-nums">${trade.entryPrice.toFixed(2)}</div>
+                      <div className="text-base text-text-primary tabular-nums">{entryPriceLine(trade.entryPrice, trade)}</div>
                       <div className="text-sm text-text-muted">{formatJournalStoredDate(trade.entryDate)}</div>
                     </td>
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap">
                       {trade.exitPrice ? (
                         <>
-                          <div className="text-base text-text-primary tabular-nums">${trade.exitPrice.toFixed(2)}</div>
+                          <div className="text-base text-text-primary tabular-nums">{exitPriceLine(trade)}</div>
                           {trade.exitDate && <div className="text-sm text-text-muted">{formatJournalStoredDate(trade.exitDate)}</div>}
                         </>
                       ) : <div className="text-base text-text-muted">—</div>}
@@ -1222,6 +1255,49 @@ export default function JournalClient({ session }: JournalClientProps) {
                         className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" required={!isOpen} />
                     </div>
                   )}
+                </div>
+              )}
+
+              {(isIntraday || !isOpen) && (
+                <div className="space-y-3">
+                  {adds.map((row, index) => (
+                    <div key={`add-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Add {index + 1} Time</label>
+                        <input type="time" step="1" value={row.time} onChange={(e) => setAdds(adds.map((item, i) => i === index ? { ...item, time: e.target.value } : item))}
+                          className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Add {index + 1} Price</label>
+                        <input type="number" step="0.01" value={row.price} onChange={(e) => setAdds(adds.map((item, i) => i === index ? { ...item, price: e.target.value } : item))}
+                          className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
+                      </div>
+                      <button type="button" onClick={() => setAdds(adds.filter((_, i) => i !== index))}
+                        className="px-3 py-3 text-sm text-text-muted hover:text-loss">Remove</button>
+                    </div>
+                  ))}
+                  {moreExits.map((row, index) => (
+                    <div key={`exit-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Exit {index + 2} Time</label>
+                        <input type="time" step="1" value={row.time} onChange={(e) => setMoreExits(moreExits.map((item, i) => i === index ? { ...item, time: e.target.value } : item))}
+                          className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Exit {index + 2} Price</label>
+                        <input type="number" step="0.01" value={row.price} onChange={(e) => setMoreExits(moreExits.map((item, i) => i === index ? { ...item, price: e.target.value } : item))}
+                          className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
+                      </div>
+                      <button type="button" onClick={() => setMoreExits(moreExits.filter((_, i) => i !== index))}
+                        className="px-3 py-3 text-sm text-text-muted hover:text-loss">Remove</button>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setAdds([...adds, { time: '', price: '' }])}
+                      className="px-3 py-2 text-sm font-medium rounded-lg border border-border text-text-secondary hover:bg-surface-3">Add to position</button>
+                    <button type="button" onClick={() => setMoreExits([...moreExits, { time: '', price: '' }])}
+                      className="px-3 py-2 text-sm font-medium rounded-lg border border-border text-text-secondary hover:bg-surface-3">Another exit</button>
+                  </div>
                 </div>
               )}
 

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
+import { fillsExportText } from '@/lib/journal-fills';
 
 interface OHLCBar {
   open?: number;
@@ -43,6 +44,9 @@ const CSV_COLUMNS = [
   'Exit Price',
   'Exit Date',
   'Exit Time',
+  'Exit 2 Price',
+  'Exit 2 Time',
+  'More Fills',
   'Amount ($)',
   'Is Open',
   'Strategy',
@@ -107,6 +111,9 @@ function tradeToRow(t: any): string[] {
     t.exitPrice,
     t.exitDate,
     t.exitTime,
+    t.exit2Price,
+    t.exit2Time,
+    fillsExportText(t.fills),
     t.amount,
     t.isOpen,
     t.strategy,

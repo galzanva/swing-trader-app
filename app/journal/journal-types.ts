@@ -11,6 +11,10 @@ export interface Trade {
   exitDate: string | null;
   entryTime: string | null;
   exitTime: string | null;
+  exit2Time?: string | null;
+  exit2Price?: number | null;
+  /** Adds and trims after the first entry and the first two exits. */
+  fills?: { side: 'entry' | 'exit'; time: string; price: number }[] | null;
   amount: number;
   strategy: string | null;
   strategies?: { id: string; name: string }[];

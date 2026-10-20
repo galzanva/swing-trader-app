@@ -12,7 +12,9 @@ import {
   computeJournalPolygonPatchFromBars,
   fetchUnadjustedDailyBars,
 } from '@/lib/journal-polygon-enrichment';
+import { parseJournalFills } from '@/lib/journal-fills';
 import { resolveStrategySelection, strategyLabel, syncTradeStrategies } from '@/lib/trade-strategies';
+import { Prisma } from '@prisma/client';
 
 interface TradeInput {
   id?: string;
@@ -25,6 +27,9 @@ interface TradeInput {
   exitDate?: string;
   entryTime?: string;
   exitTime?: string;
+  exit2Time?: string | null;
+  exit2Price?: number | null;
+  fills?: unknown;
   amount: number;
   strategy?: string;
   strategyIds?: string[];
@@ -222,6 +227,9 @@ export async function POST(request: NextRequest) {
       exitDate: exitDate,
       entryTime: body.entryTime ?? null,
       exitTime: body.exitTime ?? null,
+      exit2Time: body.exit2Time ? String(body.exit2Time) : null,
+      exit2Price: typeof body.exit2Price === 'number' && Number.isFinite(body.exit2Price) ? body.exit2Price : null,
+      fills: parseJournalFills(body.fills).length ? parseJournalFills(body.fills) : Prisma.DbNull,
       amount: body.amount,
       strategy: strategyText,
       strategyId: strategyPicks[0]?.id ?? null,
