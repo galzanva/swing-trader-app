@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { Trade, TradeDetail, OHLCBar } from './journal-types';
 import { formatJournalStoredDate, nyseCalendarDateString } from '@/lib/trade-dates';
 import { addSequence, exitSequence } from '@/lib/journal-fills';
+import { formatPointMove, futuresPointMove, isFuturesTrade } from '@/lib/futures-trade';
 import TradeChartModal from './trade-chart-modal';
 import TradeScreenshots from './trade-screenshots';
 
@@ -151,6 +152,8 @@ function detailToTradeForEdit(d: TradeDetail): Trade {
     exit2Price: d.exit2Price,
     fills: d.fills,
     amount: d.amount,
+    filledQty: d.filledQty,
+    instrumentType: d.instrumentType,
     strategy: d.strategy,
     notes: d.notes,
     isOpen: d.isOpen,
@@ -323,14 +326,15 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 </div>
               </div>
               <div className="rounded-xl px-5 py-4 min-w-[120px] border border-border bg-surface-2">
-                <div className="text-xs uppercase tracking-wider text-text-muted font-medium">Return</div>
+                <div className="text-xs uppercase tracking-wider text-text-muted font-medium">{isFuturesTrade(detail) ? 'Points' : 'Return'}</div>
                 <div
                   className={`text-2xl font-bold tabular-nums ${
-                    detail.returnPct >= 0 ? 'text-profit' : 'text-loss'
+                    (isFuturesTrade(detail) ? (futuresPointMove(detail) ?? 0) : detail.returnPct) >= 0 ? 'text-profit' : 'text-loss'
                   }`}
                 >
-                  {detail.returnPct >= 0 ? '+' : ''}
-                  {detail.returnPct.toFixed(2)}%
+                  {isFuturesTrade(detail) && futuresPointMove(detail) != null
+                    ? formatPointMove(futuresPointMove(detail) as number)
+                    : `${detail.returnPct >= 0 ? '+' : ''}${detail.returnPct.toFixed(2)}%`}
                 </div>
               </div>
               {detail.rMultiple != null && (
@@ -377,7 +381,12 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 {exitSequence(detail).slice(1).map((exit, index) => (
                   <Row key={`exit-${index}`} label={`Exit ${index + 2}`} value={`$${exit.price.toFixed(2)}${exit.time ? ` · ${exit.time}` : ''}`} />
                 ))}
-                <Row label="Size" value={formatMoney(detail.amount)} />
+                <Row
+                  label="Size"
+                  value={isFuturesTrade(detail)
+                    ? (detail.filledQty != null ? `${detail.filledQty} contract${detail.filledQty === 1 ? '' : 's'}` : '—')
+                    : formatMoney(detail.amount)}
+                />
                 <Row label="Strategies" value={detail.strategy || '—'} />
                 {detail.exitReason && (
                   <Row label="Exit reason" value={EXIT_REASON_LABELS[detail.exitReason] || detail.exitReason} />
@@ -387,6 +396,7 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 )}
               </Section>
 
+              {!isFuturesTrade(detail) && (
               <Section title="Ticker snapshot">
                 <Row label="Sector" value={detail.sector || '—'} />
                 <Row label="Industry" value={detail.industry || '—'} />
@@ -400,10 +410,13 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                 <Row label="Short % of float" value={detail.shortPercent != null ? `${detail.shortPercent.toFixed(2)}%` : '—'} />
                 <Row label="Beta" value={detail.beta != null ? detail.beta.toFixed(2) : '—'} />
               </Section>
+              )}
 
               <Section title="Session OHLC (saved)">
                 <p className="text-sm text-text-muted mb-3 leading-relaxed">
-                  Daily bars are saved as <span className="text-text-secondary">unadjusted</span> US session OHLC so levels align with broker prints; re-save the trade to refresh after a bad match.
+                  {isFuturesTrade(detail)
+                    ? 'Daily bars are the delayed continuous contract from Yahoo, so the session matches the futures chart.'
+                    : <>Daily bars are saved as <span className="text-text-secondary">unadjusted</span> US session OHLC so levels align with broker prints; re-save the trade to refresh after a bad match.</>}
                 </p>
                 <div className="space-y-3">
                   <OHLCCard title={`Entry day · ${formatJournalStoredDate(detail.entryDate)}`} bar={entryBar} />
@@ -421,26 +434,28 @@ export default function TradeDetailDrawer({ tradeId, onClose, onEdit, onDelete }
                     </p>
                   )}
                 <p className="text-sm text-text-muted mb-3 leading-relaxed">
-                  EMA, RSI, and ATR use Polygon <span className="text-text-secondary">unadjusted</span> daily closes <strong>through</strong> each session (oldest → newest). After a huge day from a low base, EMAs can still sit <strong>below</strong> the last close because they weight many prior sessions. ATR(14) is a <strong>smoothed</strong> average of true range — often much smaller than that day&apos;s high−low spike.
-                  {detail.tradeType === 'intraday' && (
+                  {isFuturesTrade(detail)
+                    ? 'EMA, RSI, and ATR use delayed Yahoo daily closes on the continuous contract. ATR is in points.'
+                    : <>EMA, RSI, and ATR use Polygon <span className="text-text-secondary">unadjusted</span> daily closes <strong>through</strong> each session (oldest → newest). After a huge day from a low base, EMAs can still sit <strong>below</strong> the last close because they weight many prior sessions. ATR(14) is a <strong>smoothed</strong> average of true range — often much smaller than that day&apos;s high−low spike.</>}
+                  {!isFuturesTrade(detail) && detail.tradeType === 'intraday' && (
                     <span> ATR % = ATR ÷ that session&apos;s daily close.</span>
                   )}{' '}
-                  If rows show dashes, use <span className="text-accent">Refresh OHLC</span> on the journal page (refreshes trades matching your filters; needs Polygon).
+                  If rows show dashes, use <span className="text-accent">Refresh OHLC</span> on the journal page. Stocks use Polygon. Futures use Yahoo.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="rounded-xl bg-surface-2 border border-border p-4">
                     <div className="text-sm font-semibold text-text-secondary mb-3">At entry</div>
                     <Row label="EMA 9 / 20 / 50" value={`${n(detail.entryEMA9)} / ${n(detail.entryEMA20)} / ${n(detail.entryEMA50)}`} />
                     <Row label="RSI" value={n(detail.entryRSI)} />
-                    <Row label="ATR ($)" value={n(detail.entryATR)} />
-                    <Row label="ATR % of day close" value={atrPctLabel(detail.entryATR, entryBar?.close)} />
+                    <Row label={isFuturesTrade(detail) ? 'ATR (pts)' : 'ATR ($)'} value={n(detail.entryATR)} />
+                    {!isFuturesTrade(detail) && <Row label="ATR % of day close" value={atrPctLabel(detail.entryATR, entryBar?.close)} />}
                   </div>
                   <div className="rounded-xl bg-surface-2 border border-border p-4">
                     <div className="text-sm font-semibold text-text-secondary mb-3">At exit</div>
                     <Row label="EMA 9 / 20 / 50" value={`${n(detail.exitEMA9)} / ${n(detail.exitEMA20)} / ${n(detail.exitEMA50)}`} />
                     <Row label="RSI" value={n(detail.exitRSI)} />
-                    <Row label="ATR ($)" value={n(detail.exitATR)} />
-                    <Row label="ATR % of day close" value={atrPctLabel(detail.exitATR, exitBar?.close)} />
+                    <Row label={isFuturesTrade(detail) ? 'ATR (pts)' : 'ATR ($)'} value={n(detail.exitATR)} />
+                    {!isFuturesTrade(detail) && <Row label="ATR % of day close" value={atrPctLabel(detail.exitATR, exitBar?.close)} />}
                   </div>
                 </div>
               </Section>

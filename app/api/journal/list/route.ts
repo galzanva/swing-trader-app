@@ -66,6 +66,8 @@ export async function GET(request: NextRequest) {
         exit2Time: true,
         fills: true,
         amount: true,
+        filledQty: true,
+        instrumentType: true,
         strategy: true,
         strategyId: true,
         notes: true,

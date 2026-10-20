@@ -205,7 +205,7 @@ model TradeJournal {
   filledQty       Float?   // Actual filled quantity from broker
   avgFillPrice    Float?   // Average fill price from broker
   orderType       String?  @db.VarChar(30)  // MARKET, LIMIT, STOP_LOSS, etc.
-  instrumentType  String?  @db.VarChar(20)  // EQUITY, OPTION, CRYPTO
+  instrumentType  String?  @db.VarChar(20)  // EQUITY, OPTION, CRYPTO, FUTURES
   
   // Linked analysis report (auto-populated if analysis exists within ±3 days)
   analysisReportId String? // Links to SavedReport for strategy feedback loop

@@ -13,6 +13,8 @@ import {
   fetchUnadjustedDailyBars,
 } from '@/lib/journal-polygon-enrichment';
 import { parseJournalFills } from '@/lib/journal-fills';
+import { fetchYahooDailyBars } from '@/lib/journal-yahoo';
+import { isFuturesTicker } from '@/lib/journal-paste-import';
 import { resolveStrategySelection, strategyLabel, syncTradeStrategies } from '@/lib/trade-strategies';
 import { Prisma } from '@prisma/client';
 
@@ -30,6 +32,7 @@ interface TradeInput {
   exit2Time?: string | null;
   exit2Price?: number | null;
   fills?: unknown;
+  filledQty?: number | null;
   amount: number;
   strategy?: string;
   strategyIds?: string[];
@@ -146,6 +149,28 @@ export async function POST(request: NextRequest) {
       console.log(`[Journal] Calculated metrics - Return: ${returnPct.toFixed(2)}%, P/L: $${profitLoss.toFixed(2)}, Days: ${holdingDays}`);
     }
 
+    // Saving must not replace a broker result. A trim uses more than the
+    // first price, and an unchanged trade still carries fees the price
+    // formula does not.
+    if (body.id) {
+      const existing = await prisma.tradeJournal.findFirst({
+        where: { id: body.id, userId },
+        select: { profitLoss: true, returnPct: true, entryPrice: true, exitPrice: true, amount: true },
+      });
+      const close = (a: number | null | undefined, b: number | null | undefined) =>
+        a == null || b == null ? a == null && b == null : Math.abs(a - b) < 0.001;
+      const unchanged = !!existing
+        && close(existing.entryPrice, body.entryPrice)
+        && close(existing.exitPrice, body.exitPrice ?? null)
+        && close(existing.amount, body.amount);
+      const scaled = body.exit2Price != null || parseJournalFills(body.fills).length > 0;
+      const futures = isFuturesTicker(ticker);
+      if (existing?.profitLoss != null && (unchanged || scaled || futures)) {
+        profitLoss = existing.profitLoss;
+        returnPct = existing.returnPct;
+      }
+    }
+
     // 3. Enrich with market data and calculate maxPotentialR for early exit detection
     const polygonApiKey = process.env.POLYGON_API_KEY;
     let entryOHLC: any = null;
@@ -160,13 +185,19 @@ export async function POST(request: NextRequest) {
     let exitEMA50: number | null = null;
     let exitRSI: number | null = null;
     let exitATR: number | null = null;
+    let enriched = false;
 
-    if (polygonApiKey) {
+    const futuresTicker = isFuturesTicker(ticker);
+    if (futuresTicker || polygonApiKey) {
       try {
-        const polygonClient = new PolygonClient(polygonApiKey);
+        const polygonClient = !futuresTicker && polygonApiKey ? new PolygonClient(polygonApiKey) : null;
         console.log(`[Journal] Fetching market data for ${ticker}...`);
 
-        const bars = await fetchUnadjustedDailyBars(polygonClient, ticker);
+        const bars = futuresTicker
+          ? await fetchYahooDailyBars(ticker)
+          : polygonClient
+            ? await fetchUnadjustedDailyBars(polygonClient, ticker)
+            : [];
         const exitDateStr =
           exitDate &&
           (body.exitDate && body.exitDate.length >= 10
@@ -183,6 +214,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (patch) {
+          enriched = true;
           entryOHLC = patch.entryOHLC;
           exitOHLC = patch.exitOHLC;
           entryEMA9 = patch.entryEMA9;
@@ -195,8 +227,10 @@ export async function POST(request: NextRequest) {
           exitEMA50 = patch.exitEMA50;
           exitRSI = patch.exitRSI;
           exitATR = patch.exitATR;
-          maxPotentialR = patch.maxPotentialR;
-          rMultiple = patch.rMultiple;
+          if (!futuresTicker) {
+            maxPotentialR = patch.maxPotentialR;
+            rMultiple = patch.rMultiple;
+          }
           console.log(
             `[Journal] Entry indicators - EMA9: ${entryEMA9?.toFixed(2)}, RSI: ${entryRSI?.toFixed(2)}, ATR: ${entryATR?.toFixed(2)}`,
           );
@@ -231,6 +265,8 @@ export async function POST(request: NextRequest) {
       exit2Price: typeof body.exit2Price === 'number' && Number.isFinite(body.exit2Price) ? body.exit2Price : null,
       fills: parseJournalFills(body.fills).length ? parseJournalFills(body.fills) : Prisma.DbNull,
       amount: body.amount,
+      ...(typeof body.filledQty === 'number' && Number.isFinite(body.filledQty) ? { filledQty: body.filledQty } : {}),
+      ...(futuresTicker ? { instrumentType: 'FUTURES' as const } : {}),
       strategy: strategyText,
       strategyId: strategyPicks[0]?.id ?? null,
       notes: body.notes ?? null,
@@ -238,23 +274,24 @@ export async function POST(request: NextRequest) {
       exitReason: body.exitReason ?? null,
       broker: body.broker ?? 'webull',
       returnPct,
-      rMultiple,
       holdingDays,
       profitLoss,
-      maxPotentialR,
       analysisReportId,
-      entryOHLC: entryOHLC ?? null,
-      exitOHLC: exitOHLC ?? null,
-      entryEMA9,
-      entryEMA20,
-      entryEMA50,
-      entryRSI,
-      entryATR,
-      exitEMA9,
-      exitEMA20,
-      exitEMA50,
-      exitRSI,
-      exitATR,
+      ...(!(futuresTicker && body.id) ? { rMultiple, maxPotentialR } : {}),
+      ...(enriched ? {
+        entryOHLC: entryOHLC ?? null,
+        exitOHLC: exitOHLC ?? null,
+        entryEMA9,
+        entryEMA20,
+        entryEMA50,
+        entryRSI,
+        entryATR,
+        exitEMA9,
+        exitEMA20,
+        exitEMA50,
+        exitRSI,
+        exitATR,
+      } : {}),
     };
 
     let trade;

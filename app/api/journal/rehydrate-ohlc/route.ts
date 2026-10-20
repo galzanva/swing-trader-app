@@ -14,6 +14,8 @@ import {
   computeJournalPolygonPatchFromBars,
   fetchUnadjustedDailyBars,
 } from '@/lib/journal-polygon-enrichment';
+import { fetchYahooDailyBars } from '@/lib/journal-yahoo';
+import { isFuturesTicker } from '@/lib/journal-paste-import';
 import { journalStoredYmd } from '@/lib/trade-dates';
 
 const MAX_TRADES = 2000;
@@ -28,12 +30,6 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
     const polygonApiKey = process.env.POLYGON_API_KEY;
-    if (!polygonApiKey) {
-      return NextResponse.json(
-        { error: 'POLYGON_API_KEY is not configured' },
-        { status: 503 },
-      );
-    }
 
     let tradeIds: string[] = [];
     try {
@@ -65,6 +61,14 @@ export async function POST(request: NextRequest) {
       orderBy: { entryDate: 'desc' },
     });
 
+    const needsPolygon = trades.some((t) => !isFuturesTicker(t.ticker));
+    if (needsPolygon && !polygonApiKey) {
+      return NextResponse.json(
+        { error: 'POLYGON_API_KEY is not configured' },
+        { status: 503 },
+      );
+    }
+
     if (trades.length === 0) {
       return NextResponse.json({
         success: true,
@@ -88,16 +92,21 @@ export async function POST(request: NextRequest) {
     let skipped = 0;
     const errors: string[] = [];
 
-    const polygonClient = new PolygonClient(polygonApiKey);
+    const polygonClient = polygonApiKey ? new PolygonClient(polygonApiKey) : null;
     let tickerIndex = 0;
 
     for (const [ticker, list] of byTicker) {
       tickerIndex++;
+      const futures = isFuturesTicker(ticker);
       try {
-        const bars = await fetchUnadjustedDailyBars(polygonClient, ticker);
+        const bars = futures
+          ? await fetchYahooDailyBars(ticker)
+          : polygonClient
+            ? await fetchUnadjustedDailyBars(polygonClient, ticker)
+            : [];
         if (!bars.length) {
           skipped += list.length;
-          errors.push(`${ticker}: no Polygon daily bars`);
+          errors.push(`${ticker}: no ${futures ? 'Yahoo' : 'Polygon'} daily bars`);
           continue;
         }
 
@@ -142,8 +151,10 @@ export async function POST(request: NextRequest) {
                 exitEMA50: patch.exitEMA50,
                 exitRSI: patch.exitRSI,
                 exitATR: patch.exitATR,
-                maxPotentialR: patch.maxPotentialR,
-                rMultiple: patch.rMultiple,
+                ...(futures ? {} : {
+                  maxPotentialR: patch.maxPotentialR,
+                  rMultiple: patch.rMultiple,
+                }),
               },
             });
             updated++;

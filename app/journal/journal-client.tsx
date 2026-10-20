@@ -9,6 +9,8 @@ import TradeScreenshots from './trade-screenshots';
 import DateRangeFilter, { DateRange, getDefault30DayRange } from '@/app/components/date-range-filter';
 import { formatJournalStoredDate } from '@/lib/trade-dates';
 import { entryClockLine, entryPriceLine, exitPriceLine, latestExitClock, parseJournalFills, type JournalFill } from '@/lib/journal-fills';
+import { formatPointMove, futuresPointMove, isFuturesTrade } from '@/lib/futures-trade';
+import { isFuturesTicker, pointValue } from '@/lib/journal-paste-import';
 
 interface Summary {
   totalTrades: number;
@@ -194,6 +196,7 @@ export default function JournalClient({ session }: JournalClientProps) {
   const [moreExits, setMoreExits] = useState<FillDraft[]>([]);
   const [adds, setAdds] = useState<FillDraft[]>([]);
   const [amount, setAmount] = useState('');
+  const [contracts, setContracts] = useState('');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
   const [selectedReportId, setSelectedReportId] = useState('');
   const [notes, setNotes] = useState('');
@@ -437,8 +440,10 @@ export default function JournalClient({ session }: JournalClientProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticker || !entryPrice || !entryDate || !amount) {
-      alert('Please fill in all required fields');
+    const futuresForm = isFuturesTicker(ticker);
+    const contractQty = contracts.trim() ? parseFloat(contracts) : NaN;
+    if (!ticker || !entryPrice || !entryDate || (futuresForm ? !(contractQty > 0) : !amount)) {
+      alert(futuresForm ? 'Ticker, prices, date, and contracts are required' : 'Please fill in all required fields');
       return;
     }
 
@@ -476,7 +481,10 @@ export default function JournalClient({ session }: JournalClientProps) {
           ...cleanDrafts(adds).map((fill) => ({ side: 'entry' as const, ...fill })),
           ...cleanDrafts(moreExits).slice(1).map((fill) => ({ side: 'exit' as const, ...fill })),
         ],
-        amount: parseFloat(amount),
+        amount: futuresForm
+          ? contractQty * parseFloat(entryPrice) * pointValue(ticker)
+          : parseFloat(amount),
+        filledQty: futuresForm ? contractQty : undefined,
         strategyIds,
         analysisReportId: selectedReportId || undefined,
         notes: notes || undefined,
@@ -505,7 +513,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setTicker(''); setDirection('long'); setTradeType('intraday');
     setBrokerForm('webull');
     setEntryPrice(''); setEntryDate(localDateStr());
-    setExitPrice(''); setExitDate(''); setAmount('');
+    setExitPrice(''); setExitDate(''); setAmount(''); setContracts('');
     setEntryTimeForm(''); setExitTimeForm(''); setMoreExits([]); setAdds([]);
     setStrategyIds([]); setSelectedReportId(''); setNotes('');
     setIsOpen(false); setExitReason('');
@@ -535,6 +543,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     setMoreExits(exitDrafts);
     setAdds(draftsFromFills(stored.filter((fill) => fill.side === 'entry')));
     setAmount(trade.amount.toString());
+    setContracts(trade.filledQty != null ? String(trade.filledQty) : '');
     setStrategyIds(idsForTrade(trade, dbStrategies));
     setSelectedReportId(trade.analysisReportId || '');
     setNotes(trade.notes || '');
@@ -610,7 +619,7 @@ export default function JournalClient({ session }: JournalClientProps) {
     const truncated = ids.length > MAX_REFRESH;
     if (
       !confirm(
-        `Re-fetch daily OHLC and indicators from Polygon for ${idsToSend.length} trade(s) that match your current filters${truncated ? ` (capped at ${MAX_REFRESH} of ${ids.length})` : ''}? Only these rows are updated — not the rest of your journal. Uses Polygon API quota.`,
+        `Re-fetch daily OHLC and indicators for ${idsToSend.length} trade(s) that match your current filters${truncated ? ` (capped at ${MAX_REFRESH} of ${ids.length})` : ''}? Stocks use Polygon. Futures contracts use delayed Yahoo prices. Only these rows are updated.`,
       )
     ) {
       return;
@@ -1035,6 +1044,9 @@ export default function JournalClient({ session }: JournalClientProps) {
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span className="text-base font-semibold text-text-primary">{trade.ticker}</span>
+                        {isFuturesTrade(trade) && trade.filledQty != null && (
+                          <span className="text-xs font-medium text-text-muted">{trade.filledQty} ct</span>
+                        )}
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-surface-3 text-text-secondary uppercase">
                           {(() => { const b = trade.broker || 'webull'; if (b === 'robinhood') return 'RH'; if (b.startsWith('tradethepool')) return b.includes('funded') ? 'TTP-F' : 'TTP-E'; if (b === 'webull') return 'WB'; return b.slice(0, 3).toUpperCase(); })()}
                         </span>
@@ -1067,7 +1079,11 @@ export default function JournalClient({ session }: JournalClientProps) {
                       ) : <div className="text-base text-text-muted">—</div>}
                     </td>
                     <td className="px-4 lg:px-5 py-4 whitespace-nowrap text-right">
-                      {trade.returnPct !== null ? (
+                      {isFuturesTrade(trade) && futuresPointMove(trade) != null ? (
+                        <div className={`text-base font-semibold tabular-nums ${(futuresPointMove(trade) ?? 0) > 0 ? 'text-profit' : (futuresPointMove(trade) ?? 0) < 0 ? 'text-loss' : 'text-text-muted'}`}>
+                          {formatPointMove(futuresPointMove(trade) as number)}
+                        </div>
+                      ) : trade.returnPct !== null ? (
                         <div className={`text-base font-semibold tabular-nums ${trade.returnPct > 0 ? 'text-profit' : trade.returnPct < 0 ? 'text-loss' : 'text-text-muted'}`}>
                           {trade.returnPct > 0 ? '+' : ''}{trade.returnPct.toFixed(2)}%
                         </div>
@@ -1205,9 +1221,14 @@ export default function JournalClient({ session }: JournalClientProps) {
                     className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-text-secondary mb-2">Amount ($) *</label>
-                  <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1000"
-                    className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" required />
+                  <label className="block text-sm font-semibold text-text-secondary mb-2">{isFuturesTicker(ticker) ? 'Contracts *' : 'Amount ($) *'}</label>
+                  {isFuturesTicker(ticker) ? (
+                    <input type="number" step="1" min="1" value={contracts} onChange={(e) => setContracts(e.target.value)} placeholder="6"
+                      className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" required />
+                  ) : (
+                    <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1000"
+                      className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" required />
+                  )}
                 </div>
               </div>
 
