@@ -629,6 +629,7 @@ Rules:
 - A trim can have two, three, or four exits. Keep every fill in order. "10:40→10:46 / 10:50 / 10:55" with "7743→7750 / 7742.75 / 7748" means exitTime 10:46 at 7750, exit2Time 10:50 at 7742.75, then fills [{"side":"exit","time":"10:55:00","price":7748}]. Leave exit2 and fills null when there is one exit.
 - An add is another entry before the exit. "10:21 / 10:26 → 10:30" with "7754 / 7758 → 7749.50" means entryTime 10:21 at 7754, then fills [{"side":"entry","time":"10:26:00","price":7758}], exitTime 10:30 at 7749.50. Do not drop later adds or trims.
 - If the paste names a calendar date, use it. If it has no date at all, use ${args.year} only when a month and day are written; otherwise use today, ${args.today}. Never invent January 1.
+- An Asia or Globex fill at 18:00 or later that is listed under the next session's trading day happened the night before. Monday's trading day at 19:42 is the previous calendar date, not Monday.
 - ticker MUST come from that row's contract/symbol/ticker cell. Mixed dumps (MNQ then MES/ES) are common. Never copy MNQ onto a ~5k–8k ES/MES print, and never copy MES/ES onto a ~20k–30k MNQ/NQ print.
 - ES = $50/pt, MES = $5/pt, MNQ = $2/pt, NQ = $20/pt.
 - Map setup names onto these strategies when close: ${args.strategies.map((s) => s.name).join('; ')}
@@ -757,6 +758,36 @@ export function applyUndatedFallback(result: ParseResult, text: string, fallback
     ...result,
     trades,
     warnings: result.warnings.filter((w) => !w.startsWith('Some rows are missing a full date')),
+  };
+}
+
+/** Evening Asia listed on the same date as that session's daytime trades belongs to the night before. */
+export function shiftAsiaListedOnTradingDay(result: ParseResult): ParseResult {
+  const daytime = new Set(
+    result.trades
+      .filter((t) => t.entryTime && t.entryTime < '16:00:00')
+      .map((t) => t.entryDate),
+  );
+  if (!daytime.size) return result;
+  let changed = false;
+  const trades = result.trades.map((t) => {
+    if (!t.entryTime || t.entryTime < '18:00:00' || !daytime.has(t.entryDate)) return t;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t.entryDate)) return t;
+    const prior = new Date(`${t.entryDate}T00:00:00.000Z`);
+    prior.setUTCDate(prior.getUTCDate() - 1);
+    const entryDate = prior.toISOString().slice(0, 10);
+    const exitSameNight = !t.exitTime || t.exitTime >= '18:00:00';
+    const exitDate = t.exitDate && exitSameNight && t.exitDate === t.entryDate ? entryDate : t.exitDate;
+    changed = true;
+    return { ...t, entryDate, exitDate };
+  });
+  if (!changed) return result;
+  return {
+    ...result,
+    trades,
+    warnings: result.warnings.some((w) => w.startsWith('Evening Asia'))
+      ? result.warnings
+      : [...result.warnings, 'Evening Asia fills were dated the night before the listed trading day.'],
   };
 }
 

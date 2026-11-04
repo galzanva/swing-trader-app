@@ -10,6 +10,7 @@ type Note = {
   time: string | null;
   body: string;
   checks: unknown;
+  kind?: string | null;
   strategy: { name: string; criteria: { checklist?: Section[]; entry_rules?: string[] } | null } | null;
 };
 
@@ -73,8 +74,8 @@ export default function SessionSummary({ timezone }: { timezone: string }) {
                 <div className="text-text-primary">
                   <span className="tabular-nums text-text-muted">{note.time || '—'}</span>
                   {' · '}
-                  {note.strategy?.name || 'No strategy'}
-                  {total > 0 && <span className="text-text-muted"> · {met}/{total}</span>}
+                  {note.kind === 'plan' ? 'Plan for the day' : note.kind === 'summary' ? 'Session summary' : (note.strategy?.name || 'No strategy')}
+                  {note.kind !== 'plan' && note.kind !== 'summary' && total > 0 && <span className="text-text-muted"> · {met}/{total}</span>}
                 </div>
                 {feeling && <p className="text-text-secondary mt-0.5 line-clamp-2">{feeling}</p>}
               </li>

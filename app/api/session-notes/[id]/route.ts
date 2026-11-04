@@ -13,6 +13,11 @@ function clock(raw: unknown): string | null {
   return `${hh}:${mm}`;
 }
 
+function noteKind(raw: unknown): 'trade' | 'plan' | 'summary' | null {
+  if (raw === 'trade' || raw === 'plan' || raw === 'summary') return raw;
+  return null;
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -24,8 +29,10 @@ export async function PUT(
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
+  const kind = noteKind(body.kind) ?? (existing.kind === 'plan' || existing.kind === 'summary' ? existing.kind : 'trade');
   let strategyId: string | null = existing.strategyId;
-  if (body.strategyId === null || body.strategyId === '') strategyId = null;
+  if (kind !== 'trade') strategyId = null;
+  else if (body.strategyId === null || body.strategyId === '') strategyId = null;
   else if (typeof body.strategyId === 'string') {
     const owned = await prisma.strategy.findFirst({
       where: { id: body.strategyId, userId: session.user.id },
@@ -38,10 +45,13 @@ export async function PUT(
     where: { id },
     data: {
       ...(body.time !== undefined && { time: clock(body.time) }),
-      ...(body.strategyId !== undefined && { strategyId }),
-      ...(Array.isArray(body.checks) && {
-        checks: body.checks.filter((x: unknown) => typeof x === 'string').slice(0, 80),
-      }),
+      ...(body.kind !== undefined && { kind }),
+      ...((body.strategyId !== undefined || body.kind !== undefined) && { strategyId }),
+      ...(kind !== 'trade'
+        ? { checks: [] }
+        : Array.isArray(body.checks)
+          ? { checks: body.checks.filter((x: unknown) => typeof x === 'string').slice(0, 80) }
+          : {}),
       ...(typeof body.body === 'string' && { body: body.body.slice(0, 8000) }),
     },
   });

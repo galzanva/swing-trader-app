@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma';
+import { futuresRoot, isFuturesTicker } from '@/lib/journal-paste-import';
 import { journalStoredYmd } from '@/lib/trade-dates';
 
 export async function replacePlaybookRules(playbookId: string, lines: string[]) {
@@ -73,6 +74,20 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
   const stratIds = new Set(playbook.strategies.map((s) => s.strategyId));
   const stratNames = new Set(playbook.strategies.map((s) => s.strategy.name.toLowerCase()));
 
+  const matchesTicker = (ticker: string) => {
+    const upper = ticker.toUpperCase();
+    if (tickers.includes(upper)) return true;
+    if (!isFuturesTicker(upper)) return false;
+    const root = futuresRoot(upper);
+    return tickers.some((item) => futuresRoot(item) === root);
+  };
+  const matchesStrategy = (trade: { strategy: string | null; strategyId: string | null; strategyLinks: { strategyId: string }[] }) => {
+    if (!stratIds.size) return true;
+    const linked = trade.strategyLinks.some((l) => stratIds.has(l.strategyId)) || (trade.strategyId != null && stratIds.has(trade.strategyId));
+    const names = (trade.strategy || '').split('·').map((s) => s.trim().toLowerCase());
+    return linked || names.some((n) => stratNames.has(n));
+  };
+
   const ymds = days.map((d) => journalStoredYmd(d.date));
   let trades: {
     entryDate: Date;
@@ -106,11 +121,12 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
 
   const pnlByDay = new Map<string, number>();
   for (const t of trades) {
-    if (tickers.length && !tickers.includes(t.ticker.toUpperCase())) continue;
-    if (stratIds.size) {
-      const linked = t.strategyLinks.some((l) => stratIds.has(l.strategyId)) || (t.strategyId && stratIds.has(t.strategyId));
-      const names = (t.strategy || '').split('·').map((s) => s.trim().toLowerCase());
-      if (!linked && !names.some((n) => stratNames.has(n))) continue;
+    // Listed contracts are the session. Every fill on those tickers counts,
+    // including setups that are not attached to the playbook.
+    if (tickers.length) {
+      if (!matchesTicker(t.ticker)) continue;
+    } else if (!matchesStrategy(t)) {
+      continue;
     }
     const day = journalStoredYmd(t.entryDate);
     pnlByDay.set(day, (pnlByDay.get(day) || 0) + (t.profitLoss ?? 0));
@@ -118,7 +134,7 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
 
   const followed = emptyBucket();
   const missed = emptyBucket();
-  const recent = days.slice(0, 21).map((d) => {
+  const rows = days.map((d) => {
     const date = journalStoredYmd(d.date);
     const pnl = Math.round((pnlByDay.get(date) || 0) * 100) / 100;
     const bucket = d.followedAll ? followed : missed;
@@ -140,6 +156,6 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
     },
     followed,
     missed,
-    recent,
+    recent: rows.slice(0, 21),
   };
 }

@@ -16,6 +16,10 @@ function clock(raw: unknown): string | null {
   return `${hh}:${mm}`;
 }
 
+function noteKind(raw: unknown): 'trade' | 'plan' | 'summary' {
+  return raw === 'plan' || raw === 'summary' ? raw : 'trade';
+}
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -66,14 +70,16 @@ export async function POST(request: NextRequest) {
     strategyId = owned?.id ?? null;
   }
 
+  const kind = noteKind(body.kind);
   const note = await prisma.sessionNote.create({
     data: {
       userId: session.user.id,
       date: new Date(`${body.date}T00:00:00.000Z`),
       time: clock(body.time),
-      strategyId,
-      checks: Array.isArray(body.checks) ? body.checks.filter((x: unknown) => typeof x === 'string') : [],
+      strategyId: kind === 'trade' ? strategyId : null,
+      checks: kind === 'trade' && Array.isArray(body.checks) ? body.checks.filter((x: unknown) => typeof x === 'string') : [],
       body: typeof body.body === 'string' ? body.body.slice(0, 8000) : '',
+      kind,
     },
   });
   return NextResponse.json({ success: true, note });

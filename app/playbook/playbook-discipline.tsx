@@ -41,9 +41,8 @@ export default function PlaybookDiscipline({ playbookId }: { playbookId?: string
       <div>
         <h3 className="text-base font-semibold text-text-primary">Playbook · {playbook.name}</h3>
         <p className="text-xs text-text-muted mt-1">
-          A day counts as followed only when every rule is checked. P/L is that day’s trades
-          {playbook.strategyCount ? ' in the attached strategies' : ''}
-          {playbook.tickers ? ` (${playbook.tickers})` : playbook.strategyCount ? '' : ' (all tickers)'}.
+          A day counts as followed only when every rule is checked. P/L is every trade that day
+          {playbook.tickers ? ` on ${playbook.tickers}` : playbook.strategyCount ? ' in the attached strategies' : ''}.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

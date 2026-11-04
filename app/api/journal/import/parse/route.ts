@@ -10,6 +10,7 @@ import {
   llmParsePrompt,
   parseDeterministic,
   pasteFingerprint,
+  shiftAsiaListedOnTradingDay,
   tradesFromLlmJson,
   type ParseResult,
 } from '@/lib/journal-paste-import';
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    result = applyUndatedFallback(result, text, today);
+    result = shiftAsiaListedOnTradingDay(applyUndatedFallback(result, text, today));
 
     const broker = result.inferredBroker || defaultBroker;
     result.trades = applyStrategyAndBroker(result.trades, strategies, broker);
