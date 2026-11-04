@@ -327,6 +327,7 @@ model SessionNote {
   strategyId String?
   checks     Json?
   body       String   @default("") @db.Text
+  kind       String   @default("trade") @db.VarChar(16) // trade | plan | summary
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

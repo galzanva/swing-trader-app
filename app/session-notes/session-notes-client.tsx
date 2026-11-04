@@ -5,6 +5,7 @@ import PlaybookDayCheck from '@/app/playbook/playbook-day-check';
 
 type Section = { title: string; items: string[] };
 type Strategy = { id: string; name: string; criteria: { checklist?: Section[]; entry_rules?: string[] } | null };
+type NoteKind = 'trade' | 'plan' | 'summary';
 type Note = {
   id: string;
   date: string;
@@ -12,6 +13,7 @@ type Note = {
   strategyId: string | null;
   checks: string[];
   body: string;
+  kind?: NoteKind | null;
 };
 
 function localYmd() {
@@ -39,15 +41,39 @@ function asChecks(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
 }
 
+function noteKind(raw: unknown): NoteKind {
+  return raw === 'plan' || raw === 'summary' ? raw : 'trade';
+}
+
+const KIND_LABEL: Record<Exclude<NoteKind, 'trade'>, string> = {
+  plan: 'Plan for the day',
+  summary: 'Session summary',
+};
+
 export function formatSessionNotes(date: string, notes: Note[], strategies: Strategy[]): string {
   const lines = [
     `Intraday session notes — ${date}`,
     'Live notes only. Not fills. Paste the actual entry, exit, time, qty, and P/L with this before writing journal rows.',
     '',
   ];
-  const ordered = [...notes].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+  const ordered = [...notes].sort((a, b) => {
+    const rank = (note: Note) => {
+      const kind = noteKind(note.kind);
+      const band = kind === 'plan' ? '0' : kind === 'summary' ? '2' : '1';
+      return `${band}-${note.time || '99:99'}`;
+    };
+    return rank(a).localeCompare(rank(b));
+  });
   if (!ordered.length) lines.push('(no notes)');
   for (const note of ordered) {
+    const kind = noteKind(note.kind);
+    if (kind === 'plan' || kind === 'summary') {
+      lines.push(`${note.time || '—'} · ${KIND_LABEL[kind]}`);
+      lines.push(kind === 'plan' ? 'Plan:' : 'Summary:');
+      lines.push(note.body.trim() || '(none)');
+      lines.push('');
+      continue;
+    }
     const strategy = strategies.find((s) => s.id === note.strategyId);
     lines.push(`${note.time || '—'} · ${strategy?.name || 'No strategy'}`);
     const sections = sectionsOf(strategy);
@@ -83,7 +109,12 @@ export default function SessionNotesClient() {
       fetch('/api/strategies').then((r) => r.json()),
     ]);
     if (notesRes.success) {
-      setNotes((notesRes.notes || []).map((n: Note) => ({ ...n, checks: asChecks(n.checks), body: n.body || '' })));
+      setNotes((notesRes.notes || []).map((n: Note) => ({
+        ...n,
+        checks: asChecks(n.checks),
+        body: n.body || '',
+        kind: noteKind(n.kind),
+      })));
     }
     if (stratRes.success) setStrategies(stratRes.strategies || []);
     setLoading(false);
@@ -91,7 +122,7 @@ export default function SessionNotesClient() {
 
   useEffect(() => { void load(date); }, [date, load]);
 
-  const patch = (id: string, data: Partial<Pick<Note, 'time' | 'strategyId' | 'checks' | 'body'>>) => {
+  const patch = (id: string, data: Partial<Pick<Note, 'time' | 'strategyId' | 'checks' | 'body' | 'kind'>>) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...data } : n)));
     const prev = saves.current.get(id) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(() =>
@@ -112,7 +143,7 @@ export default function SessionNotesClient() {
     });
     const data = await res.json();
     if (data.success) {
-      const note = { ...data.note, checks: [] as string[], body: '' };
+      const note = { ...data.note, checks: [] as string[], body: '', kind: noteKind(data.note.kind) };
       setNotes((prev) => [note, ...prev]);
       requestAnimationFrame(() => {
         document.getElementById(`note-${note.id}`)?.scrollIntoView({ block: 'start' });
@@ -182,8 +213,14 @@ export default function SessionNotesClient() {
 
       <div className="space-y-4">
         {notes.map((note) => {
-          const strategy = strategies.find((s) => s.id === note.strategyId);
+          const kind = noteKind(note.kind);
+          const strategy = kind === 'trade' ? strategies.find((s) => s.id === note.strategyId) : undefined;
           const sections = sectionsOf(strategy);
+          const placeholder = kind === 'plan'
+            ? 'What is the plan for the day?'
+            : kind === 'summary'
+              ? 'How did the session go overall?'
+              : 'What did you see, and how did it feel?';
           return (
             <article id={`note-${note.id}`} key={note.id} className="bg-surface-1 border border-border rounded-2xl p-5 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -194,16 +231,31 @@ export default function SessionNotesClient() {
                   className="px-3 py-2 bg-surface-2 border border-border rounded-xl text-text-primary"
                 />
                 <select
-                  value={note.strategyId || ''}
-                  onChange={(e) => void patch(note.id, { strategyId: e.target.value || null, checks: [] })}
-                  className="flex-1 min-w-[16rem] px-3 py-2 bg-surface-2 border border-border rounded-xl text-text-primary"
+                  value={kind}
+                  onChange={(e) => {
+                    const next = noteKind(e.target.value);
+                    if (next === 'trade') void patch(note.id, { kind: next });
+                    else void patch(note.id, { kind: next, strategyId: null, checks: [] });
+                  }}
+                  className="px-3 py-2 bg-surface-2 border border-border rounded-xl text-text-primary"
                 >
-                  <option value="">No strategy</option>
-                  {strategies.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                  <option value="trade">Trade note</option>
+                  <option value="plan">Plan for the day</option>
+                  <option value="summary">Session summary</option>
                 </select>
-                <button type="button" onClick={() => void remove(note.id)} className="text-sm text-loss hover:underline">
+                {kind === 'trade' && (
+                  <select
+                    value={note.strategyId || ''}
+                    onChange={(e) => void patch(note.id, { strategyId: e.target.value || null, checks: [] })}
+                    className="flex-1 min-w-[16rem] px-3 py-2 bg-surface-2 border border-border rounded-xl text-text-primary"
+                  >
+                    <option value="">No strategy</option>
+                    {strategies.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button type="button" onClick={() => void remove(note.id)} className="text-sm text-loss hover:underline ml-auto">
                   Delete
                 </button>
               </div>
@@ -257,7 +309,7 @@ export default function SessionNotesClient() {
                   patch(note.id, { body: e.target.value });
                 }}
                 rows={3}
-                placeholder="What did you see, and how did it feel?"
+                placeholder={placeholder}
                 className="w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-sm text-text-primary placeholder-text-muted"
               />
             </article>
