@@ -56,6 +56,11 @@ export async function readPrivate(pathname: string) {
   return result;
 }
 
+/** Throws if the store refuses, so the caller can keep the row and let the user retry. */
+export async function deletePrivateOrThrow(pathname: string) {
+  await del(pathname);
+}
+
 /** Best effort: a missing blob must not block deleting the row that pointed at it. */
 export async function deletePrivate(pathnames: string | string[]) {
   const list = (Array.isArray(pathnames) ? pathnames : [pathnames]).filter(Boolean);

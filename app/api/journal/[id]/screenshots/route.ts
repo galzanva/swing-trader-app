@@ -6,6 +6,7 @@ import {
   MAX_IMAGE_BYTES,
   blobConfigured,
   deletePrivate,
+  deletePrivateOrThrow,
   putPrivateImage,
   sniffImage,
   tradeScreenshotPath,
@@ -122,7 +123,14 @@ export async function DELETE(
     select: { id: true, blobPath: true },
   });
   if (!shot) return NextResponse.json({ success: true });
+  if (shot.blobPath) {
+    try {
+      await deletePrivateOrThrow(shot.blobPath);
+    } catch (error) {
+      console.error('[screenshots] blob delete failed', shot.blobPath, error);
+      return NextResponse.json({ error: 'Could not delete the screenshot from storage. Try again.' }, { status: 502 });
+    }
+  }
   await prisma.tradeScreenshot.delete({ where: { id: shot.id } });
-  if (shot.blobPath) await deletePrivate(shot.blobPath);
   return NextResponse.json({ success: true });
 }
