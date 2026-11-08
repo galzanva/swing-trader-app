@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-type Shot = { id: string; data: string };
+type Shot = { id: string; url: string };
 
-async function compressImage(file: File): Promise<string> {
+async function compressImage(file: File): Promise<Blob> {
   const bmp = await createImageBitmap(file);
   const max = 1400;
   const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
@@ -17,7 +17,9 @@ async function compressImage(file: File): Promise<string> {
   if (!ctx) throw new Error('Could not read image');
   ctx.drawImage(bmp, 0, 0, w, h);
   bmp.close();
-  return canvas.toDataURL('image/jpeg', 0.72);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not read image'))), 'image/jpeg', 0.72);
+  });
 }
 
 export default function TradeScreenshots({ tradeId }: { tradeId: string | null }) {
@@ -44,12 +46,10 @@ export default function TradeScreenshots({ tradeId }: { tradeId: string | null }
     setBusy(true);
     setError('');
     try {
-      const dataUrl = await compressImage(file);
-      const res = await fetch(`/api/journal/${tradeId}/screenshots`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: dataUrl }),
-      });
+      const image = await compressImage(file);
+      const form = new FormData();
+      form.append('file', image, 'screenshot.jpg');
+      const res = await fetch(`/api/journal/${tradeId}/screenshots`, { method: 'POST', body: form });
       const json = await res.json();
       if (!res.ok) setError(json.error || 'Upload failed');
       else setShots((prev) => [...prev, json.screenshot]);
@@ -75,8 +75,8 @@ export default function TradeScreenshots({ tradeId }: { tradeId: string | null }
       <div className="flex flex-wrap gap-3">
         {shots.map((s) => (
           <div key={s.id} className="relative">
-            <a href={s.data} target="_blank" rel="noreferrer">
-              <img src={s.data} alt="Trade screenshot" className="h-24 w-36 object-cover rounded-lg border border-border" />
+            <a href={s.url} target="_blank" rel="noreferrer">
+              <img src={s.url} alt="Trade screenshot" className="h-24 w-36 object-cover rounded-lg border border-border" />
             </a>
             <button
               type="button"
@@ -106,7 +106,7 @@ export default function TradeScreenshots({ tradeId }: { tradeId: string | null }
         </label>
       )}
       {error && <p className="text-sm text-loss">{error}</p>}
-      <p className="text-xs text-text-muted">Optional. Up to 4 images, stored with the trade.</p>
+      <p className="text-xs text-text-muted">Optional. Up to 4 images, stored privately with the trade.</p>
     </div>
   );
 }

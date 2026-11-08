@@ -12,12 +12,14 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "create-user": "ts-node --project tsconfig.node.json scripts/create-user.ts",
-    "create-user:quick": "ts-node --project tsconfig.node.json scripts/create-user-simple.ts"
+    "create-user:quick": "ts-node --project tsconfig.node.json scripts/create-user-simple.ts",
+    "migrate:screenshots": "ts-node --project tsconfig.node.json scripts/migrate-screenshots-to-blob.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.3",
     "@prisma/client": "^5.19.1",
     "@types/node": "^20.11.30",
+    "@vercel/blob": "^2.8.2",
     "axios": "^1.7.2",
     "bcrypt": "^5.1.1",
     "date-fns": "^3.6.0",

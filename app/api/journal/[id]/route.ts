@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
+import { deletePrivate } from '@/lib/storage/blob';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 
@@ -78,6 +79,11 @@ export async function DELETE(
 
     console.log(`[Journal Delete] Deleting trade ${tradeId} for user ${userId}`);
 
+    const shots = await prisma.tradeScreenshot.findMany({
+      where: { tradeId, userId, blobPath: { not: null } },
+      select: { blobPath: true },
+    });
+
     // Delete trade (ensure user owns it)
     await prisma.tradeJournal.delete({
       where: {
@@ -85,6 +91,7 @@ export async function DELETE(
         userId,
       },
     });
+    await deletePrivate(shots.map((s) => s.blobPath as string));
 
     console.log(`[Journal Delete] Successfully deleted trade ${tradeId}`);
 

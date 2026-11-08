@@ -351,10 +351,13 @@ model TradeStrategy {
 model TradeScreenshot {
   id        String   @id @default(cuid())
   tradeId   String
-  userId    String
-  data      String   @db.Text
-  createdAt DateTime @default(now())
-  trade     TradeJournal @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  userId      String
+  blobPath    String?  @db.VarChar(300) // private Vercel Blob pathname
+  contentType String?  @db.VarChar(40)
+  size        Int?
+  data        String?  @db.Text         // legacy base64 data URL, used only when Blob is not configured
+  createdAt   DateTime @default(now())
+  trade       TradeJournal @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@index([tradeId])
 }
