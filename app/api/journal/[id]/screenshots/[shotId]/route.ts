@@ -8,7 +8,7 @@ const HEADERS = {
   // The path holds a random id and never changes, so the browser may keep it.
   'Cache-Control': 'private, max-age=86400, immutable',
   'X-Content-Type-Options': 'nosniff',
-  'Content-Security-Policy': "default-src 'none'",
+  'Content-Disposition': 'inline',
 };
 
 export async function GET(
