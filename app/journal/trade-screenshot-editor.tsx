@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { compressImage } from './screenshot-image';
 
-type Tool = 'select' | 'pan' | 'pen' | 'highlight' | 'arrow' | 'box' | 'text';
+type Tool = 'select' | 'pan' | 'pen' | 'highlight' | 'arrow' | 'box' | 'circle' | 'text';
 type Point = { x: number; y: number };
 type Anno =
   | { kind: 'pen'; color: string; width: number; alpha: number; points: Point[]; rot: number }
   | { kind: 'arrow'; color: string; width: number; from: Point; to: Point; rot: number }
-  | { kind: 'box'; color: string; x: number; y: number; w: number; h: number; rot: number }
-  | { kind: 'text'; color: string; x: number; y: number; size: number; text: string; rot: number };
+  | { kind: 'box'; color: string; width: number; x: number; y: number; w: number; h: number; rot: number }
+  | { kind: 'circle'; color: string; width: number; x: number; y: number; w: number; h: number; rot: number }
+  | { kind: 'text'; color: string; bg: string | null; x: number; y: number; size: number; text: string; rot: number };
 
 type Bounds = { x: number; y: number; w: number; h: number; cx: number; cy: number };
 
@@ -33,6 +34,22 @@ function textBlock(text: string, size: number) {
 }
 
 const COLORS = ['#ef4444', '#22c55e', '#eab308', '#38bdf8', '#f8fafc'] as const;
+const WIDTHS = [4, 8, 16, 28] as const;
+
+function textPad(size: number) {
+  return Math.max(10, size * 0.42);
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -48,7 +65,7 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color:
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const head = Math.min(28, Math.max(12, width * 4));
+  const head = Math.min(72, Math.max(14, width * 3.5));
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = width;
@@ -71,7 +88,7 @@ function boundsOf(anno: Anno): Bounds {
     const top = anno.y - anno.size;
     return { x: anno.x, y: top, w: block.w, h: block.h, cx: anno.x + block.w / 2, cy: top + block.h / 2 };
   }
-  if (anno.kind === 'box') {
+  if (anno.kind === 'box' || anno.kind === 'circle') {
     return { x: anno.x, y: anno.y, w: anno.w, h: anno.h, cx: anno.x + anno.w / 2, cy: anno.y + anno.h / 2 };
   }
   const pts = anno.kind === 'arrow' ? [anno.from, anno.to] : anno.points;
@@ -110,7 +127,7 @@ function distToSeg(p: Point, a: Point, b: Point) {
 function hits(anno: Anno, pt: Point): boolean {
   const b = boundsOf(anno);
   const local = unspin(b.cx, b.cy, pt, anno.rot);
-  if (anno.kind === 'arrow') return distToSeg(local, anno.from, anno.to) <= 16;
+  if (anno.kind === 'arrow') return distToSeg(local, anno.from, anno.to) <= Math.max(14, anno.width + 8);
   if (anno.kind === 'pen') {
     const reach = Math.max(12, anno.width / 2 + 6);
     for (let i = 1; i < anno.points.length; i++) {
@@ -118,7 +135,15 @@ function hits(anno: Anno, pt: Point): boolean {
     }
     return false;
   }
-  return local.x >= b.x && local.x <= b.x + b.w && local.y >= b.y && local.y <= b.y + b.h;
+  if (anno.kind === 'circle') {
+    const rx = Math.max(8, anno.w / 2 + anno.width / 2 + 8);
+    const ry = Math.max(8, anno.h / 2 + anno.width / 2 + 8);
+    const nx = (local.x - (anno.x + anno.w / 2)) / rx;
+    const ny = (local.y - (anno.y + anno.h / 2)) / ry;
+    return nx * nx + ny * ny <= 1;
+  }
+  const pad = anno.kind === 'text' && anno.bg ? textPad(anno.size) : anno.kind === 'box' ? anno.width / 2 + 6 : 0;
+  return local.x >= b.x - pad && local.x <= b.x + b.w + pad && local.y >= b.y - pad && local.y <= b.y + b.h + pad;
 }
 
 function scaleAround(p: Point, c: Point, f: number): Point {
@@ -126,7 +151,7 @@ function scaleAround(p: Point, c: Point, f: number): Point {
 }
 
 function resizeAnno(start: Anno, pt: Point, center: Point, startDist: number): Anno {
-  if (start.kind === 'box') {
+  if (start.kind === 'box' || start.kind === 'circle') {
     const local = unspin(center.x, center.y, pt, start.rot);
     const w = clamp(Math.abs(local.x - center.x) * 2, 8, 4000);
     const h = clamp(Math.abs(local.y - center.y) * 2, 8, 4000);
@@ -156,7 +181,7 @@ function resizeAnno(start: Anno, pt: Point, center: Point, startDist: number): A
 
 function translateAnno(anno: Anno, dx: number, dy: number): Anno {
   if (anno.kind === 'text') return { ...anno, x: anno.x + dx, y: anno.y + dy };
-  if (anno.kind === 'box') return { ...anno, x: anno.x + dx, y: anno.y + dy };
+  if (anno.kind === 'box' || anno.kind === 'circle') return { ...anno, x: anno.x + dx, y: anno.y + dy };
   if (anno.kind === 'arrow') {
     return { ...anno, from: { x: anno.from.x + dx, y: anno.from.y + dy }, to: { x: anno.to.x + dx, y: anno.to.y + dy } };
   }
@@ -195,11 +220,25 @@ function paintRaw(ctx: CanvasRenderingContext2D, anno: Anno) {
   }
   if (anno.kind === 'box') {
     ctx.strokeStyle = anno.color;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = anno.width;
     ctx.strokeRect(anno.x, anno.y, anno.w, anno.h);
     return;
   }
+  if (anno.kind === 'circle') {
+    ctx.strokeStyle = anno.color;
+    ctx.lineWidth = anno.width;
+    ctx.beginPath();
+    ctx.ellipse(anno.x + anno.w / 2, anno.y + anno.h / 2, Math.max(1, anno.w / 2), Math.max(1, anno.h / 2), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
   const block = textBlock(anno.text, anno.size);
+  if (anno.bg) {
+    const pad = textPad(anno.size);
+    ctx.fillStyle = anno.bg;
+    roundRect(ctx, anno.x - pad, anno.y - anno.size - pad, block.w + pad * 2, block.h + pad * 2, Math.max(6, anno.size * 0.25));
+    ctx.fill();
+  }
   ctx.font = `700 ${anno.size}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
@@ -250,6 +289,8 @@ export default function ScreenshotEditor({
   const imgRef = useRef<HTMLImageElement>(null);
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState<string>(COLORS[0]);
+  const [width, setWidth] = useState<number>(8);
+  const [textBg, setTextBg] = useState<string | null>(null);
   const [annos, setAnnos] = useState<Anno[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -262,8 +303,14 @@ export default function ScreenshotEditor({
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const textDraftRef = useRef(textDraft);
   textDraftRef.current = textDraft;
+  const textBgRef = useRef(textBg);
+  textBgRef.current = textBg;
+  const colorRef = useRef(color);
+  colorRef.current = color;
+  const widthRef = useRef(width);
+  widthRef.current = width;
   const drag = useRef<{
-    mode: 'pan' | 'draw' | 'arrow' | 'box' | 'move' | 'rotate' | 'resize' | null;
+    mode: 'pan' | 'draw' | 'arrow' | 'box' | 'circle' | 'move' | 'rotate' | 'resize' | null;
     last: Point;
     start: Point;
     space: boolean;
@@ -399,6 +446,7 @@ export default function ScreenshotEditor({
       if (e.key === '4') setTool('box');
       if (e.key === '5') setTool('text');
       if (e.key === '6') setTool('select');
+      if (e.key === '8') setTool('circle');
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKey);
@@ -443,18 +491,22 @@ export default function ScreenshotEditor({
         setAnnos((prev) => prev.filter((_, idx) => idx !== i));
         setSelected(null);
       } else {
-        setAnnos((prev) => prev.map((a, idx) => (idx === i && a.kind === 'text' ? { ...a, text: typed } : a)));
+        setAnnos((prev) => prev.map((a, idx) => (
+          idx === i && a.kind === 'text' ? { ...a, text: typed, color: colorRef.current, bg: textBgRef.current } : a
+        )));
         setSelected(i);
         setTool('select');
       }
     } else if (typed && draft) {
       const index = annosRef.current.length;
-      setAnnos((prev) => [...prev, { kind: 'text', color, x: draft.x, y: draft.y, size: 32, text: typed, rot: 0 }]);
+      setAnnos((prev) => [...prev, {
+        kind: 'text', color: colorRef.current, bg: textBgRef.current, x: draft.x, y: draft.y, size: 32, text: typed, rot: 0,
+      }]);
       setSelected(index);
       setTool('select');
     }
     setTextDraft(null);
-  }, [color]);
+  }, []);
 
   const openEdit = (i: number) => {
     const a = annosRef.current[i];
@@ -463,6 +515,8 @@ export default function ScreenshotEditor({
     const sx = panRef.current.x + a.x * zoomRef.current;
     const sy = panRef.current.y + (a.y - a.size) * zoomRef.current;
     setSelected(i);
+    setColor(a.color);
+    setTextBg(a.bg);
     setTextDraft({
       x: a.x,
       y: a.y,
@@ -478,6 +532,44 @@ export default function ScreenshotEditor({
     if (i == null) return;
     setAnnos((prev) => prev.filter((_, idx) => idx !== i));
     setSelected(null);
+  };
+
+  const keepTyping = (e: React.MouseEvent) => {
+    if (textDraftRef.current) e.preventDefault();
+  };
+
+  const applyColor = (next: string) => {
+    setColor(next);
+    const draft = textDraftRef.current;
+    if (draft?.editIndex != null) {
+      setAnnos((prev) => prev.map((a, idx) => (idx === draft.editIndex ? { ...a, color: next } : a)));
+      return;
+    }
+    if (draft) return;
+    const i = selectedRef.current;
+    if (i == null) return;
+    setAnnos((prev) => prev.map((a, idx) => (idx === i ? { ...a, color: next } : a)));
+  };
+
+  const applyBg = (next: string | null) => {
+    setTextBg(next);
+    const draft = textDraftRef.current;
+    if (draft?.editIndex != null) {
+      setAnnos((prev) => prev.map((a, idx) => (idx === draft.editIndex && a.kind === 'text' ? { ...a, bg: next } : a)));
+      return;
+    }
+    if (draft) return;
+    const i = selectedRef.current;
+    if (i == null) return;
+    setAnnos((prev) => prev.map((a, idx) => (idx === i && a.kind === 'text' ? { ...a, bg: next } : a)));
+  };
+
+  const applyWidth = (next: number) => {
+    setWidth(next);
+    if (textDraftRef.current) return;
+    const i = selectedRef.current;
+    if (i == null) return;
+    setAnnos((prev) => prev.map((a, idx) => (idx === i && a.kind !== 'text' ? { ...a, width: next } : a)));
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -513,6 +605,7 @@ export default function ScreenshotEditor({
       const view = viewRef.current?.getBoundingClientRect();
       const screenX = Math.min(Math.max(8, e.clientX - (view?.left ?? 0)), Math.max(8, (view?.width ?? 200) - 220));
       const screenY = Math.min(Math.max(8, e.clientY - (view?.top ?? 0) - 18), Math.max(8, (view?.height ?? 80) - 44));
+      setTextBg(null);
       setTextDraft({ x: pt.x, y: pt.y, screenX, screenY, value: '', editIndex: null });
       return;
     }
@@ -521,7 +614,7 @@ export default function ScreenshotEditor({
       live.current = {
         kind: 'pen',
         color,
-        width: tool === 'highlight' ? 22 : 4,
+        width,
         alpha: tool === 'highlight' ? 0.32 : 1,
         points: [pt],
         rot: 0,
@@ -531,12 +624,18 @@ export default function ScreenshotEditor({
       return;
     }
     if (tool === 'arrow') {
-      live.current = { kind: 'arrow', color, width: 4, from: pt, to: pt, rot: 0 };
+      live.current = { kind: 'arrow', color, width, from: pt, to: pt, rot: 0 };
       drag.current.mode = 'arrow';
       redraw();
       return;
     }
-    live.current = { kind: 'box', color, x: pt.x, y: pt.y, w: 0, h: 0, rot: 0 };
+    if (tool === 'circle') {
+      live.current = { kind: 'circle', color, width, x: pt.x, y: pt.y, w: 0, h: 0, rot: 0 };
+      drag.current = { ...drag.current, mode: 'circle', start: pt, last: pt };
+      redraw();
+      return;
+    }
+    live.current = { kind: 'box', color, width, x: pt.x, y: pt.y, w: 0, h: 0, rot: 0 };
     drag.current = { ...drag.current, mode: 'box', start: pt, last: pt };
     redraw();
   };
@@ -577,9 +676,15 @@ export default function ScreenshotEditor({
       live.current = { ...live.current, points: [...live.current.points, pt] };
     } else if (mode === 'arrow' && live.current.kind === 'arrow') {
       live.current = { ...live.current, to: pt };
-    } else if (mode === 'box' && live.current.kind === 'box') {
+    } else if ((mode === 'box' || mode === 'circle') && (live.current.kind === 'box' || live.current.kind === 'circle')) {
       const s = drag.current.start;
-      live.current = { kind: 'box', color, x: Math.min(s.x, pt.x), y: Math.min(s.y, pt.y), w: Math.abs(pt.x - s.x), h: Math.abs(pt.y - s.y), rot: 0 };
+      live.current = {
+        ...live.current,
+        x: Math.min(s.x, pt.x),
+        y: Math.min(s.y, pt.y),
+        w: Math.abs(pt.x - s.x),
+        h: Math.abs(pt.y - s.y),
+      };
     }
     redraw();
   };
@@ -587,13 +692,13 @@ export default function ScreenshotEditor({
   const onPointerUp = () => {
     if (live.current) {
       const done = live.current;
-      const emptyBox = done.kind === 'box' && (Math.abs(done.w) < 4 || Math.abs(done.h) < 4);
+      const emptyShape = (done.kind === 'box' || done.kind === 'circle') && (Math.abs(done.w) < 4 || Math.abs(done.h) < 4);
       const emptyPen = done.kind === 'pen' && done.points.length < 2;
-      if (!emptyBox && !emptyPen) {
+      if (!emptyShape && !emptyPen) {
         const index = annosRef.current.length;
         setAnnos((prev) => [...prev, done]);
         setSelected(index);
-        if (done.kind === 'arrow' || done.kind === 'box') setTool('select');
+        if (done.kind === 'arrow' || done.kind === 'box' || done.kind === 'circle') setTool('select');
       }
       live.current = null;
       redraw();
@@ -618,9 +723,13 @@ export default function ScreenshotEditor({
       let painted = annos;
       if (pending && draft?.editIndex != null) {
         const i = draft.editIndex;
-        painted = annos.map((a, idx) => (idx === i && a.kind === 'text' ? { ...a, text: pending } : a));
+        painted = annos.map((a, idx) => (
+          idx === i && a.kind === 'text' ? { ...a, text: pending, color: colorRef.current, bg: textBgRef.current } : a
+        ));
       } else if (pending && draft) {
-        painted = [...annos, { kind: 'text', color, x: draft.x, y: draft.y, size: 32, text: pending, rot: 0 }];
+        painted = [...annos, {
+          kind: 'text', color: colorRef.current, bg: textBgRef.current, x: draft.x, y: draft.y, size: 32, text: pending, rot: 0,
+        }];
       }
       for (const anno of painted) paintAnno(ctx, anno);
       const blob = await new Promise<Blob>((resolve, reject) => {
@@ -635,6 +744,9 @@ export default function ScreenshotEditor({
 
   const cursor = drag.current.space || tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : tool === 'select' ? 'default' : 'crosshair';
   const selectedAnno = selected != null ? annos[selected] : null;
+  const showFill = Boolean(textDraft) || selectedAnno?.kind === 'text';
+  const shownBg = textDraft ? textBg : selectedAnno?.kind === 'text' ? selectedAnno.bg : null;
+  const activeWidth = !textDraft && selectedAnno && selectedAnno.kind !== 'text' ? selectedAnno.width : width;
   let rotateHandle: Point | null = null;
   let resizeHandle: Point | null = null;
   if (tool === 'select' && selectedAnno && textDraft?.editIndex !== selected) {
@@ -654,18 +766,58 @@ export default function ScreenshotEditor({
         <ToolBtn active={tool === 'highlight'} onClick={() => setTool('highlight')}>Highlight</ToolBtn>
         <ToolBtn active={tool === 'arrow'} onClick={() => setTool('arrow')}>Arrow</ToolBtn>
         <ToolBtn active={tool === 'box'} onClick={() => setTool('box')}>Box</ToolBtn>
+        <ToolBtn active={tool === 'circle'} onClick={() => setTool('circle')}>Circle</ToolBtn>
         <ToolBtn active={tool === 'text'} onClick={() => setTool('text')}>Text</ToolBtn>
         <span className="w-px h-5 bg-white/20 mx-1" />
         {COLORS.map((c) => (
           <button
             key={c}
             type="button"
-            onClick={() => setColor(c)}
+            onMouseDown={keepTyping}
+            onClick={() => applyColor(c)}
             className={`w-6 h-6 rounded-full border ${color === c ? 'border-white scale-110' : 'border-white/30'}`}
             style={{ background: c }}
             aria-label={`Color ${c}`}
           />
         ))}
+        <span className="w-px h-5 bg-white/20 mx-1" />
+        {WIDTHS.map((w) => (
+          <button
+            key={w}
+            type="button"
+            onMouseDown={keepTyping}
+            onClick={() => applyWidth(w)}
+            className={`w-8 h-6 rounded border flex items-center justify-center ${activeWidth === w ? 'border-white bg-white/10' : 'border-white/20'}`}
+            aria-label={`Line thickness ${w}`}
+          >
+            <span className="block w-5 rounded-full bg-white" style={{ height: Math.max(2, w / 4) }} />
+          </button>
+        ))}
+        {showFill && (
+          <>
+            <span className="w-px h-5 bg-white/20 mx-1" />
+            <span className="text-xs text-white/50">Fill</span>
+            <button
+              type="button"
+              onMouseDown={keepTyping}
+              onClick={() => applyBg(null)}
+              className={`px-2 py-1 rounded-lg border text-xs ${shownBg == null ? 'border-white text-white' : 'border-white/20 text-white/70'}`}
+            >
+              None
+            </button>
+            {COLORS.map((c) => (
+              <button
+                key={`bg-${c}`}
+                type="button"
+                onMouseDown={keepTyping}
+                onClick={() => applyBg(c)}
+                className={`w-6 h-6 rounded border ${shownBg === c ? 'border-white scale-110' : 'border-white/30'}`}
+                style={{ background: c }}
+                aria-label={`Text background ${c}`}
+              />
+            ))}
+          </>
+        )}
         <span className="w-px h-5 bg-white/20 mx-1" />
         <button type="button" onClick={() => { setAnnos((prev) => prev.slice(0, -1)); setSelected((sel) => (sel != null && sel >= annosRef.current.length - 1 ? null : sel)); }} className="px-2 py-1 rounded-lg border border-white/20 hover:bg-white/10">Undo</button>
         {selected != null && (
@@ -730,8 +882,8 @@ export default function ScreenshotEditor({
               }
             }}
             placeholder={textDraft.editIndex != null ? 'Edit, then click away' : 'Type. Enter for a new line'}
-            className="absolute z-20 min-w-[12rem] px-3 py-2 rounded-lg bg-black text-white border-2 border-white text-base leading-snug outline-none resize-none"
-            style={{ left: textDraft.screenX, top: textDraft.screenY, color: textDraft.editIndex != null ? selectedAnno?.color ?? color : color }}
+            className="absolute z-20 min-w-[12rem] px-3 py-2 rounded-lg border-2 border-white text-base leading-snug outline-none resize-none"
+            style={{ left: textDraft.screenX, top: textDraft.screenY, color, background: textBg ?? '#000' }}
           />
         )}
         {rotateHandle && (
@@ -798,7 +950,7 @@ export default function ScreenshotEditor({
         )}
       </div>
       <p className="px-3 py-1.5 text-xs text-white/50">
-        Enter adds a line of text, and clicking away keeps it. Select a mark to drag it, rotate it, or pull the corner to resize. Save replaces this screenshot.
+        Enter adds a line. Click away to keep the text, then use Fill if you want a colored box behind it. The thickness buttons change lines, arrows, boxes, and circles. Save replaces this screenshot.
       </p>
     </div>
   );
