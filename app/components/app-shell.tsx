@@ -1,7 +1,7 @@
 'use client';
 
 import { Session } from 'next-auth';
-import Sidebar, { useSidebar } from './sidebar';
+import Sidebar, { SidebarProvider, useSidebar } from './sidebar';
 
 interface AppShellProps {
   session: Session;
@@ -31,9 +31,11 @@ function MainContent({ children }: { children: React.ReactNode }) {
 
 export default function AppShell({ session, children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-bg">
-      <Sidebar session={session} />
-      <MainContent>{children}</MainContent>
-    </div>
+    <SidebarProvider>
+      <div className="min-h-screen bg-bg">
+        <Sidebar session={session} />
+        <MainContent>{children}</MainContent>
+      </div>
+    </SidebarProvider>
   );
 }

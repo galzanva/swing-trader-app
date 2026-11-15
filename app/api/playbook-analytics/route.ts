@@ -7,6 +7,9 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const playbookId = request.nextUrl.searchParams.get('playbookId');
-  const report = await playbookDiscipline(session.user.id, playbookId);
+  const report = await playbookDiscipline(session.user.id, playbookId, {
+    from: request.nextUrl.searchParams.get('from'),
+    to: request.nextUrl.searchParams.get('to'),
+  });
   return NextResponse.json({ success: true, ...report });
 }

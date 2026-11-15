@@ -371,7 +371,7 @@ export default function DashboardNewClient({ session }: { session: Session }) {
         )}
       </div>
 
-      <DayContext timezone={timezone} />
+      <DayContext timezone={timezone} from={dateRange.from} to={dateRange.to} />
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -386,11 +386,11 @@ export default function DashboardNewClient({ session }: { session: Session }) {
 
 /* ── Sub-components ─────────────────────────────────────────── */
 
-function DayContext({ timezone }: { timezone: string }) {
+function DayContext({ timezone, from, to }: { timezone: string; from: string; to: string }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
       <SessionSummary timezone={timezone} />
-      <PlaybookDiscipline />
+      <PlaybookDiscipline from={from} to={to} pageSize={5} paginate={false} />
     </div>
   );
 }

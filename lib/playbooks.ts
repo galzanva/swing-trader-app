@@ -57,7 +57,12 @@ export type RuleLimits = {
   maxContracts: number | null;
   riskPerTrade: number | null;
   bannedRoots: string[];
+  /** Max trades allowed in the first `minutes` after the 9:30 ET cash open. */
+  openWindow: { maxTrades: number; minutes: number } | null;
 };
+
+/** Index-futures cash open. Journal entry times are stored in America/New_York. */
+const RTH_OPEN_MINUTES = 9 * 60 + 30;
 
 function amount(raw: string) {
   const n = Number(raw.replace(/,/g, ''));
@@ -66,7 +71,9 @@ function amount(raw: string) {
 
 /** Pulls the numbers the replay can enforce out of free-text rules. */
 export function ruleLimits(texts: string[]): RuleLimits {
-  const limits: RuleLimits = { dayStop: null, lossStreak: null, maxContracts: null, riskPerTrade: null, bannedRoots: [] };
+  const limits: RuleLimits = {
+    dayStop: null, lossStreak: null, maxContracts: null, riskPerTrade: null, bannedRoots: [], openWindow: null,
+  };
   for (const text of texts) {
     const dayStop = text.match(/day\s*stop[^\d$]*-?\s*\$\s*(\d[\d,]*(?:\.\d+)?)/i)
       || text.match(/(?:max(?:imum)?\s+)?daily\s+loss[^\d$]*-?\s*\$\s*(\d[\d,]*(?:\.\d+)?)/i);
@@ -78,6 +85,12 @@ export function ruleLimits(texts: string[]): RuleLimits {
     if (cap) limits.maxContracts ??= amount(cap[1]);
     const risk = text.match(/risk\s+\$\s*(\d[\d,]*(?:\.\d+)?)\s+(?:per|a|each)\s+trade/i);
     if (risk) limits.riskPerTrade ??= amount(risk[1]);
+    const opening = text.match(/no more than\s+(\d+)\s+trades?\s+during\s+(?:the\s+)?first\s+(\d+)\s+minutes/i);
+    if (opening && !limits.openWindow) {
+      const maxTrades = amount(opening[1]);
+      const minutes = amount(opening[2]);
+      if (maxTrades && minutes) limits.openWindow = { maxTrades, minutes };
+    }
     for (const m of text.matchAll(/never\s+trade\s+([A-Z]{2,4})\b/gi)) {
       const root = m[1].toUpperCase();
       if (isFuturesTicker(root) && !limits.bannedRoots.includes(root)) limits.bannedRoots.push(root);
@@ -86,15 +99,35 @@ export function ruleLimits(texts: string[]): RuleLimits {
   return limits;
 }
 
+function limitsActive(limits: RuleLimits) {
+  return Boolean(
+    limits.dayStop || limits.lossStreak || limits.maxContracts || limits.riskPerTrade
+    || limits.bannedRoots.length || limits.openWindow,
+  );
+}
+
+function minutesAfterRthOpen(entryTime: string | null): number | null {
+  if (!entryTime) return null;
+  const m = entryTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number(m[3]) / 60 : 0) - RTH_OPEN_MINUTES;
+}
+
 type ReplayTrade = { entryTime: string | null; profitLoss: number | null; ticker: string; filledQty: number | null };
 
-/** What the day would have paid if the stops, size cap, and per-trade risk had been respected. */
+/** What the day would have paid if the limits passed in had been respected. The caller decides which rules those are. */
 export function replayWithRules(trades: ReplayTrade[], limits: RuleLimits): number {
   const ordered = [...trades].sort((a, b) => (a.entryTime || '99').localeCompare(b.entryTime || '99'));
   let total = 0;
   let streak = 0;
+  let windowCount = 0;
   for (const t of ordered) {
     if (limits.bannedRoots.includes(futuresRoot(t.ticker.toUpperCase()))) continue;
+    const afterOpen = minutesAfterRthOpen(t.entryTime);
+    if (limits.openWindow && afterOpen != null && afterOpen >= 0 && afterOpen < limits.openWindow.minutes) {
+      if (windowCount >= limits.openWindow.maxTrades) continue;
+      windowCount += 1;
+    }
     let pnl = t.profitLoss ?? 0;
     const qty = t.filledQty ?? 0;
     if (limits.maxContracts && qty > limits.maxContracts) pnl *= limits.maxContracts / qty;
@@ -108,25 +141,28 @@ export function replayWithRules(trades: ReplayTrade[], limits: RuleLimits): numb
   return Math.round(total * 100) / 100;
 }
 
-export async function playbookDiscipline(userId: string, playbookId?: string | null) {
+export async function playbookDiscipline(
+  userId: string,
+  playbookId?: string | null,
+  range?: { from?: string | null; to?: string | null },
+) {
   const playbook = await prisma.playbook.findFirst({
     where: playbookId ? { id: playbookId, userId } : { userId, isActive: true },
     include: {
       strategies: { include: { strategy: { select: { id: true, name: true } } } },
-      rules: { orderBy: { sortOrder: 'asc' }, select: { text: true } },
+      rules: { orderBy: { sortOrder: 'asc' }, select: { id: true, text: true } },
     },
   });
   if (!playbook) {
-    return { playbook: null, followed: emptyBucket(), missed: emptyBucket(), recent: [] as const, limits: null };
+    return { playbook: null, followed: emptyBucket(), missed: emptyBucket(), recent: [] as const, limits: null, totalDays: 0 };
   }
   const limits = ruleLimits(playbook.rules.map((r) => r.text));
-  const canReplay = Boolean(
-    limits.dayStop || limits.lossStreak || limits.maxContracts || limits.riskPerTrade || limits.bannedRoots.length,
-  );
+  const canReplay = limitsActive(limits);
 
   const days = await prisma.playbookDay.findMany({
     where: { playbookId: playbook.id },
     orderBy: { date: 'desc' },
+    include: { checks: { select: { ruleId: true, followed: true } } },
   });
 
   const tickers = (playbook.tickers || '')
@@ -200,17 +236,36 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
     tradesByDay.set(day, [...(tradesByDay.get(day) || []), t]);
   }
 
+  // A rule is in force on a day once some check-in on or before that day includes it.
+  // A rule added later must not rewrite older days that never had a box for it.
+  const seen = new Set<string>();
+  const inForceByDate = new Map<string, Set<string>>();
+  for (const d of [...days].reverse()) {
+    for (const c of d.checks) seen.add(c.ruleId);
+    inForceByDate.set(journalStoredYmd(d.date), new Set(seen));
+  }
+
+  const from = range?.from && /^\d{4}-\d{2}-\d{2}$/.test(range.from) ? range.from : null;
+  const to = range?.to && /^\d{4}-\d{2}-\d{2}$/.test(range.to) ? range.to : null;
   const followed = emptyBucket();
   const missed = emptyBucket();
-  const rows = days.map((d) => {
+  const rows = days.flatMap((d) => {
     const date = journalStoredYmd(d.date);
+    if ((from && date < from) || (to && date > to)) return [];
     const pnl = Math.round((pnlByDay.get(date) || 0) * 100) / 100;
-    const ifFollowed = !d.followedAll && canReplay ? replayWithRules(tradesByDay.get(date) || [], limits) : null;
+    const inForce = inForceByDate.get(date) || new Set<string>();
+    const missedTexts = playbook.rules
+      .filter((r) => inForce.has(r.id) && !d.checks.some((c) => c.ruleId === r.id && c.followed))
+      .map((r) => r.text);
+    const dayLimits = ruleLimits(missedTexts);
+    const ifFollowed = !d.followedAll && limitsActive(dayLimits)
+      ? replayWithRules(tradesByDay.get(date) || [], dayLimits)
+      : null;
     const bucket = d.followedAll ? followed : missed;
     bucket.days += 1;
     bucket.totalPL += pnl;
     bucket.ifFollowedPL += ifFollowed ?? pnl;
-    return { date, followed: d.followedAll, pnl, ifFollowed, note: d.note };
+    return [{ date, followed: d.followedAll, pnl, ifFollowed, note: d.note }];
   });
   for (const bucket of [followed, missed]) {
     bucket.totalPL = Math.round(bucket.totalPL * 100) / 100;
@@ -227,7 +282,8 @@ export async function playbookDiscipline(userId: string, playbookId?: string | n
     },
     followed,
     missed,
-    recent: rows.slice(0, 21),
+    recent: rows,
     limits: canReplay ? limits : null,
+    totalDays: days.length,
   };
 }

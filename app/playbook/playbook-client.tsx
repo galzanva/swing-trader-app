@@ -117,7 +117,7 @@ export default function PlaybookClient() {
         </button>
       </div>
 
-      <PlaybookDiscipline playbookId={active?.id} />
+      <PlaybookDiscipline playbookId={active?.id} showRange pageSize={10} />
 
       <div className="space-y-3">
         {loading && <p className="text-text-muted text-sm">Loading playbooks…</p>}

@@ -11,10 +11,22 @@ interface SidebarProps {
   session: Session;
 }
 
-const SidebarContext = createContext<{ collapsed: boolean }>({ collapsed: false });
+const SidebarContext = createContext<{ collapsed: boolean; setCollapsed: (collapsed: boolean) => void }>({
+  collapsed: false,
+  setCollapsed: () => {},
+});
 
 export function useSidebar() {
   return useContext(SidebarContext);
+}
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
+      {children}
+    </SidebarContext.Provider>
+  );
 }
 
 /* ── SVG Icon components ─────────────────────────────────────── */
@@ -222,7 +234,7 @@ function ThemeToggleButton({ collapsed }: { collapsed: boolean }) {
 
 export default function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, setCollapsed } = useSidebar();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -305,7 +317,7 @@ export default function Sidebar({ session }: SidebarProps) {
   );
 
   return (
-    <SidebarContext.Provider value={{ collapsed }}>
+    <>
       {/* Desktop sidebar */}
       <aside
         className={`
@@ -356,6 +368,6 @@ export default function Sidebar({ session }: SidebarProps) {
           </aside>
         </div>
       )}
-    </SidebarContext.Provider>
+    </>
   );
 }
