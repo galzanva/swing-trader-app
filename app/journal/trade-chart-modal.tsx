@@ -121,9 +121,11 @@ export default function TradeChartModal({
   const [data, setData] = useState<ChartPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [full, setFull] = useState(true);
 
   useEffect(() => {
     setTf(defaultChartTf(tradeType || 'intraday'));
+    setFull(true);
   }, [tradeId, tradeType]);
 
   const load = useCallback(async (id: string, timeframe: ChartTimeframe) => {
@@ -352,10 +354,12 @@ export default function TradeChartModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6">
+    <div className={`fixed inset-0 z-[90] flex ${full ? '' : 'items-center justify-center p-2 sm:p-4'}`}>
       <div className="absolute inset-0 bg-black/70" onClick={onClose} aria-hidden />
       <div
-        className="relative w-full max-w-6xl h-[min(92vh,860px)] bg-surface-1 border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className={`relative bg-surface-1 border border-border shadow-2xl flex flex-col overflow-hidden ${
+          full ? 'w-full h-full rounded-none' : 'w-full max-w-[1600px] h-[min(94vh,980px)] rounded-2xl'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="trade-chart-title"
@@ -441,6 +445,13 @@ export default function TradeChartModal({
             className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-text-secondary hover:bg-surface-3"
           >
             Fit trade
+          </button>
+          <button
+            type="button"
+            onClick={() => setFull((open) => !open)}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-text-secondary hover:bg-surface-3"
+          >
+            {full ? 'Minimize' : 'Full page'}
           </button>
           <button
             type="button"

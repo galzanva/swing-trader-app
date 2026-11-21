@@ -6,6 +6,18 @@ import { firmDisplayName } from '@/lib/prop-firms';
 
 const TYPES = new Set(['eval_purchase', 'payout']);
 
+function parseOutcome(outcomeRaw: unknown, daysRaw: unknown): { outcome: string | null; daysToPass: number | null; error?: string } {
+  if (outcomeRaw == null || outcomeRaw === '') return { outcome: null, daysToPass: null };
+  const outcome = String(outcomeRaw);
+  if (outcome !== 'passed' && outcome !== 'failed') return { outcome: null, daysToPass: null, error: 'Result must be passed or failed' };
+  if (outcome !== 'passed' || daysRaw == null || daysRaw === '') return { outcome, daysToPass: null };
+  const days = Number(daysRaw);
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return { outcome: null, daysToPass: null, error: 'Days to pass must be a whole number from 1 to 365' };
+  }
+  return { outcome, daysToPass: days };
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -76,6 +88,8 @@ export async function POST(request: NextRequest) {
     const amount = Number(body.amount);
     const dateStr = String(body.date || '');
     const notes = body.notes ? String(body.notes) : null;
+    const marked = type === 'eval_purchase' ? parseOutcome(body.outcome, body.daysToPass) : { outcome: null, daysToPass: null };
+    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
 
     if (!firmSlug) return NextResponse.json({ error: 'Firm is required' }, { status: 400 });
     if (!TYPES.has(type)) return NextResponse.json({ error: 'Type must be eval_purchase or payout' }, { status: 400 });
@@ -94,12 +108,43 @@ export async function POST(request: NextRequest) {
         amount: Math.round(amount * 100) / 100,
         date: new Date(`${dateStr}T00:00:00.000Z`),
         notes,
+        outcome: marked.outcome,
+        daysToPass: marked.daysToPass,
       },
     });
 
     return NextResponse.json({ success: true, entry });
   } catch (error: any) {
     console.error('[Prop ledger POST]', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const body = await request.json();
+    const id = String(body.id || '');
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    const marked = parseOutcome(body.outcome, body.daysToPass);
+    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
+
+    const existing = await prisma.propLedgerEntry.findFirst({ where: { id, userId: session.user.id } });
+    if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
+    if (existing.type !== 'eval_purchase') {
+      return NextResponse.json({ error: 'Only eval purchases have a pass or fail' }, { status: 400 });
+    }
+
+    const entry = await prisma.propLedgerEntry.update({
+      where: { id },
+      data: { outcome: marked.outcome, daysToPass: marked.outcome === 'passed' ? marked.daysToPass : null },
+    });
+    return NextResponse.json({ success: true, entry });
+  } catch (error: any) {
+    console.error('[Prop ledger PATCH]', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

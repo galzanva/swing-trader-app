@@ -287,6 +287,8 @@ model PropLedgerEntry {
   amount    Float                     // stored positive; type decides sign
   date      DateTime
   notes     String?  @db.Text
+  outcome   String?  @db.VarChar(10)  // eval only: "passed" | "failed"
+  daysToPass Int?                     // calendar days from purchase to a pass
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
