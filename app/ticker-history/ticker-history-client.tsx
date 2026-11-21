@@ -43,6 +43,7 @@ interface TickerStats {
   lastExitDate: string | null;
   daysSinceLastTrade: number;
   washSaleWarning: boolean;
+  washSaleApplies?: boolean;
   washSaleDetails: WashSaleDetails;
   trades: TickerTrade[];
 }
@@ -293,7 +294,15 @@ export default function TickerHistoryClient({ session }: TickerHistoryClientProp
               </div>
             )}
 
-            {!selectedTicker.washSaleWarning && selectedTicker.closedTrades > 0 && (
+            {selectedTicker.washSaleApplies === false && (
+              <div className="bg-surface-1 border border-border rounded-xl p-4">
+                <p className="text-sm text-text-secondary">
+                  Wash sale does not apply to futures. The 30-day rule is for stocks and other securities.
+                </p>
+              </div>
+            )}
+
+            {!selectedTicker.washSaleWarning && selectedTicker.washSaleApplies !== false && selectedTicker.closedTrades > 0 && (
               <div className="bg-profit/10 border border-profit/30 rounded-xl p-4">
                 <div className="flex items-center gap-2 text-profit text-sm">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

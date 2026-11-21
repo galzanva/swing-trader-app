@@ -10,7 +10,12 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 import { firmDisplayName, inferFirmSlug, isPropAccountType } from '@/lib/prop-firms';
 
-export async function GET() {
+function ymdBound(value: string | null, end: boolean): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  return new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}Z`);
+}
+
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -18,6 +23,8 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+    const from = ymdBound(request.nextUrl.searchParams.get('from'), false);
+    const to = ymdBound(request.nextUrl.searchParams.get('to'), true);
 
     const brokers = await prisma.brokerAccount.findMany({
       where: { userId },
@@ -26,7 +33,10 @@ export async function GET() {
 
     // Get trade stats per broker (group by broker slug)
     const trades = await prisma.tradeJournal.findMany({
-      where: { userId },
+      where: {
+        userId,
+        ...((from || to) ? { entryDate: { gte: from, lte: to } } : {}),
+      },
       select: {
         broker: true,
         isOpen: true,
@@ -96,7 +106,11 @@ export async function GET() {
     let ledger: { firmSlug: string; type: string; amount: number }[] = [];
     try {
       ledger = await prisma.propLedgerEntry.findMany({
-        where: { userId },
+        where: {
+          userId,
+          ...((from || to) ? { date: { gte: from, lte: to } } : {}),
+        },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       });
     } catch (err) {
       console.warn('[Brokers] Prop ledger unavailable (restart dev server after prisma generate):', err);

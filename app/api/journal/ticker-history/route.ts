@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
+import { isFuturesTicker } from '@/lib/journal-paste-import';
 
 const WASH_SALE_DAYS = 30;
 
@@ -30,6 +31,7 @@ interface TickerStats {
   lastExitDate: string | null;
   daysSinceLastTrade: number;
   washSaleWarning: boolean;
+  washSaleApplies: boolean;
   washSaleDetails: {
     inWashSalePeriod: boolean;
     daysRemaining: number;
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
         strategy: true,
         isOpen: true,
         notes: true,
+        instrumentType: true,
       },
       orderBy: { entryDate: 'desc' },
     });
@@ -129,8 +132,13 @@ export async function GET(request: NextRequest) {
         ? Math.floor((now.getTime() - lastExitDate.getTime()) / (1000 * 60 * 60 * 24))
         : Math.floor((now.getTime() - new Date(lastTradeDate).getTime()) / (1000 * 60 * 60 * 24));
 
+      // Section 1091 wash sales apply to stocks and securities, not futures (section 1256).
+      const markedFutures = tickerTrades.some(t => t.instrumentType === 'FUTURES');
+      const markedEquity = tickerTrades.some(t => t.instrumentType === 'EQUITY');
+      const washSaleApplies = markedEquity || (!markedFutures && !isFuturesTicker(ticker));
+
       // Wash sale analysis
-      const losingTrades = closed.filter(t => (t.profitLoss ?? 0) < 0 && t.exitDate);
+      const losingTrades = washSaleApplies ? closed.filter(t => (t.profitLoss ?? 0) < 0 && t.exitDate) : [];
       const recentLosses = losingTrades.filter(t => {
         const exitD = new Date(t.exitDate!);
         const daysSince = Math.floor((now.getTime() - exitD.getTime()) / (1000 * 60 * 60 * 24));
@@ -171,6 +179,7 @@ export async function GET(request: NextRequest) {
         lastExitDate: lastExitDate ? lastExitDate.toISOString() : null,
         daysSinceLastTrade,
         washSaleWarning: inWashSalePeriod,
+        washSaleApplies,
         washSaleDetails: {
           inWashSalePeriod,
           daysRemaining,

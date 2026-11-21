@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { firmDisplayName, inferFirmSlug, isPropAccountType } from '@/lib/prop-firms';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import Link from 'next/link';
+import DateRangeFilter, { DateRange, getDefaultAllTimeRange } from '@/app/components/date-range-filter';
+import { firmDisplayName, inferFirmSlug, isPropAccountType, summarizeEvals } from '@/lib/prop-firms';
 
 interface BrokerStats {
   totalTrades: number;
@@ -24,44 +26,63 @@ interface BrokerAccount {
   stats: BrokerStats;
 }
 
-interface FirmSummary {
-  firmSlug: string;
-  name: string;
-  evalCount: number;
-  evalSpend: number;
-  payouts: number;
-  truePL: number;
-  tradePL: number;
-  trades: number;
-  accounts: string[];
-}
-
-interface LedgerEntry {
+export interface LedgerEntry {
   id: string;
   firmSlug: string;
   type: 'eval_purchase' | 'payout';
   amount: number;
   date: string;
   notes: string | null;
+  outcome: string | null;
+  daysToPass: number | null;
 }
 
 const ACCOUNT_TYPES = [
   { value: 'cash', label: 'Cash' },
   { value: 'margin', label: 'Margin' },
-  { value: 'prop-eval', label: 'Prop Firm (Evaluation)' },
-  { value: 'prop-funded', label: 'Prop Firm (Funded)' },
+  { value: 'prop-eval', label: 'Prop eval' },
+  { value: 'prop-funded', label: 'Prop funded' },
 ];
 
-const fmt = (n: number) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`);
-const money = (n: number) => `$${Math.abs(n).toFixed(2)}`;
-const plColor = (n: number) => (n > 0 ? 'text-profit' : n < 0 ? 'text-loss' : 'text-text-secondary');
-const ymd = (iso: string) => iso.slice(0, 10);
+export const fmt = (n: number) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}`);
+export const money = (n: number) => `$${Math.abs(n).toFixed(2)}`;
+export const plColor = (n: number) => (n > 0 ? 'text-profit' : n < 0 ? 'text-loss' : 'text-text-secondary');
+export const ymd = (iso: string) => iso.slice(0, 10);
+
+export function shortDate(iso: string) {
+  const [y, m, d] = ymd(iso).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function periodLabel(from: string | null, to: string | null) {
+  if (!from) return '—';
+  if (!to || from === to) return shortDate(from);
+  return `${shortDate(from)} – ${shortDate(to)}`;
+}
+
+export function priceToPass(evalSpend: number, passed: number) {
+  if (!passed) return null;
+  return Math.round((evalSpend / passed) * 100) / 100;
+}
+
+function typeLabel(accountType: string) {
+  return ACCOUNT_TYPES.find((t) => t.value === accountType)?.label || accountType;
+}
+
+function firmOf(b: BrokerAccount) {
+  return b.firmSlug || inferFirmSlug(b.slug, b.accountType);
+}
+
+function hasTotals(b: BrokerAccount) {
+  return b.stats.totalTrades > 0 || Math.abs(b.stats.totalPL) >= 0.005;
+}
 
 export default function AccountsClient() {
   const [brokers, setBrokers] = useState<BrokerAccount[]>([]);
-  const [firms, setFirms] = useState<FirmSummary[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timezone, setTimezone] = useState('America/New_York');
+  const [range, setRange] = useState<DateRange | null>(null);
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [editingBroker, setEditingBroker] = useState<BrokerAccount | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,55 +92,75 @@ export default function AccountsClient() {
   const [formType, setFormType] = useState('cash');
   const [formFirm, setFormFirm] = useState('');
 
-  const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [ledgerType, setLedgerType] = useState<'eval_purchase' | 'payout'>('eval_purchase');
-  const [ledgerFirm, setLedgerFirm] = useState('');
-  const [ledgerAmount, setLedgerAmount] = useState('');
-  const [ledgerDate, setLedgerDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [ledgerNotes, setLedgerNotes] = useState('');
-  const [ledgerSaving, setLedgerSaving] = useState(false);
-  const [expandedFirm, setExpandedFirm] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/account/settings')
+      .then((r) => r.json())
+      .then((d) => {
+        const tz = d.timezone || 'America/New_York';
+        setTimezone(tz);
+        setRange(getDefaultAllTimeRange(tz));
+      })
+      .catch(() => setRange(getDefaultAllTimeRange('America/New_York')));
+  }, []);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (r: DateRange) => {
     try {
-      const res = await fetch('/api/brokers');
+      const params = new URLSearchParams({ from: r.from, to: r.to });
+      const res = await fetch(`/api/brokers?${params}`);
       const data = await res.json();
       if (data.success) {
         setBrokers(data.brokers);
-        setFirms(data.firms || []);
         setLedger(data.ledger || []);
       }
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    if (range) void fetchAll(range);
+  }, [range, fetchAll]);
 
-  const cashAccounts = useMemo(
-    () => brokers.filter((b) => !isPropAccountType(b.accountType)),
-    [brokers],
-  );
-  const propAccounts = useMemo(
-    () => brokers.filter((b) => isPropAccountType(b.accountType)),
-    [brokers],
-  );
+  const ledgerByFirm = useMemo(() => {
+    const map = new Map<string, LedgerEntry[]>();
+    for (const e of ledger) {
+      map.set(e.firmSlug, [...(map.get(e.firmSlug) || []), e]);
+    }
+    return map;
+  }, [ledger]);
 
   const knownFirms = useMemo(() => {
     const slugs = new Set<string>();
-    for (const f of firms) slugs.add(f.firmSlug);
-    for (const b of propAccounts) {
-      const s = b.firmSlug || inferFirmSlug(b.slug, b.accountType);
+    for (const e of ledger) slugs.add(e.firmSlug);
+    for (const b of brokers) {
+      const s = firmOf(b);
       if (s) slugs.add(s);
     }
     return [...slugs].sort();
-  }, [firms, propAccounts]);
+  }, [ledger, brokers]);
 
-  const cashPL = cashAccounts.reduce((s, b) => s + b.stats.totalPL, 0);
-  const propTruePL = firms.reduce((s, f) => s + f.truePL, 0);
-  const propTradePL = firms.reduce((s, f) => s + f.tradePL, 0);
-  const totalEvalSpend = firms.reduce((s, f) => s + f.evalSpend, 0);
-  const totalPayouts = firms.reduce((s, f) => s + f.payouts, 0);
-  const totalRealPL = cashPL + propTruePL;
+  const rows = useMemo(() => {
+    const visible = brokers.filter(hasTotals);
+    const margin = visible.filter((b) => !isPropAccountType(b.accountType));
+    const evalAccounts = visible.filter((b) => b.accountType === 'prop-eval');
+    const funded = visible.filter((b) => b.accountType === 'prop-funded');
+    const evalFirms = new Set(evalAccounts.map(firmOf).filter((s): s is string => Boolean(s)));
+    const fundedFirms = new Set(funded.map(firmOf).filter((s): s is string => Boolean(s)));
+    const evalOrphans = knownFirms
+      .filter((slug) => !evalFirms.has(slug))
+      .map((slug) => ({ slug, summary: summarizeEvals(ledgerByFirm.get(slug) || []) }))
+      .filter(({ summary }) => summary.evalCount > 0);
+    const payoutOrphans = knownFirms
+      .filter((slug) => !fundedFirms.has(slug))
+      .map((slug) => ({ slug, summary: summarizeEvals(ledgerByFirm.get(slug) || []) }))
+      .filter(({ summary }) => summary.payouts > 0);
+    return { margin, evalAccounts, funded, evalOrphans, payoutOrphans };
+  }, [brokers, knownFirms, ledgerByFirm]);
+
+  const cashPL = brokers
+    .filter((b) => !isPropAccountType(b.accountType))
+    .reduce((s, b) => s + b.stats.totalPL, 0);
+  const allEval = summarizeEvals(ledger);
+  const totalRealPL = cashPL + allEval.truePL;
 
   const openAddForm = () => {
     setEditingBroker(null);
@@ -167,7 +208,7 @@ export default function AccountsClient() {
       const data = await res.json();
       if (data.success) {
         setShowAccountForm(false);
-        fetchAll();
+        if (range) fetchAll(range);
       } else {
         alert(data.error || 'Failed to save');
       }
@@ -175,48 +216,7 @@ export default function AccountsClient() {
     setSaving(false);
   };
 
-  const openLedger = (type: 'eval_purchase' | 'payout', firmSlug?: string) => {
-    setLedgerType(type);
-    setLedgerFirm(firmSlug || knownFirms[0] || 'topstep');
-    setLedgerAmount('');
-    setLedgerDate(new Date().toISOString().slice(0, 10));
-    setLedgerNotes('');
-    setLedgerOpen(true);
-  };
-
-  const handleSubmitLedger = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLedgerSaving(true);
-    try {
-      const res = await fetch('/api/prop-ledger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firmSlug: ledgerFirm,
-          type: ledgerType,
-          amount: Number(ledgerAmount),
-          date: ledgerDate,
-          notes: ledgerNotes.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setLedgerOpen(false);
-        fetchAll();
-      } else {
-        alert(data.error || 'Failed to save');
-      }
-    } catch { alert('Network error'); }
-    setLedgerSaving(false);
-  };
-
-  const deleteLedger = async (id: string) => {
-    if (!confirm('Delete this entry?')) return;
-    await fetch(`/api/prop-ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    fetchAll();
-  };
-
-  if (loading) {
+  if (!range || loading) {
     return (
       <div className="py-20 text-center">
         <div className="w-8 h-8 border-2 border-text-muted border-t-accent rounded-full animate-spin mx-auto" />
@@ -226,152 +226,109 @@ export default function AccountsClient() {
   }
 
   return (
-    <div className="space-y-8 lg:space-y-10">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl lg:text-4xl font-bold text-text-primary tracking-tight">Trading Accounts</h1>
           <p className="text-text-muted text-base mt-1.5">
-            Trade P/L stays on each book. Prop firms also show what you actually paid and got paid.
+            Totals are for {range.label}. Accounts with nothing in this range stay off the list.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => openLedger('eval_purchase')}
-            className="px-4 py-2.5 bg-surface-2 border border-border text-text-primary rounded-xl text-base font-semibold hover:bg-surface-3">
-            Log eval purchase
-          </button>
-          <button onClick={() => openLedger('payout')}
-            className="px-4 py-2.5 bg-surface-2 border border-border text-text-primary rounded-xl text-base font-semibold hover:bg-surface-3">
-            Log payout
-          </button>
-          <button onClick={openAddForm}
-            className="px-5 py-2.5 bg-accent text-white rounded-xl text-base font-semibold hover:bg-accent-hover">
-            + Add Account
-          </button>
-        </div>
+        <DateRangeFilter value={range} onChange={setRange} timezone={timezone} />
       </div>
 
-      <div className="bg-surface-1 border border-border rounded-2xl p-6 lg:p-7">
-        <div className="text-xs text-text-muted uppercase tracking-wider font-semibold">Total P/L</div>
-        <div className={`text-4xl font-bold tabular-nums mt-1 ${plColor(totalRealPL)}`}>{fmt(totalRealPL)}</div>
-        <p className="text-sm text-text-muted mt-2">
-          Cash/margin {fmt(cashPL)} + prop true P/L {fmt(propTruePL)}
-        </p>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <SummaryCard label="Total" value={fmt(totalRealPL)} color={plColor(totalRealPL)} sub="Brokerage plus prop cash" />
+        <SummaryCard label="Brokerages" value={fmt(cashPL)} color={plColor(cashPL)} sub="Cash and margin trade P/L" />
+        <SummaryCard label="Eval spend" value={`-${money(allEval.evalSpend)}`} color="text-loss" sub={`${allEval.evalCount} purchase${allEval.evalCount === 1 ? '' : 's'}`} />
+        <SummaryCard label="Payouts" value={money(allEval.payouts)} color="text-profit" sub="Cash received from prop firms" />
+        <SummaryCard label="Prop firm P/L" value={fmt(allEval.truePL)} color={plColor(allEval.truePL)} sub="Payouts minus eval spend" />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard label="Real brokerage P/L" value={fmt(cashPL)} color={plColor(cashPL)} sub="Cash / margin trade P/L" />
-        <SummaryCard label="Prop true P/L" value={fmt(propTruePL)} color={plColor(propTruePL)} sub="Payouts minus eval spend" />
-        <SummaryCard label="Eval spend" value={`-${money(totalEvalSpend)}`} color="text-loss" sub="Paid to buy / reset evals" />
-        <SummaryCard label="Payouts received" value={money(totalPayouts)} color="text-profit" sub={`Sim trade P/L ${fmt(propTradePL)}`} />
+      <div className="flex flex-wrap gap-2">
+        <button onClick={openAddForm} className={btnAccent}>+ Add account</button>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-bold text-text-primary">Cash &amp; margin</h2>
-        {cashAccounts.length === 0 ? (
-          <div className="bg-surface-1 border border-border rounded-2xl p-10 text-center text-text-muted">
-            No cash or margin accounts yet.
-          </div>
-        ) : (
-          <AccountGrid brokers={cashAccounts} onEdit={openEditForm} />
-        )}
-      </section>
-
-      {firms.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-bold text-text-primary">Prop firms</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {firms.map((firm) => {
-              const firmLedger = ledger.filter((e) => e.firmSlug === firm.firmSlug);
-              const firmBrokers = brokers.filter((b) => (b.firmSlug || inferFirmSlug(b.slug, b.accountType)) === firm.firmSlug);
-              const open = expandedFirm === firm.firmSlug;
-              return (
-                <div key={firm.firmSlug} className="bg-surface-1 border border-border rounded-2xl p-6 lg:p-7">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div>
-                      <h3 className="text-xl font-bold text-text-primary">{firm.name}</h3>
-                      <p className="text-sm text-text-muted mt-1">
-                        {firm.evalCount} eval{firm.evalCount !== 1 ? 's' : ''} bought · {firmBrokers.length} journal account{firmBrokers.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => openLedger('eval_purchase', firm.firmSlug)}
-                        className="px-3 py-1.5 text-sm rounded-lg bg-surface-2 border border-border text-text-secondary hover:text-text-primary">
-                        + Eval
-                      </button>
-                      <button onClick={() => openLedger('payout', firm.firmSlug)}
-                        className="px-3 py-1.5 text-sm rounded-lg bg-surface-2 border border-border text-text-secondary hover:text-text-primary">
-                        + Payout
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div>
-                      <div className="text-xs text-text-muted uppercase tracking-wider">True P/L</div>
-                      <div className={`text-2xl font-bold tabular-nums ${plColor(firm.truePL)}`}>{fmt(firm.truePL)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-text-muted uppercase tracking-wider">Trade P/L (sim)</div>
-                      <div className={`text-2xl font-bold tabular-nums ${plColor(firm.tradePL)}`}>{fmt(firm.tradePL)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-text-muted uppercase tracking-wider">Paid for evals</div>
-                      <div className="text-lg font-semibold tabular-nums text-loss">-{money(firm.evalSpend)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-text-muted uppercase tracking-wider">Payouts</div>
-                      <div className="text-lg font-semibold tabular-nums text-profit">{money(firm.payouts)}</div>
-                    </div>
-                  </div>
-
-                  {firmBrokers.length > 0 && (
-                    <div className="text-sm text-text-muted mb-3">
-                      Linked: {firmBrokers.map((b) => b.name).join(', ')}
-                    </div>
-                  )}
-
-                  <button onClick={() => setExpandedFirm(open ? null : firm.firmSlug)}
-                    className="text-sm text-accent hover:underline">
-                    {open ? 'Hide cash log' : `Show cash log (${firmLedger.length})`}
-                  </button>
-
-                  {open && (
-                    <div className="mt-3 border-t border-border pt-3 space-y-2">
-                      {firmLedger.length === 0 && (
-                        <p className="text-sm text-text-muted">No eval purchases or payouts logged yet.</p>
-                      )}
-                      {firmLedger.map((e) => (
-                        <div key={e.id} className="flex items-center justify-between gap-3 text-sm">
-                          <div>
-                            <span className="text-text-muted tabular-nums mr-2">{ymd(e.date)}</span>
-                            <span className="text-text-secondary">
-                              {e.type === 'eval_purchase' ? 'Eval purchase' : 'Payout'}
-                            </span>
-                            {e.notes && <span className="text-text-muted"> · {e.notes}</span>}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`tabular-nums font-semibold ${e.type === 'payout' ? 'text-profit' : 'text-loss'}`}>
-                              {e.type === 'payout' ? '+' : '-'}{money(e.amount)}
-                            </span>
-                            <button onClick={() => deleteLedger(e.id)} className="text-text-muted hover:text-loss">×</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {rows.margin.length === 0 && rows.evalAccounts.length === 0 && rows.funded.length === 0 && rows.evalOrphans.length === 0 && rows.payoutOrphans.length === 0 && (
+        <p className="text-sm text-text-muted">No accounts with totals in this range.</p>
       )}
 
-      {propAccounts.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-bold text-text-primary">Prop journal books</h2>
-          <p className="text-sm text-text-muted -mt-2">Sim / combine P/L from trades — not cash out of pocket.</p>
-          <AccountGrid brokers={propAccounts} onEdit={openEditForm} />
-        </section>
+      {(rows.margin.length > 0) && (
+        <AccountSection title="Cash and margin">
+          <TradeTable
+            rows={rows.margin.map((broker) => ({
+              key: broker.id || broker.slug,
+              href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
+              name: broker.name,
+              meta: null,
+              type: typeLabel(broker.accountType),
+              stats: broker.stats,
+              onEdit: broker.id ? () => openEditForm(broker) : undefined,
+            }))}
+          />
+        </AccountSection>
+      )}
+
+      {(rows.evalAccounts.length > 0 || rows.evalOrphans.length > 0) && (
+        <AccountSection title="Prop eval">
+          <EvalTable
+            rows={[
+              ...rows.evalAccounts.map((broker) => {
+                const firm = firmOf(broker);
+                return {
+                  key: broker.id || broker.slug,
+                  href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
+                  name: broker.name,
+                  meta: firm ? firmDisplayName(firm) : null,
+                  stats: broker.stats,
+                  evals: summarizeEvals(firm ? (ledgerByFirm.get(firm) || []) : []),
+                  onEdit: broker.id ? () => openEditForm(broker) : undefined,
+                };
+              }),
+              ...rows.evalOrphans.map(({ slug, summary }) => ({
+                key: slug,
+                href: `/accounts/firm/${slug}`,
+                name: firmDisplayName(slug),
+                meta: 'No journal account yet',
+                stats: emptyStats,
+                evals: summary,
+              })),
+            ]}
+          />
+        </AccountSection>
+      )}
+
+      {(rows.funded.length > 0 || rows.payoutOrphans.length > 0) && (
+        <AccountSection title="Prop funded">
+          <TradeTable
+            payouts
+            rows={[
+              ...rows.funded.map((broker) => {
+                const firm = firmOf(broker);
+                const summary = summarizeEvals(firm ? (ledgerByFirm.get(firm) || []) : []);
+                return {
+                  key: broker.id || broker.slug,
+                  href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
+                  name: broker.name,
+                  meta: firm ? firmDisplayName(firm) : null,
+                  type: 'Prop funded',
+                  stats: broker.stats,
+                  payouts: summary.payouts,
+                  onEdit: broker.id ? () => openEditForm(broker) : undefined,
+                };
+              }),
+              ...rows.payoutOrphans.map(({ slug, summary }) => ({
+                key: `payout-${slug}`,
+                href: `/accounts/firm/${slug}?view=payout`,
+                name: firmDisplayName(slug),
+                meta: 'Payouts, no funded journal account',
+                type: 'Prop funded',
+                stats: emptyStats,
+                payouts: summary.payouts,
+              })),
+            ]}
+          />
+        </AccountSection>
       )}
 
       {showAccountForm && (
@@ -385,7 +342,6 @@ export default function AccountsClient() {
             <Field label="Slug (identifier)">
               <input type="text" value={formSlug} onChange={(e) => setFormSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                 className={`${inputClass} font-mono`} required />
-              <p className="text-xs text-text-muted mt-1.5">Used internally to link trades to this account</p>
             </Field>
             <Field label="Account Type">
               <select value={formType} onChange={(e) => {
@@ -400,59 +356,161 @@ export default function AccountsClient() {
             {isPropAccountType(formType) && (
               <Field label="Prop firm">
                 <input type="text" value={formFirm} onChange={(e) => setFormFirm(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                  placeholder="topstep"
-                  list="firm-slugs"
-                  className={`${inputClass} font-mono`} />
+                  placeholder="topstep" list="firm-slugs" className={`${inputClass} font-mono`} />
                 <datalist id="firm-slugs">
                   {knownFirms.map((f) => <option key={f} value={f}>{firmDisplayName(f)}</option>)}
                 </datalist>
-                <p className="text-xs text-text-muted mt-1.5">
-                  Eval and funded books that share this slug roll into one true P/L (e.g. topstep).
-                </p>
               </Field>
             )}
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" onClick={() => setShowAccountForm(false)} className={btnGhost}>Cancel</button>
-              <button type="submit" disabled={saving} className={btnAccent}>
-                {saving ? 'Saving...' : editingBroker ? 'Update' : 'Add Account'}
-              </button>
+              <button type="submit" disabled={saving} className={btnAccent}>{saving ? 'Saving...' : editingBroker ? 'Update' : 'Add Account'}</button>
             </div>
           </form>
         </Modal>
       )}
 
-      {ledgerOpen && (
-        <Modal title={ledgerType === 'eval_purchase' ? 'Log eval purchase' : 'Log payout'} onClose={() => setLedgerOpen(false)}>
-          <form onSubmit={handleSubmitLedger} className="space-y-5">
-            <Field label="Prop firm">
-              <input type="text" value={ledgerFirm} onChange={(e) => setLedgerFirm(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                list="ledger-firms" className={`${inputClass} font-mono`} required />
-              <datalist id="ledger-firms">
-                {knownFirms.map((f) => <option key={f} value={f}>{firmDisplayName(f)}</option>)}
-              </datalist>
-            </Field>
-            <Field label="Amount (USD) *">
-              <input type="number" min="0" step="0.01" value={ledgerAmount} onChange={(e) => setLedgerAmount(e.target.value)}
-                placeholder={ledgerType === 'eval_purchase' ? '149.00' : '2500.00'}
-                className={inputClass} required />
-            </Field>
-            <Field label="Date">
-              <input type="date" value={ledgerDate} onChange={(e) => setLedgerDate(e.target.value)} className={inputClass} required />
-            </Field>
-            <Field label="Notes">
-              <input type="text" value={ledgerNotes} onChange={(e) => setLedgerNotes(e.target.value)}
-                placeholder={ledgerType === 'eval_purchase' ? '50K combine, account #5' : 'First payout'}
-                className={inputClass} />
-            </Field>
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setLedgerOpen(false)} className={btnGhost}>Cancel</button>
-              <button type="submit" disabled={ledgerSaving} className={btnAccent}>
-                {ledgerSaving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </form>
-        </Modal>
+    </div>
+  );
+}
+
+const emptyStats: BrokerStats = { totalTrades: 0, openTrades: 0, closedTrades: 0, wins: 0, losses: 0, totalPL: 0, winRate: 0 };
+
+function AccountSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function NameCell({ href, name, meta }: { href: string; name: string; meta: string | null }) {
+  return (
+    <td className="px-4 py-3">
+      <Link href={href} className="font-semibold text-text-primary hover:text-accent">{name}</Link>
+      {meta && <div className="text-xs text-text-muted mt-0.5">{meta}</div>}
+    </td>
+  );
+}
+
+function EditCell({ onEdit }: { onEdit?: () => void }) {
+  return (
+    <td className="px-4 py-3 text-right">
+      {onEdit && (
+        <button type="button" onClick={onEdit} className="text-sm text-text-muted hover:text-text-primary">Edit</button>
       )}
+    </td>
+  );
+}
+
+function TradeCells({ stats }: { stats: BrokerStats }) {
+  return (
+    <>
+      <td className="px-3 py-3 text-right tabular-nums text-text-secondary">{stats.totalTrades || '—'}</td>
+      <td className={`px-3 py-3 text-right tabular-nums ${stats.closedTrades > 0 ? (stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-muted'}`}>
+        {stats.closedTrades > 0 ? `${stats.winRate}%` : '—'}
+      </td>
+      <td className={`px-3 py-3 text-right tabular-nums font-semibold ${stats.totalTrades ? plColor(stats.totalPL) : 'text-text-muted'}`}>
+        {stats.totalTrades ? fmt(stats.totalPL) : '—'}
+      </td>
+    </>
+  );
+}
+
+function TradeTable({ rows, payouts = false }: {
+  rows: {
+    key: string;
+    href: string;
+    name: string;
+    meta: string | null;
+    type: string;
+    stats: BrokerStats;
+    payouts?: number;
+    onEdit?: () => void;
+  }[];
+  payouts?: boolean;
+}) {
+  return (
+    <div className="bg-surface-1 border border-border rounded-2xl overflow-x-auto">
+      <table className="w-full text-sm min-w-[640px]">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
+            <th className="px-4 py-3 font-medium">Account</th>
+            <th className="px-3 py-3 font-medium">Type</th>
+            <th className="px-3 py-3 font-medium text-right">Trades</th>
+            <th className="px-3 py-3 font-medium text-right">Win rate</th>
+            <th className="px-3 py-3 font-medium text-right">Trade P/L</th>
+            {payouts && <th className="px-3 py-3 font-medium text-right">Payouts</th>}
+            <th className="px-4 py-3 font-medium text-right">Edit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-t border-border hover:bg-surface-2/60">
+              <NameCell href={row.href} name={row.name} meta={row.meta} />
+              <td className="px-3 py-3 text-text-secondary whitespace-nowrap">{row.type}</td>
+              <TradeCells stats={row.stats} />
+              {payouts && (
+                <td className="px-3 py-3 text-right tabular-nums text-profit">{row.payouts ? money(row.payouts) : '—'}</td>
+              )}
+              <EditCell onEdit={row.onEdit} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EvalTable({ rows }: {
+  rows: {
+    key: string;
+    href: string;
+    name: string;
+    meta: string | null;
+    stats: BrokerStats;
+    evals: ReturnType<typeof summarizeEvals>;
+    onEdit?: () => void;
+  }[];
+}) {
+  return (
+    <div className="bg-surface-1 border border-border rounded-2xl overflow-x-auto">
+      <table className="w-full text-sm min-w-[980px]">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
+            <th className="px-4 py-3 font-medium">Account</th>
+            <th className="px-3 py-3 font-medium text-right">Trades</th>
+            <th className="px-3 py-3 font-medium text-right">Win rate</th>
+            <th className="px-3 py-3 font-medium text-right">Trade P/L</th>
+            <th className="px-3 py-3 font-medium text-right">Evals</th>
+            <th className="px-3 py-3 font-medium text-right">Pass rate</th>
+            <th className="px-3 py-3 font-medium">Period</th>
+            <th className="px-3 py-3 font-medium text-right">Price to pass</th>
+            <th className="px-4 py-3 font-medium text-right">Edit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const price = priceToPass(row.evals.evalSpend, row.evals.passed);
+            return (
+            <tr key={row.key} className="border-t border-border hover:bg-surface-2/60">
+              <NameCell href={row.href} name={row.name} meta={row.meta} />
+              <TradeCells stats={row.stats} />
+              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">
+                {row.evals.evalCount > 0 ? row.evals.evalCount : '—'}
+              </td>
+              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">
+                {row.evals.evalCount > 0 ? `${Math.round((row.evals.passed / row.evals.evalCount) * 100)}%` : '—'}
+              </td>
+              <td className="px-3 py-3 text-text-secondary whitespace-nowrap">{periodLabel(row.evals.periodFrom, row.evals.periodTo)}</td>
+              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">{price == null ? '—' : money(price)}</td>
+              <EditCell onEdit={row.onEdit} />
+            </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -467,72 +525,12 @@ function SummaryCard({ label, value, color, sub }: { label: string; value: strin
   );
 }
 
-function AccountGrid({ brokers, onEdit }: { brokers: BrokerAccount[]; onEdit: (b: BrokerAccount) => void }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
-      {brokers.map((broker) => (
-        <div key={broker.slug} className="bg-surface-1 border border-border rounded-2xl p-6 lg:p-7 hover:border-accent/30 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-text-primary">{broker.name}</h3>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-md bg-surface-3 text-text-muted uppercase">
-                  {ACCOUNT_TYPES.find((t) => t.value === broker.accountType)?.label || broker.accountType}
-                </span>
-                {broker.firmSlug && (
-                  <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-md bg-accent/10 text-accent">
-                    {firmDisplayName(broker.firmSlug)}
-                  </span>
-                )}
-              </div>
-            </div>
-            {broker.id && (
-              <button onClick={() => onEdit(broker)}
-                className="text-text-muted hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-2">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-baseline">
-              <span className="text-sm text-text-muted font-medium">Trade P/L</span>
-              <span className={`text-2xl font-bold tabular-nums ${plColor(broker.stats.totalPL)}`}>{fmt(broker.stats.totalPL)}</span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-sm text-text-muted font-medium">Win Rate</span>
-              <span className={`text-lg font-semibold tabular-nums ${broker.stats.winRate >= 50 ? 'text-profit' : broker.stats.closedTrades > 0 ? 'text-loss' : 'text-text-secondary'}`}>
-                {broker.stats.closedTrades > 0 ? `${broker.stats.winRate}%` : '—'}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
-              <div className="text-center">
-                <div className="text-lg font-bold text-text-primary tabular-nums">{broker.stats.totalTrades}</div>
-                <div className="text-xs text-text-muted">Total</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-profit tabular-nums">{broker.stats.wins}</div>
-                <div className="text-xs text-text-muted">Wins</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-loss tabular-nums">{broker.stats.losses}</div>
-                <div className="text-xs text-text-muted">Losses</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-50" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-bg border border-border rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-bg border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="px-6 py-5 border-b border-border">
             <h2 className="text-xl font-bold text-text-primary">{title}</h2>
           </div>
@@ -553,5 +551,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const inputClass = 'w-full px-4 py-3 bg-surface-2 border border-border rounded-xl text-text-primary text-base placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent';
-const btnGhost = 'px-5 py-2.5 bg-surface-2 text-text-secondary border border-border rounded-xl text-base font-medium hover:bg-surface-3';
-const btnAccent = 'px-5 py-2.5 bg-accent text-white rounded-xl text-base font-semibold hover:bg-accent-hover disabled:opacity-50';
+const btnGhost = 'px-4 py-2.5 bg-surface-2 text-text-secondary border border-border rounded-xl text-sm font-medium hover:bg-surface-3';
+const btnAccent = 'px-4 py-2.5 bg-accent text-white rounded-xl text-sm font-semibold hover:bg-accent-hover disabled:opacity-50';
