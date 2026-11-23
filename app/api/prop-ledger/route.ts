@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
-import { firmDisplayName } from '@/lib/prop-firms';
+import { calendarDays, firmDisplayName } from '@/lib/prop-firms';
 
 const TYPES = new Set(['eval_purchase', 'payout']);
 
-function parseOutcome(outcomeRaw: unknown, daysRaw: unknown): { outcome: string | null; daysToPass: number | null; error?: string } {
-  if (outcomeRaw == null || outcomeRaw === '') return { outcome: null, daysToPass: null };
+function parseOutcome(outcomeRaw: unknown, passedOnRaw: unknown, startedOn: string): { outcome: string | null; passedOn: Date | null; daysToPass: number | null; error?: string } {
+  if (outcomeRaw == null || outcomeRaw === '') return { outcome: null, passedOn: null, daysToPass: null };
   const outcome = String(outcomeRaw);
-  if (outcome !== 'passed' && outcome !== 'failed') return { outcome: null, daysToPass: null, error: 'Result must be passed or failed' };
-  if (outcome !== 'passed' || daysRaw == null || daysRaw === '') return { outcome, daysToPass: null };
-  const days = Number(daysRaw);
-  if (!Number.isInteger(days) || days < 1 || days > 365) {
-    return { outcome: null, daysToPass: null, error: 'Days to pass must be a whole number from 1 to 365' };
+  if (outcome !== 'passed' && outcome !== 'failed' && outcome !== 'ongoing') {
+    return { outcome: null, passedOn: null, daysToPass: null, error: 'Result must be passed, failed, or ongoing' };
   }
-  return { outcome, daysToPass: days };
+  if (outcome !== 'passed') return { outcome, passedOn: null, daysToPass: null };
+  const passedOn = String(passedOnRaw || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(passedOn)) {
+    return { outcome: null, passedOn: null, daysToPass: null, error: 'Choose the date the eval passed' };
+  }
+  const daysToPass = calendarDays(startedOn, passedOn);
+  if (daysToPass == null) {
+    return { outcome: null, passedOn: null, daysToPass: null, error: 'Passed date cannot be before the eval started' };
+  }
+  return { outcome, passedOn: new Date(`${passedOn}T00:00:00.000Z`), daysToPass };
 }
 
 export async function GET() {
@@ -88,8 +94,6 @@ export async function POST(request: NextRequest) {
     const amount = Number(body.amount);
     const dateStr = String(body.date || '');
     const notes = body.notes ? String(body.notes) : null;
-    const marked = type === 'eval_purchase' ? parseOutcome(body.outcome, body.daysToPass) : { outcome: null, daysToPass: null };
-    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
 
     if (!firmSlug) return NextResponse.json({ error: 'Firm is required' }, { status: 400 });
     if (!TYPES.has(type)) return NextResponse.json({ error: 'Type must be eval_purchase or payout' }, { status: 400 });
@@ -99,6 +103,8 @@ export async function POST(request: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return NextResponse.json({ error: 'Date must be YYYY-MM-DD' }, { status: 400 });
     }
+    const marked = type === 'eval_purchase' ? parseOutcome(body.outcome, body.passedOn, dateStr) : { outcome: null, passedOn: null, daysToPass: null, error: undefined };
+    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
 
     const entry = await prisma.propLedgerEntry.create({
       data: {
@@ -109,6 +115,7 @@ export async function POST(request: NextRequest) {
         date: new Date(`${dateStr}T00:00:00.000Z`),
         notes,
         outcome: marked.outcome,
+        passedOn: marked.passedOn,
         daysToPass: marked.daysToPass,
       },
     });
@@ -129,18 +136,17 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const id = String(body.id || '');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-    const marked = parseOutcome(body.outcome, body.daysToPass);
-    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
-
     const existing = await prisma.propLedgerEntry.findFirst({ where: { id, userId: session.user.id } });
     if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
     if (existing.type !== 'eval_purchase') {
       return NextResponse.json({ error: 'Only eval purchases have a pass or fail' }, { status: 400 });
     }
+    const marked = parseOutcome(body.outcome, body.passedOn, existing.date.toISOString().slice(0, 10));
+    if (marked.error) return NextResponse.json({ error: marked.error }, { status: 400 });
 
     const entry = await prisma.propLedgerEntry.update({
       where: { id },
-      data: { outcome: marked.outcome, daysToPass: marked.outcome === 'passed' ? marked.daysToPass : null },
+      data: { outcome: marked.outcome, passedOn: marked.passedOn, daysToPass: marked.daysToPass },
     });
     return NextResponse.json({ success: true, entry });
   } catch (error: any) {

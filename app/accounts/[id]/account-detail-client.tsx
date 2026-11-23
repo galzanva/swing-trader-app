@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DateRangeFilter, { DateRange, getDefaultAllTimeRange } from '@/app/components/date-range-filter';
-import { firmDisplayName, inferFirmSlug, summarizeEvals } from '@/lib/prop-firms';
-import { fmt, money, periodLabel, plColor, priceToPass, shortDate, ymd, type LedgerEntry } from '../accounts-client';
+import { calendarDays, firmDisplayName, inferFirmSlug, summarizeEvals } from '@/lib/prop-firms';
+import { fmt, formatRate, money, periodLabel, plColor, priceToPass, shortDate, ymd, type LedgerEntry } from '../accounts-client';
 
 interface BrokerStats {
   totalTrades: number;
@@ -45,8 +45,8 @@ export default function AccountDetailClient({
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
-  const [outcome, setOutcome] = useState<'passed' | 'failed'>('failed');
-  const [days, setDays] = useState('');
+  const [outcome, setOutcome] = useState<'passed' | 'failed' | 'ongoing'>('ongoing');
+  const [passedOn, setPassedOn] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -124,17 +124,21 @@ export default function AccountDetailClient({
     return ledger.filter((e) => e.firmSlug === firmSlug && e.type === (kind === 'eval' ? 'eval_purchase' : 'payout'));
   }, [ledger, firmSlug, kind]);
   const evalSummary = summarizeEvals(kind === 'eval' && firmSlug ? ledger.filter((e) => e.firmSlug === firmSlug && e.type === 'eval_purchase') : []);
+  const firmBooks = summarizeEvals(firmSlug ? ledger.filter((e) => e.firmSlug === firmSlug) : []);
   const passPrice = priceToPass(evalSummary.evalSpend, evalSummary.passed);
   const payoutTotal = entries.reduce((sum, e) => sum + (e.type === 'payout' ? e.amount : 0), 0);
+  const sibling = firmSlug
+    ? brokers.find((b) => b.id !== broker?.id && (b.firmSlug || inferFirmSlug(b.slug, b.accountType)) === firmSlug && b.accountType === (kind === 'eval' ? 'prop-funded' : 'prop-eval'))
+    : null;
 
-  const saveOutcome = async (entry: LedgerEntry, next: 'passed' | 'failed', dayValue: string) => {
+  const saveOutcome = async (entry: LedgerEntry, next: 'passed' | 'failed' | 'ongoing', passedOnValue: string | null) => {
     const res = await fetch('/api/prop-ledger', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: entry.id,
         outcome: next,
-        daysToPass: next === 'passed' && dayValue ? Number(dayValue) : null,
+        passedOn: next === 'passed' ? passedOnValue : null,
       }),
     });
     const data = await res.json();
@@ -155,8 +159,8 @@ export default function AccountDetailClient({
     setFormOpen(false);
     setAmount('');
     setNotes('');
-    setOutcome('failed');
-    setDays('');
+    setOutcome('ongoing');
+    setPassedOn('');
   };
 
   const submitLog = async (e: React.FormEvent) => {
@@ -174,7 +178,7 @@ export default function AccountDetailClient({
           date,
           notes: notes.trim() || null,
           outcome: kind === 'eval' ? outcome : null,
-          daysToPass: kind === 'eval' && outcome === 'passed' ? Number(days) : null,
+          passedOn: kind === 'eval' && outcome === 'passed' ? passedOn : null,
         }),
       });
       const data = await res.json();
@@ -224,7 +228,7 @@ export default function AccountDetailClient({
         <DateRangeFilter value={range} onChange={setRange} timezone={timezone} />
       </div>
 
-      {broker && (
+      {broker && kind === 'cash' && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Stat label="Trade P/L" value={fmt(broker.stats.totalPL)} color={plColor(broker.stats.totalPL)} />
           <Stat label="Win rate" value={broker.stats.closedTrades ? `${broker.stats.winRate}%` : '—'} color={broker.stats.closedTrades ? (broker.stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-secondary'} />
@@ -233,18 +237,32 @@ export default function AccountDetailClient({
         </div>
       )}
 
+      {kind !== 'cash' && firmSlug && sibling?.id && (
+        <Link href={`/accounts/${sibling.id}`} className="text-sm text-accent hover:underline -mt-4 inline-block">
+          {sibling.accountType === 'prop-funded' ? `${firmDisplayName(firmSlug)} funded account` : `${firmDisplayName(firmSlug)} eval account`}
+        </Link>
+      )}
+
       {kind === 'eval' && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Stat label="Pass rate" value={evalSummary.evalCount ? `${Math.round((evalSummary.passed / evalSummary.evalCount) * 100)}%` : '—'} color="text-text-primary" sub={evalSummary.evalCount ? `${evalSummary.passed} of ${evalSummary.evalCount} passed` : 'No evals in this range'} />
-          <Stat label="Period" value={periodLabel(evalSummary.periodFrom, evalSummary.periodTo)} color="text-text-primary" sub="First purchase through the latest" />
+          <Stat label="Pass rate" value={formatRate(evalSummary.passRate)} color="text-text-primary" sub={passRateSub(evalSummary)} />
           <Stat label="Price to pass" value={passPrice == null ? '—' : money(passPrice)} color="text-text-primary" sub="Eval spend divided by passes" />
-          <Stat label="Eval spend" value={`-${money(evalSummary.evalSpend)}`} color="text-loss" />
+          <Stat label="Eval spend" value={`-${money(firmBooks.evalSpend)}`} color="text-loss" sub={periodLabel(evalSummary.periodFrom, evalSummary.periodTo)} />
+          <Stat label="True P/L" value={fmt(firmBooks.truePL)} color={plColor(firmBooks.truePL)} sub={`Payouts ${money(firmBooks.payouts)}`} />
+          {broker && <Stat label="Trades" value={String(broker.stats.totalTrades)} color="text-text-primary" />}
+          {broker && <Stat label="Win rate" value={broker.stats.closedTrades ? `${broker.stats.winRate}%` : '—'} color={broker.stats.closedTrades ? (broker.stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-secondary'} />}
+          {broker && <Stat label="Wins / losses" value={`${broker.stats.wins} / ${broker.stats.losses}`} color="text-text-primary" />}
         </div>
       )}
 
       {kind === 'payout' && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Stat label="Payouts" value={money(payoutTotal)} color="text-profit" sub={`${entries.length} payout${entries.length === 1 ? '' : 's'} in this range`} />
+          <Stat label="Eval spend" value={`-${money(firmBooks.evalSpend)}`} color="text-loss" sub="Same firm" />
+          <Stat label="True P/L" value={fmt(firmBooks.truePL)} color={plColor(firmBooks.truePL)} sub="Payouts minus eval spend" />
+          {broker && <Stat label="Trades" value={String(broker.stats.totalTrades)} color="text-text-primary" />}
+          {broker && <Stat label="Win rate" value={broker.stats.closedTrades ? `${broker.stats.winRate}%` : '—'} color={broker.stats.closedTrades ? (broker.stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-secondary'} />}
+          {broker && <Stat label="Wins / losses" value={`${broker.stats.wins} / ${broker.stats.losses}`} color="text-text-primary" />}
         </div>
       )}
 
@@ -268,7 +286,8 @@ export default function AccountDetailClient({
               {kind === 'eval' && (
                 <label className="text-sm text-text-secondary">
                   Result
-                  <select value={outcome} onChange={(e) => setOutcome(e.target.value as 'passed' | 'failed')} className={inputClass}>
+                  <select value={outcome} onChange={(e) => setOutcome(e.target.value as 'passed' | 'failed' | 'ongoing')} className={inputClass}>
+                    <option value="ongoing">Ongoing</option>
                     <option value="failed">Failed</option>
                     <option value="passed">Passed</option>
                   </select>
@@ -276,8 +295,11 @@ export default function AccountDetailClient({
               )}
               {kind === 'eval' && outcome === 'passed' && (
                 <label className="text-sm text-text-secondary">
-                  Days to pass
-                  <input type="number" min="1" max="365" value={days} onChange={(e) => setDays(e.target.value)} required className={inputClass} />
+                  Passed on
+                  <input type="date" value={passedOn} min={date} onChange={(e) => setPassedOn(e.target.value)} required className={inputClass} />
+                  {passedOn && calendarDays(date, passedOn) != null && (
+                    <span className="block mt-1 text-xs text-text-muted">{calendarDays(date, passedOn)} days from the start date</span>
+                  )}
                 </label>
               )}
               <label className="text-sm text-text-secondary sm:col-span-2">
@@ -295,21 +317,29 @@ export default function AccountDetailClient({
             </form>
           )}
           <div className="bg-surface-1 border border-border rounded-2xl overflow-x-auto">
-            <table className="w-full text-sm min-w-[760px]">
+            <table className={`w-full text-sm table-fixed ${kind === 'eval' ? 'min-w-[920px]' : 'min-w-[640px]'}`}>
+              <colgroup>
+                <col className="w-[14%]" />
+                <col />
+                {kind === 'eval' && <col className="w-[12%]" />}
+                {kind === 'eval' && <col className="w-[16%]" />}
+                {kind === 'eval' && <col className="w-[10%]" />}
+                <col className="w-[14%]" />
+              </colgroup>
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
-                  <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-3 py-3 font-medium">{kind === 'eval' ? 'Eval' : 'Payout'}</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap">Date</th>
                   <th className="px-3 py-3 font-medium">Notes</th>
                   {kind === 'eval' && <th className="px-3 py-3 font-medium">Result</th>}
-                  {kind === 'eval' && <th className="px-3 py-3 font-medium">Days</th>}
+                  {kind === 'eval' && <th className="px-3 py-3 font-medium whitespace-nowrap">Passed on</th>}
+                  {kind === 'eval' && <th className="px-3 py-3 font-medium text-right">Days</th>}
                   <th className="px-4 py-3 font-medium text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 && (
                   <tr>
-                    <td colSpan={kind === 'eval' ? 6 : 4} className="px-4 py-8 text-center text-text-muted">
+                    <td colSpan={kind === 'eval' ? 6 : 3} className="px-4 py-8 text-center text-text-muted">
                       {kind === 'eval' ? 'No eval purchases in this range.' : 'No payouts in this range.'}
                     </td>
                   </tr>
@@ -330,57 +360,64 @@ function LogRow({
   entry, onSave, onDelete,
 }: {
   entry: LedgerEntry;
-  onSave: (entry: LedgerEntry, outcome: 'passed' | 'failed', days: string) => void;
+  onSave: (entry: LedgerEntry, outcome: 'passed' | 'failed' | 'ongoing', passedOn: string | null) => void;
   onDelete: () => void;
 }) {
-  const [outcome, setOutcome] = useState(entry.outcome === 'passed' ? 'passed' : 'failed');
-  const [days, setDays] = useState(entry.daysToPass ? String(entry.daysToPass) : '');
+  const [outcome, setOutcome] = useState(storedOutcome(entry.outcome));
+  const [passedOn, setPassedOn] = useState(entry.passedOn ? ymd(entry.passedOn) : '');
   useEffect(() => {
-    setOutcome(entry.outcome === 'passed' ? 'passed' : 'failed');
-    setDays(entry.daysToPass ? String(entry.daysToPass) : '');
-  }, [entry.outcome, entry.daysToPass]);
+    setOutcome(storedOutcome(entry.outcome));
+    setPassedOn(entry.passedOn ? ymd(entry.passedOn) : '');
+  }, [entry.outcome, entry.passedOn]);
 
   const isEval = entry.type === 'eval_purchase';
   return (
     <tr className="border-t border-border">
-      <td className="px-4 py-3 text-text-secondary whitespace-nowrap tabular-nums">{shortDate(ymd(entry.date))}</td>
-      <td className="px-3 py-3 text-text-primary whitespace-nowrap">{isEval ? 'Eval purchase' : 'Payout'}</td>
-      <td className="px-3 py-3 text-text-muted">{entry.notes || '—'}</td>
+      <td className="px-4 py-3 text-text-secondary whitespace-nowrap tabular-nums align-middle">{shortDate(ymd(entry.date))}</td>
+      <td className="px-3 py-3 text-text-muted align-middle truncate" title={entry.notes || undefined}>{entry.notes || '—'}</td>
       {isEval && (
-        <td className="px-3 py-3">
+        <td className="px-3 py-3 align-middle">
           <select
             value={entry.outcome ? outcome : ''}
             onChange={(e) => {
-              const next = e.target.value as 'passed' | 'failed';
+              const next = e.target.value as 'passed' | 'failed' | 'ongoing';
               setOutcome(next);
-              onSave(entry, next, next === 'passed' ? days : '');
+              if (next !== 'passed') onSave(entry, next, null);
+              else if (passedOn) onSave(entry, next, passedOn);
             }}
-            className={`bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm ${entry.outcome === 'passed' ? 'text-profit' : entry.outcome === 'failed' ? 'text-loss' : 'text-text-secondary'}`}
+            className={`w-full bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm ${outcomeColor(entry.outcome)}`}
           >
             {!entry.outcome && <option value="">Unmarked</option>}
+            <option value="ongoing">Ongoing</option>
             <option value="failed">Failed</option>
             <option value="passed">Passed</option>
           </select>
         </td>
       )}
       {isEval && (
-        <td className="px-3 py-3">
+        <td className="px-3 py-3 align-middle">
           {entry.outcome === 'passed' || outcome === 'passed' ? (
             <input
-              type="number"
-              min="1"
-              max="365"
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              onBlur={() => onSave(entry, 'passed', days)}
-              className="w-16 bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm tabular-nums text-text-primary"
+              type="date"
+              value={passedOn}
+              min={ymd(entry.date)}
+              onChange={(e) => {
+                setPassedOn(e.target.value);
+                if (e.target.value) onSave(entry, 'passed', e.target.value);
+              }}
+              className="w-full bg-surface-2 border border-border rounded-lg px-2 py-1 text-sm tabular-nums text-text-primary"
             />
           ) : (
             <span className="text-text-muted">—</span>
           )}
         </td>
       )}
-      <td className="px-4 py-3 text-right whitespace-nowrap">
+      {isEval && (
+        <td className="px-3 py-3 text-right text-text-secondary tabular-nums align-middle whitespace-nowrap">
+          {outcome === 'passed' ? (passedOn ? `${calendarDays(ymd(entry.date), passedOn) ?? '—'} days` : entry.daysToPass != null ? `${entry.daysToPass} days` : '—') : '—'}
+        </td>
+      )}
+      <td className="px-4 py-3 text-right whitespace-nowrap align-middle">
         <span className={`tabular-nums font-semibold ${entry.type === 'payout' ? 'text-profit' : 'text-loss'}`}>
           {entry.type === 'payout' ? '+' : '-'}{money(entry.amount)}
         </span>
@@ -388,6 +425,26 @@ function LogRow({
       </td>
     </tr>
   );
+}
+
+function storedOutcome(value: string | null): 'passed' | 'failed' | 'ongoing' {
+  if (value === 'passed' || value === 'ongoing') return value;
+  return 'failed';
+}
+
+function outcomeColor(value: string | null) {
+  if (value === 'passed') return 'text-profit';
+  if (value === 'failed') return 'text-loss';
+  if (value === 'ongoing') return 'text-accent';
+  return 'text-text-secondary';
+}
+
+function passRateSub(summary: { evalCount: number; passed: number; failed: number; ongoing: number }) {
+  if (!summary.evalCount) return 'No evals in this range';
+  const finished = summary.passed + summary.failed;
+  if (!finished) return `${summary.ongoing} ongoing`;
+  if (summary.ongoing) return `${summary.passed} of ${finished} finished, ${summary.ongoing} ongoing`;
+  return `${summary.passed} of ${finished} passed`;
 }
 
 function Stat({ label, value, color, sub }: { label: string; value: string; color: string; sub?: string }) {
