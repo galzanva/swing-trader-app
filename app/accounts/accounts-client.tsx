@@ -34,6 +34,7 @@ export interface LedgerEntry {
   date: string;
   notes: string | null;
   outcome: string | null;
+  passedOn: string | null;
   daysToPass: number | null;
 }
 
@@ -65,6 +66,12 @@ export function priceToPass(evalSpend: number, passed: number) {
   return Math.round((evalSpend / passed) * 100) / 100;
 }
 
+export function formatRate(rate: number | null) {
+  if (rate == null) return '—';
+  const pct = Math.round(rate * 1000) / 10;
+  return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
+}
+
 function typeLabel(accountType: string) {
   return ACCOUNT_TYPES.find((t) => t.value === accountType)?.label || accountType;
 }
@@ -91,6 +98,7 @@ export default function AccountsClient() {
   const [formSlug, setFormSlug] = useState('');
   const [formType, setFormType] = useState('cash');
   const [formFirm, setFormFirm] = useState('');
+  const [newFirmName, setNewFirmName] = useState('');
 
   useEffect(() => {
     fetch('/api/account/settings')
@@ -141,8 +149,17 @@ export default function AccountsClient() {
   const rows = useMemo(() => {
     const visible = brokers.filter(hasTotals);
     const margin = visible.filter((b) => !isPropAccountType(b.accountType));
-    const evalAccounts = visible.filter((b) => b.accountType === 'prop-eval');
-    const funded = visible.filter((b) => b.accountType === 'prop-funded');
+    const firmSummary = (slug: string | null) => summarizeEvals(slug ? (ledgerByFirm.get(slug) || []) : []);
+    const evalAccounts = brokers.filter((b) => {
+      if (b.accountType !== 'prop-eval') return false;
+      const slug = firmOf(b);
+      return hasTotals(b) || firmSummary(slug).evalCount > 0;
+    });
+    const funded = brokers.filter((b) => {
+      if (b.accountType !== 'prop-funded') return false;
+      const slug = firmOf(b);
+      return hasTotals(b) || firmSummary(slug).payouts > 0;
+    });
     const evalFirms = new Set(evalAccounts.map(firmOf).filter((s): s is string => Boolean(s)));
     const fundedFirms = new Set(funded.map(firmOf).filter((s): s is string => Boolean(s)));
     const evalOrphans = knownFirms
@@ -156,6 +173,28 @@ export default function AccountsClient() {
     return { margin, evalAccounts, funded, evalOrphans, payoutOrphans };
   }, [brokers, knownFirms, ledgerByFirm]);
 
+  const firmGroups = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const broker of [...rows.evalAccounts, ...rows.funded]) {
+      const slug = firmOf(broker);
+      if (slug) slugs.add(slug);
+    }
+    for (const orphan of rows.evalOrphans) slugs.add(orphan.slug);
+    for (const orphan of rows.payoutOrphans) slugs.add(orphan.slug);
+    return [...slugs].map((slug) => {
+      const entries = ledgerByFirm.get(slug) || [];
+      const summary = summarizeEvals(entries);
+      const latest = entries.reduce((max, entry) => {
+        const day = entry.date.slice(0, 10);
+        return day > max ? day : max;
+      }, '');
+      const evalBrokers = rows.evalAccounts.filter((broker) => firmOf(broker) === slug);
+      const fundedBrokers = rows.funded.filter((broker) => firmOf(broker) === slug);
+      return { slug, summary, latest, evalBrokers, fundedBrokers, orphanEval: evalBrokers.length === 0 && summary.evalCount > 0, orphanPayout: fundedBrokers.length === 0 && summary.payouts > 0 };
+    }).filter((group) => group.evalBrokers.length > 0 || group.fundedBrokers.length > 0 || group.summary.evalCount > 0 || group.summary.payouts > 0)
+      .sort((a, b) => b.latest.localeCompare(a.latest) || firmDisplayName(a.slug).localeCompare(firmDisplayName(b.slug)));
+  }, [rows, ledgerByFirm]);
+
   const cashPL = brokers
     .filter((b) => !isPropAccountType(b.accountType))
     .reduce((s, b) => s + b.stats.totalPL, 0);
@@ -168,6 +207,7 @@ export default function AccountsClient() {
     setFormSlug('');
     setFormType('cash');
     setFormFirm('');
+    setNewFirmName('');
     setShowAccountForm(true);
   };
 
@@ -176,7 +216,9 @@ export default function AccountsClient() {
     setFormName(broker.name);
     setFormSlug(broker.slug);
     setFormType(broker.accountType);
-    setFormFirm(broker.firmSlug || inferFirmSlug(broker.slug, broker.accountType) || '');
+    const firm = broker.firmSlug || inferFirmSlug(broker.slug, broker.accountType) || '';
+    setFormFirm(firm);
+    setNewFirmName('');
     setShowAccountForm(true);
   };
 
@@ -185,13 +227,25 @@ export default function AccountsClient() {
     if (!editingBroker) {
       const slug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       setFormSlug(slug);
-      if (isPropAccountType(formType)) setFormFirm(inferFirmSlug(slug, formType) || formFirm);
     }
+  };
+
+  const resolvedFirm = () => {
+    if (!isPropAccountType(formType)) return null;
+    if (!formFirm || formFirm === '__new') {
+      return newFirmName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+    return formFirm;
   };
 
   const handleSubmitAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formSlug.trim()) return;
+    const firm = resolvedFirm();
+    if (isPropAccountType(formType) && !firm) {
+      alert('Choose the prop firm, or name a new one. Eval and funded accounts connect by that firm.');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/brokers', {
@@ -202,7 +256,7 @@ export default function AccountsClient() {
           name: formName.trim(),
           slug: formSlug.trim(),
           accountType: formType,
-          firmSlug: isPropAccountType(formType) ? (formFirm || inferFirmSlug(formSlug, formType)) : null,
+          firmSlug: firm,
         }),
       });
       const data = await res.json();
@@ -269,65 +323,9 @@ export default function AccountsClient() {
         </AccountSection>
       )}
 
-      {(rows.evalAccounts.length > 0 || rows.evalOrphans.length > 0) && (
-        <AccountSection title="Prop eval">
-          <EvalTable
-            rows={[
-              ...rows.evalAccounts.map((broker) => {
-                const firm = firmOf(broker);
-                return {
-                  key: broker.id || broker.slug,
-                  href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
-                  name: broker.name,
-                  meta: firm ? firmDisplayName(firm) : null,
-                  stats: broker.stats,
-                  evals: summarizeEvals(firm ? (ledgerByFirm.get(firm) || []) : []),
-                  onEdit: broker.id ? () => openEditForm(broker) : undefined,
-                };
-              }),
-              ...rows.evalOrphans.map(({ slug, summary }) => ({
-                key: slug,
-                href: `/accounts/firm/${slug}`,
-                name: firmDisplayName(slug),
-                meta: 'No journal account yet',
-                stats: emptyStats,
-                evals: summary,
-              })),
-            ]}
-          />
-        </AccountSection>
-      )}
-
-      {(rows.funded.length > 0 || rows.payoutOrphans.length > 0) && (
-        <AccountSection title="Prop funded">
-          <TradeTable
-            payouts
-            rows={[
-              ...rows.funded.map((broker) => {
-                const firm = firmOf(broker);
-                const summary = summarizeEvals(firm ? (ledgerByFirm.get(firm) || []) : []);
-                return {
-                  key: broker.id || broker.slug,
-                  href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
-                  name: broker.name,
-                  meta: firm ? firmDisplayName(firm) : null,
-                  type: 'Prop funded',
-                  stats: broker.stats,
-                  payouts: summary.payouts,
-                  onEdit: broker.id ? () => openEditForm(broker) : undefined,
-                };
-              }),
-              ...rows.payoutOrphans.map(({ slug, summary }) => ({
-                key: `payout-${slug}`,
-                href: `/accounts/firm/${slug}?view=payout`,
-                name: firmDisplayName(slug),
-                meta: 'Payouts, no funded journal account',
-                type: 'Prop funded',
-                stats: emptyStats,
-                payouts: summary.payouts,
-              })),
-            ]}
-          />
+      {firmGroups.length > 0 && (
+        <AccountSection title="Prop firms" subtitle="Each block is one prop firm, newest activity first. Eval and funded accounts that use the same firm share its spend, payouts, and true P/L.">
+          <PropFirmTable groups={firmGroups} onEdit={openEditForm} />
         </AccountSection>
       )}
 
@@ -347,19 +345,25 @@ export default function AccountsClient() {
               <select value={formType} onChange={(e) => {
                 setFormType(e.target.value);
                 if (isPropAccountType(e.target.value) && !formFirm) {
-                  setFormFirm(inferFirmSlug(formSlug, e.target.value) || '');
+                  const inferred = inferFirmSlug(formSlug, e.target.value);
+                  setFormFirm(inferred && knownFirms.includes(inferred) ? inferred : '__new');
                 }
               }} className={inputClass}>
                 {ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </Field>
             {isPropAccountType(formType) && (
-              <Field label="Prop firm">
-                <input type="text" value={formFirm} onChange={(e) => setFormFirm(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                  placeholder="topstep" list="firm-slugs" className={`${inputClass} font-mono`} />
-                <datalist id="firm-slugs">
+              <Field label="Prop firm *">
+                <select value={formFirm || '__new'} onChange={(e) => setFormFirm(e.target.value)} className={inputClass}>
                   {knownFirms.map((f) => <option key={f} value={f}>{firmDisplayName(f)}</option>)}
-                </datalist>
+                  <option value="__new">New prop firm</option>
+                </select>
+                {formFirm === '__new' || !formFirm ? (
+                  <input type="text" value={newFirmName} onChange={(e) => setNewFirmName(e.target.value)}
+                    placeholder="Firm name, e.g. Apex"
+                    className={`${inputClass} mt-2`} />
+                ) : null}
+                <FirmConnectNote firm={resolvedFirm()} brokers={brokers} editingId={editingBroker?.id || null} isNew={formFirm === '__new' || !formFirm} />
               </Field>
             )}
             <div className="flex justify-end gap-3 pt-2">
@@ -376,18 +380,39 @@ export default function AccountsClient() {
 
 const emptyStats: BrokerStats = { totalTrades: 0, openTrades: 0, closedTrades: 0, wins: 0, losses: 0, totalPL: 0, winRate: 0 };
 
-function AccountSection({ title, children }: { title: string; children: ReactNode }) {
+function AccountSection({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+      <div>
+        <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+        {subtitle && <p className="text-sm text-text-muted mt-1">{subtitle}</p>}
+      </div>
       {children}
     </section>
   );
 }
 
+function FirmConnectNote({ firm, brokers, editingId, isNew }: { firm: string | null; brokers: BrokerAccount[]; editingId: string | null; isNew: boolean }) {
+  if (!firm) {
+    return <p className="text-xs text-text-muted mt-2">Name the firm. A later eval or funded account with this same firm joins its true P/L.</p>;
+  }
+  const mates = brokers.filter((b) => firmOf(b) === firm && b.id !== editingId);
+  if (isNew && mates.length === 0) {
+    return <p className="text-xs text-text-muted mt-2">New firm. Add the eval account and the funded account both under {firmDisplayName(firm)} and their spend and payouts combine.</p>;
+  }
+  if (mates.length === 0) {
+    return <p className="text-xs text-text-muted mt-2">Joins {firmDisplayName(firm)}. No other account is on it yet.</p>;
+  }
+  return (
+    <p className="text-xs text-text-muted mt-2">
+      Joins {firmDisplayName(firm)}, with {mates.map((b) => b.name).join(' and ')}. Spend and payouts stay on this firm.
+    </p>
+  );
+}
+
 function NameCell({ href, name, meta }: { href: string; name: string; meta: string | null }) {
   return (
-    <td className="px-4 py-3">
+    <td className="px-4 py-3 align-middle">
       <Link href={href} className="font-semibold text-text-primary hover:text-accent">{name}</Link>
       {meta && <div className="text-xs text-text-muted mt-0.5">{meta}</div>}
     </td>
@@ -396,7 +421,7 @@ function NameCell({ href, name, meta }: { href: string; name: string; meta: stri
 
 function EditCell({ onEdit }: { onEdit?: () => void }) {
   return (
-    <td className="px-4 py-3 text-right">
+    <td className="px-4 py-3 text-right align-middle">
       {onEdit && (
         <button type="button" onClick={onEdit} className="text-sm text-text-muted hover:text-text-primary">Edit</button>
       )}
@@ -404,21 +429,29 @@ function EditCell({ onEdit }: { onEdit?: () => void }) {
   );
 }
 
+function ActivityCells({ stats }: { stats: BrokerStats }) {
+  return (
+    <>
+      <td className="px-3 py-3 text-right tabular-nums text-text-secondary align-middle whitespace-nowrap">{stats.totalTrades || '—'}</td>
+      <td className={`px-3 py-3 text-right tabular-nums align-middle whitespace-nowrap ${stats.closedTrades > 0 ? (stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-muted'}`}>
+        {stats.closedTrades > 0 ? `${stats.winRate}%` : '—'}
+      </td>
+    </>
+  );
+}
+
 function TradeCells({ stats }: { stats: BrokerStats }) {
   return (
     <>
-      <td className="px-3 py-3 text-right tabular-nums text-text-secondary">{stats.totalTrades || '—'}</td>
-      <td className={`px-3 py-3 text-right tabular-nums ${stats.closedTrades > 0 ? (stats.winRate >= 50 ? 'text-profit' : 'text-loss') : 'text-text-muted'}`}>
-        {stats.closedTrades > 0 ? `${stats.winRate}%` : '—'}
-      </td>
-      <td className={`px-3 py-3 text-right tabular-nums font-semibold ${stats.totalTrades ? plColor(stats.totalPL) : 'text-text-muted'}`}>
+      <ActivityCells stats={stats} />
+      <td className={`px-3 py-3 text-right tabular-nums font-semibold align-middle whitespace-nowrap ${stats.totalTrades ? plColor(stats.totalPL) : 'text-text-muted'}`}>
         {stats.totalTrades ? fmt(stats.totalPL) : '—'}
       </td>
     </>
   );
 }
 
-function TradeTable({ rows, payouts = false }: {
+function TradeTable({ rows }: {
   rows: {
     key: string;
     href: string;
@@ -426,14 +459,20 @@ function TradeTable({ rows, payouts = false }: {
     meta: string | null;
     type: string;
     stats: BrokerStats;
-    payouts?: number;
     onEdit?: () => void;
   }[];
-  payouts?: boolean;
 }) {
   return (
     <div className="bg-surface-1 border border-border rounded-2xl overflow-x-auto">
-      <table className="w-full text-sm min-w-[640px]">
+      <table className="w-full text-sm table-fixed min-w-[760px]">
+        <colgroup>
+          <col className="w-[24%]" />
+          <col className="w-[14%]" />
+          <col className="w-[12%]" />
+          <col className="w-[14%]" />
+          <col className="w-[22%]" />
+          <col className="w-[14%]" />
+        </colgroup>
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
             <th className="px-4 py-3 font-medium">Account</th>
@@ -441,7 +480,6 @@ function TradeTable({ rows, payouts = false }: {
             <th className="px-3 py-3 font-medium text-right">Trades</th>
             <th className="px-3 py-3 font-medium text-right">Win rate</th>
             <th className="px-3 py-3 font-medium text-right">Trade P/L</th>
-            {payouts && <th className="px-3 py-3 font-medium text-right">Payouts</th>}
             <th className="px-4 py-3 font-medium text-right">Edit</th>
           </tr>
         </thead>
@@ -451,9 +489,6 @@ function TradeTable({ rows, payouts = false }: {
               <NameCell href={row.href} name={row.name} meta={row.meta} />
               <td className="px-3 py-3 text-text-secondary whitespace-nowrap">{row.type}</td>
               <TradeCells stats={row.stats} />
-              {payouts && (
-                <td className="px-3 py-3 text-right tabular-nums text-profit">{row.payouts ? money(row.payouts) : '—'}</td>
-              )}
               <EditCell onEdit={row.onEdit} />
             </tr>
           ))}
@@ -463,56 +498,122 @@ function TradeTable({ rows, payouts = false }: {
   );
 }
 
-function EvalTable({ rows }: {
-  rows: {
-    key: string;
-    href: string;
-    name: string;
-    meta: string | null;
-    stats: BrokerStats;
-    evals: ReturnType<typeof summarizeEvals>;
-    onEdit?: () => void;
-  }[];
-}) {
+type FirmGroup = {
+  slug: string;
+  summary: ReturnType<typeof summarizeEvals>;
+  latest: string;
+  evalBrokers: BrokerAccount[];
+  fundedBrokers: BrokerAccount[];
+  orphanEval: boolean;
+  orphanPayout: boolean;
+};
+
+function PropFirmTable({ groups, onEdit }: { groups: FirmGroup[]; onEdit: (broker: BrokerAccount) => void }) {
   return (
-    <div className="bg-surface-1 border border-border rounded-2xl overflow-x-auto">
-      <table className="w-full text-sm min-w-[980px]">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
-            <th className="px-4 py-3 font-medium">Account</th>
-            <th className="px-3 py-3 font-medium text-right">Trades</th>
-            <th className="px-3 py-3 font-medium text-right">Win rate</th>
-            <th className="px-3 py-3 font-medium text-right">Trade P/L</th>
-            <th className="px-3 py-3 font-medium text-right">Evals</th>
-            <th className="px-3 py-3 font-medium text-right">Pass rate</th>
-            <th className="px-3 py-3 font-medium">Period</th>
-            <th className="px-3 py-3 font-medium text-right">Price to pass</th>
-            <th className="px-4 py-3 font-medium text-right">Edit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const price = priceToPass(row.evals.evalSpend, row.evals.passed);
-            return (
-            <tr key={row.key} className="border-t border-border hover:bg-surface-2/60">
-              <NameCell href={row.href} name={row.name} meta={row.meta} />
-              <TradeCells stats={row.stats} />
-              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">
-                {row.evals.evalCount > 0 ? row.evals.evalCount : '—'}
-              </td>
-              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">
-                {row.evals.evalCount > 0 ? `${Math.round((row.evals.passed / row.evals.evalCount) * 100)}%` : '—'}
-              </td>
-              <td className="px-3 py-3 text-text-secondary whitespace-nowrap">{periodLabel(row.evals.periodFrom, row.evals.periodTo)}</td>
-              <td className="px-3 py-3 text-right tabular-nums text-text-secondary">{price == null ? '—' : money(price)}</td>
-              <EditCell onEdit={row.onEdit} />
-            </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-5">
+      {groups.map((group) => {
+        const price = priceToPass(group.summary.evalSpend, group.summary.passed);
+        const lines = firmLines(group, onEdit);
+        return (
+          <section key={group.slug} className="bg-surface-1 border border-border rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 bg-surface-2 border-b border-border flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-text-primary">{firmDisplayName(group.slug)}</h3>
+                <p className="text-sm text-text-muted mt-1">
+                  {group.summary.evalCount} eval{group.summary.evalCount === 1 ? '' : 's'}
+                  <span className="mx-1.5">·</span>
+                  Pass rate {formatRate(group.summary.passRate)}
+                  <span className="mx-1.5">·</span>
+                  {periodLabel(group.summary.periodFrom, group.summary.periodTo)}
+                  <span className="mx-1.5">·</span>
+                  Price to pass {price == null ? '—' : money(price)}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-x-6 shrink-0">
+                <FirmFigure label="Eval spend" value={`-${money(group.summary.evalSpend)}`} color="text-loss" />
+                <FirmFigure label="Payouts" value={money(group.summary.payouts)} color="text-profit" />
+                <FirmFigure label="True P/L" value={fmt(group.summary.truePL)} color={plColor(group.summary.truePL)} />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm table-fixed min-w-[640px]">
+                <colgroup>
+                  <col className="w-[34%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
+                    <th className="px-4 py-3 font-medium">Account</th>
+                    <th className="px-3 py-3 font-medium">Type</th>
+                    <th className="px-3 py-3 font-medium text-right">Trades</th>
+                    <th className="px-3 py-3 font-medium text-right">Win rate</th>
+                    <th className="px-4 py-3 font-medium text-right">Edit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line) => (
+                    <tr key={line.key} className="border-t border-border hover:bg-surface-2/60">
+                      <NameCell href={line.href} name={line.name} meta={null} />
+                      <td className="px-3 py-3 text-text-secondary align-middle whitespace-nowrap">{line.kind}</td>
+                      <ActivityCells stats={line.stats} />
+                      <EditCell onEdit={line.onEdit} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
+}
+
+function FirmFigure({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="text-right min-w-[6.5rem]">
+      <div className="text-[11px] uppercase tracking-wider text-text-muted font-semibold">{label}</div>
+      <div className={`text-base font-bold tabular-nums mt-0.5 ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function firmLines(group: FirmGroup, onEdit: (broker: BrokerAccount) => void) {
+  const lines: { key: string; href: string; name: string; kind: string; stats: BrokerStats; onEdit?: () => void }[] = [];
+  const pushBroker = (broker: BrokerAccount, kind: string) => {
+    lines.push({
+      key: broker.id || broker.slug,
+      href: broker.id ? `/accounts/${broker.id}` : `/accounts/${broker.slug}`,
+      name: broker.name,
+      kind,
+      stats: broker.stats,
+      onEdit: broker.id ? () => onEdit(broker) : undefined,
+    });
+  };
+  for (const broker of group.evalBrokers) pushBroker(broker, 'Eval');
+  if (group.orphanEval) {
+    lines.push({
+      key: `${group.slug}-eval-ledger`,
+      href: `/accounts/firm/${group.slug}`,
+      name: firmDisplayName(group.slug),
+      kind: 'Eval',
+      stats: emptyStats,
+    });
+  }
+  for (const broker of group.fundedBrokers) pushBroker(broker, 'Funded');
+  if (group.orphanPayout) {
+    lines.push({
+      key: `${group.slug}-payout-ledger`,
+      href: `/accounts/firm/${group.slug}?view=payout`,
+      name: firmDisplayName(group.slug),
+      kind: 'Funded',
+      stats: emptyStats,
+    });
+  }
+  return lines;
 }
 
 function SummaryCard({ label, value, color, sub }: { label: string; value: string; color: string; sub: string }) {
